@@ -1,0 +1,78 @@
+name: ci-testing
+on:
+  push:
+    branches: [main]
+    paths: ['debian/**', 'scripts/**', 'ansible/**', 'Makefile', '.github/workflows/ci-testing.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: [self-hosted, builder]
+    steps:
+      - uses: actions/checkout@v4
+      - run: make fetch
+      - run: make rewrap
+      - run: make src-pkg
+      - run: make binary
+      - uses: actions/upload-artifact@v4
+        with: { name: deb, path: build/binary/*.deb }
+
+  lint-and-smoke:
+    needs: build
+    runs-on: [self-hosted, builder]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: build/binary }
+      - run: make lint
+      - run: make smoke-basic
+
+  publish-testing:
+    needs: lint-and-smoke
+    runs-on: [self-hosted, builder]
+    concurrency: { group: repo-publish-lock, cancel-in-progress: false }
+    env:
+      GITHUB_RUN_NUMBER: ${{ github.run_number }}
+    outputs:
+      snapshot: ${{ steps.snap.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: build/binary }
+      - id: snap
+        run: echo "name=$(scripts/snapshot-name.sh)" >> "$GITHUB_OUTPUT"
+      - run: make pub-testing
+        env: { OCSERV_VERSION: "1.5.0-1~bpo13+1" }
+      - run: make sync-testing
+        env: { R2_ACCESS_KEY_ID: "${{secrets.R2_ACCESS_KEY_ID}}", R2_SECRET_ACCESS_KEY: "${{secrets.R2_SECRET_ACCESS_KEY}}", R2_ACCOUNT_ID: "${{secrets.R2_ACCOUNT_ID}}" }
+      - run: make purge-testing
+        env: { CF_API_TOKEN: "${{secrets.CF_API_TOKEN}}", CF_ZONE_ID: "${{secrets.CF_ZONE_ID}}" }
+
+  staging-upgrade:
+    needs: publish-testing
+    runs-on: [self-hosted, builder]
+    concurrency: { group: repo-publish-lock, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@v4
+      - run: ansible-playbook -i ansible/inventories/staging ansible/site.yml
+            -e ocserv_backport_action=upgrade
+            -e ocserv_target_version=1.5.0-1~bpo13+1
+      - run: ansible-playbook -i ansible/inventories/staging ansible/site.yml
+            -e ocserv_backport_action=verify
+            -e ocserv_target_version=1.5.0-1~bpo13+1
+      - name: Staging auto-rollback (repo + R2 + host downgrade)
+        if: failure()
+        run: |
+          set -euo pipefail
+          # Roll the testing channel back to the previous-good snapshot (read from manifest).
+          # The script prints that snapshot's ocserv version for the ansible host downgrade
+          # (Spec §3.7 row 3 / §4.8).
+          ROLLBACK_VER="$(make rollback-testing-auto | tail -n1)"
+          make sync-testing
+          if [[ -n "${ROLLBACK_VER}" && "${ROLLBACK_VER}" != "null" ]]; then
+            ansible-playbook -i ansible/inventories/staging ansible/site.yml \
+              -e ocserv_backport_action=rollback \
+              -e ocserv_target_version="${ROLLBACK_VER}"
+          else
+            echo "WARNING: no previous-good version resolved; host not downgraded automatically" >&2
+          fi
+        env: { R2_ACCESS_KEY_ID: "${{secrets.R2_ACCESS_KEY_ID}}", R2_SECRET_ACCESS_KEY: "${{secrets.R2_SECRET_ACCESS_KEY}}", R2_ACCOUNT_ID: "${{secrets.R2_ACCOUNT_ID}}" }

@@ -1,0 +1,8 @@
+# /etc/apt/sources.list.d/thehkus-backports.sources  (managed by ocserv_backport role)
+Types: deb
+URIs: {{ ocserv_backport_repo_baseurl }}
+Suites: {{ ocserv_backport_repo_suite }}
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/thehkus-backports.asc
+Enabled: yes

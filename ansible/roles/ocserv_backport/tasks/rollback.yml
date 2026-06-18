@@ -1,0 +1,20 @@
+---
+- name: Assert ocserv_target_version provided
+  ansible.builtin.assert:
+    that: [ocserv_target_version is defined]
+    fail_msg: "rollback requires -e ocserv_target_version=... (human-confirmed target)"
+
+- name: Apt update (pull old index)
+  ansible.builtin.apt: { update_cache: true }
+
+- name: Downgrade to target version
+  ansible.builtin.apt:
+    name: "ocserv={{ ocserv_target_version }}"
+    state: present
+    allow_downgrade: true
+
+- name: Restart ocserv
+  ansible.builtin.systemd: { name: ocserv, state: restarted }
+
+- name: Verify
+  ansible.builtin.import_tasks: verify.yml

@@ -1,0 +1,9 @@
+---
+# Default channel settings; overridden by inventory. Spec §5.3.
+# Variables prefixed ocserv_backport_ per ansible-lint var-naming[no-role-prefix].
+ocserv_backport_channel: testing
+ocserv_backport_repo_suite: trixie-testing
+ocserv_backport_repo_baseurl: https://apt.example.com/testing
+ocserv_backport_tcp_port: 443
+ocserv_backport_udp_port: 443
+ocserv_backport_run_config_test: false
