@@ -32,9 +32,10 @@ smoke_basic() {
 smoke_service() {
   log "smoke-service: expects to run ON the staging VM (not container)"
   command -v systemctl >/dev/null || die "systemctl missing; smoke-service needs a systemd host"
+  local tcp="${OCSERV_TCP_PORT:-443}" udp="${OCSERV_UDP_PORT:-443}"
   systemctl is-active --quiet ocserv || die "ocserv not active"
-  ss -H -ltn 'sport = :443' | grep -q . || die "TCP 443 not listening (override OCSERV_TCP_PORT if needed)"
-  ss -H -lun 'sport = :443' | grep -q . || die "UDP 443 not listening"
+  ss -H -ltn "sport = :${tcp}" | grep -q . || die "TCP ${tcp} not listening (set OCSERV_TCP_PORT if non-default)"
+  ss -H -lun "sport = :${udp}" | grep -q . || die "UDP ${udp} not listening (set OCSERV_UDP_PORT if non-default)"
   journalctl -u ocserv --since "5 min ago" --no-pager | \
     grep -Ei "fatal|config error|permission denied" && die "fatal in journal" || true
   log "smoke-service: OK"
