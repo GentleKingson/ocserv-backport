@@ -41,3 +41,18 @@ pub-testing: ## publish testing channel (auto snapshot name)
 
 pub-prod: require-SNAP ## publish production channel (SNAP=... required)
 	scripts/aptly-publish.sh production $(SNAP) $(OCSERV_VERSION)
+
+.PHONY: sync-testing purge-testing sync-prod purge-prod \
+        rollback-testing rollback-prod require-TARGET_SNAP
+require-TARGET_SNAP:
+	@test -n "$(TARGET_SNAP)" || { echo "TARGET_SNAP is required"; exit 1; }
+
+sync-testing: ; scripts/r2-sync.sh testing
+sync-prod:    ; scripts/r2-sync.sh production
+purge-testing: ; scripts/cf-purge.sh testing
+purge-prod:    ; scripts/cf-purge.sh production
+
+rollback-testing: require-TARGET_SNAP
+	scripts/aptly-rollback.sh testing $(TARGET_SNAP)
+rollback-prod: require-TARGET_SNAP
+	scripts/aptly-rollback.sh production $(TARGET_SNAP)
