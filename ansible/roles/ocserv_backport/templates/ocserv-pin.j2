@@ -1,0 +1,8 @@
+# /etc/apt/preferences.d/ocserv-thehkus-backports  (managed)
+Package: *
+Pin: release o=THEHKUS-Backports
+Pin-Priority: -1
+
+Package: ocserv
+Pin: release o=THEHKUS-Backports,n={{ ocserv_backport_repo_suite }}
+Pin-Priority: 1001

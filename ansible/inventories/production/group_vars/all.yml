@@ -1,0 +1,6 @@
+---
+ocserv_backport_channel: production
+ocserv_backport_repo_suite: trixie-production
+ocserv_backport_repo_baseurl: https://apt.example.com/prod
+ocserv_backport_tcp_port: 443
+ocserv_backport_udp_port: 443

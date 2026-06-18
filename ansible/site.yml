@@ -1,0 +1,6 @@
+---
+- name: Apply ocserv_backport role
+  hosts: all
+  become: true
+  roles:
+    - role: ocserv_backport
