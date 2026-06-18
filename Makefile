@@ -6,3 +6,7 @@ OCSERV_VERSION := 1.5.0-1~bpo13+1
 .PHONY: help
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*##/:/' | column -t -s:
+
+.PHONY: snapshot-name
+snapshot-name: ## Print the snapshot name for current context
+	@scripts/snapshot-name.sh
