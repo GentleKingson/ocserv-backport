@@ -31,3 +31,13 @@ smoke-basic:                 ## container smoke (no systemd)
 	scripts/smoke-test.sh basic
 smoke-service:               ## host smoke (needs systemd VM)
 	scripts/smoke-test.sh service
+
+.PHONY: pub-testing pub-prod require-SNAP
+require-SNAP:
+	@test -n "$(SNAP)" || { echo "SNAP is required"; exit 1; }
+
+pub-testing: ## publish testing channel (auto snapshot name)
+	scripts/aptly-publish.sh testing $$(scripts/snapshot-name.sh) $(OCSERV_VERSION)
+
+pub-prod: require-SNAP ## publish production channel (SNAP=... required)
+	scripts/aptly-publish.sh production $(SNAP) $(OCSERV_VERSION)
