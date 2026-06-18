@@ -36,6 +36,8 @@ jobs:
       snapshot: ${{ steps.snap.outputs.name }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: deb, path: build/binary }
       - id: snap
         run: echo "name=$(scripts/snapshot-name.sh)" >> "$GITHUB_OUTPUT"
       - run: make pub-testing
@@ -57,8 +59,20 @@ jobs:
       - run: ansible-playbook -i ansible/inventories/staging ansible/site.yml
             -e ocserv_backport_action=verify
             -e ocserv_target_version=1.5.0-1~bpo13+1
-      - if: failure()
+      - name: Staging auto-rollback (repo + R2 + host downgrade)
+        if: failure()
         run: |
-          make rollback-testing TARGET_SNAP="${{ needs.publish-testing.outputs.snapshot }}"
+          set -euo pipefail
+          # Roll the testing channel back to the previous-good snapshot (read from manifest).
+          # The script prints that snapshot's ocserv version for the ansible host downgrade
+          # (Spec §3.7 row 3 / §4.8).
+          ROLLBACK_VER="$(make rollback-testing-auto | tail -n1)"
           make sync-testing
+          if [[ -n "${ROLLBACK_VER}" && "${ROLLBACK_VER}" != "null" ]]; then
+            ansible-playbook -i ansible/inventories/staging ansible/site.yml \
+              -e ocserv_backport_action=rollback \
+              -e ocserv_target_version="${ROLLBACK_VER}"
+          else
+            echo "WARNING: no previous-good version resolved; host not downgraded automatically" >&2
+          fi
         env: { R2_ACCESS_KEY_ID: "${{secrets.R2_ACCESS_KEY_ID}}", R2_SECRET_ACCESS_KEY: "${{secrets.R2_SECRET_ACCESS_KEY}}", R2_ACCOUNT_ID: "${{secrets.R2_ACCOUNT_ID}}" }

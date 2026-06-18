@@ -56,6 +56,10 @@ rollback-testing: require-TARGET_SNAP
 	scripts/aptly-rollback.sh testing $(TARGET_SNAP)
 rollback-prod: require-TARGET_SNAP
 	scripts/aptly-rollback.sh production $(TARGET_SNAP)
+rollback-testing-auto: ## rollback testing using previous-good manifest (CI auto)
+	scripts/aptly-rollback.sh testing
+rollback-prod-auto: ## rollback production using previous-good manifest
+	scripts/aptly-rollback.sh production
 
 .PHONY: dry-run
 dry-run: ## end-to-end local dry-run (no real aptly/R2/staging/prod)

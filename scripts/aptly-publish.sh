@@ -3,11 +3,11 @@ set -euo pipefail
 source "$(dirname "$0")/_common.sh"
 source "$(dirname "$0")/_manifest.sh"
 
-# Spec §3.7 / §3.8. Usage: aptly-publish.sh <testing|production> <snapshot> [version]
+# Spec §3.7 / §3.8 / §4.2 (publish-testing step). Usage:
+#   aptly-publish.sh <testing|production> <snapshot> [version]
 channel="$1"; snapshot="$2"; version="${3:-}"
 require_channel "${channel}"
 
-# Map channel -> aptly distribution
 case "${channel}" in
   testing)    dist=trixie-testing ;;
   production) dist=trixie-production ;;
@@ -15,7 +15,17 @@ esac
 
 acquire_repo_publish_lock
 
-# Detect first-publish vs subsequent-switch. Spec §3.8.
+# 1. Add freshly built deb(s) to the pool, then cut an immutable snapshot.
+#    (Spec §4.2 step 3: flock + repo add + snapshot create.)
+shopt -s nullglob
+debs=( build/binary/*.deb )
+[[ "${#debs[@]}" -gt 0 ]] || die "no deb in build/binary/ (run 'make binary' first)"
+log "aptly repo add ocserv-backports ${debs[*]}"
+aptly repo add ocserv-backports "${debs[@]}"
+log "aptly snapshot create ${snapshot} from repo ocserv-backports"
+aptly snapshot create "${snapshot}" from repo ocserv-backports
+
+# 2. Publish: first-publish uses 'publish snapshot'; subsequent updates use 'publish switch'.
 if aptly publish list -raw 2>/dev/null | grep -Fx "${dist}" >/dev/null; then
   log "channel ${dist} exists -> publish switch"
   aptly publish switch "${dist}" "${snapshot}"
@@ -28,7 +38,7 @@ else
     "${snapshot}"
 fi
 
-# Version for manifest: prefer explicit, else read from snapshot if resolvable.
+# 3. Version for manifest: prefer explicit arg, else resolve from the snapshot.
 if [[ -z "${version}" ]]; then
   version="$(aptly snapshot show -json "${snapshot}" 2>/dev/null \
     | jq -r '.Packages[]? | select(.Name=="ocserv") | .Version' | head -n1 || true)"
