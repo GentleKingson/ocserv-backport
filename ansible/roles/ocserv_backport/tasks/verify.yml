@@ -1,0 +1,46 @@
+---
+- name: Ocserv active
+  ansible.builtin.systemd: { name: ocserv }
+  register: ocserv_backport_svc
+  failed_when: ocserv_backport_svc.status.ActiveState != 'active'
+
+- name: TCP listening (exact port match)
+  ansible.builtin.command: "ss -H -ltn sport = :{{ ocserv_backport_tcp_port }}"
+  register: ocserv_backport_ss_tcp
+  changed_when: false
+  failed_when: ocserv_backport_ss_tcp.stdout | length == 0
+
+- name: UDP listening (exact port match)
+  ansible.builtin.command: "ss -H -lun sport = :{{ ocserv_backport_udp_port }}"
+  register: ocserv_backport_ss_udp
+  changed_when: false
+  failed_when: ocserv_backport_ss_udp.stdout | length == 0
+
+- name: Version matches target
+  ansible.builtin.command: dpkg-query -W -f='${Version}' ocserv
+  register: ocserv_backport_ver
+  changed_when: false
+  failed_when: >
+    ocserv_target_version is defined and
+    ocserv_backport_ver.stdout != ocserv_target_version
+
+- name: No fatal in recent journal (case-insensitive)
+  ansible.builtin.command: journalctl -u ocserv --since "5 min ago" --no-pager
+  register: ocserv_backport_journal
+  changed_when: false
+  failed_when: >
+    'fatal' in (ocserv_backport_journal.stdout | lower) or
+    'config error' in (ocserv_backport_journal.stdout | lower) or
+    'permission denied' in (ocserv_backport_journal.stdout | lower)
+
+- name: (optional) config syntax check
+  ansible.builtin.command: "ocserv --test-config --config=/etc/ocserv/ocserv.conf"
+  changed_when: false
+  when: ocserv_backport_run_config_test | bool
+
+- name: Occtl executable (rc != 0 fails; as root for socket access)
+  ansible.builtin.command: occtl show users
+  register: ocserv_backport_occtl_out
+  become: true
+  changed_when: false
+  failed_when: ocserv_backport_occtl_out.rc != 0

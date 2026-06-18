@@ -1,0 +1,45 @@
+---
+- name: Assert ocserv_target_version provided
+  ansible.builtin.assert:
+    that: [ocserv_target_version is defined]
+    fail_msg: "upgrade requires -e ocserv_target_version=..."
+
+- name: Verify candidate source/version/priority
+  ansible.builtin.script: >
+    files/assert-apt-policy.sh
+    --package ocserv
+    --expected-version {{ ocserv_target_version }}
+    --expected-origin THEHKUS-Backports
+    --expected-suite {{ ocserv_backport_repo_suite }}
+    --expected-priority 1001
+
+- name: Ensure state dir
+  ansible.builtin.file:
+    path: /var/lib/ocserv-backport
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record current version (audit)
+  ansible.builtin.command: dpkg-query -W -f='${Version}' ocserv
+  register: ocserv_backport_ver_before
+  changed_when: false
+
+- name: Write previous-version (audit, not rollback authority)
+  ansible.builtin.copy:
+    dest: /var/lib/ocserv-backport/previous-version
+    content: "{{ ocserv_backport_ver_before.stdout }}\n"
+    mode: "0644"
+
+- name: Install explicit version (not latest)
+  ansible.builtin.apt:
+    name: "ocserv={{ ocserv_target_version }}"
+    state: present
+    allow_downgrade: true
+
+- name: Restart ocserv
+  ansible.builtin.systemd: { name: ocserv, state: restarted }
+
+- name: Verify
+  ansible.builtin.import_tasks: verify.yml
