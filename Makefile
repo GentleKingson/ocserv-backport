@@ -10,3 +10,11 @@ help: ## Show targets
 .PHONY: snapshot-name
 snapshot-name: ## Print the snapshot name for current context
 	@scripts/snapshot-name.sh
+
+.PHONY: fetch rewrap src-pkg
+fetch: ## dget ocserv source from snapshot.debian.org
+	scripts/fetch-source.sh
+rewrap: ## rewrite changelog to backport version
+	scripts/rewrap-changelog.sh
+src-pkg: ## regenerate backport .dsc
+	scripts/build-source-package.sh
