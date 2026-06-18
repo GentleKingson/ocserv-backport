@@ -1,0 +1,3 @@
+# Treat unset vars + pipefail expectations; scripts set -euo pipefail themselves.
+enable=require-variable-braces
+external-sources=true
