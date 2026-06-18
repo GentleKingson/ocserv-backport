@@ -56,3 +56,7 @@ rollback-testing: require-TARGET_SNAP
 	scripts/aptly-rollback.sh testing $(TARGET_SNAP)
 rollback-prod: require-TARGET_SNAP
 	scripts/aptly-rollback.sh production $(TARGET_SNAP)
+
+.PHONY: dry-run
+dry-run: ## end-to-end local dry-run (no real aptly/R2/staging/prod)
+	scripts/dry-run.sh
