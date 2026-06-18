@@ -1,2 +1,5 @@
 # macOS Finder metadata
 .DS_Store
+
+# real bootstrap values
+.env
