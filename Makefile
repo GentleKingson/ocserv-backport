@@ -18,3 +18,9 @@ rewrap: ## rewrite changelog to backport version
 	scripts/rewrap-changelog.sh
 src-pkg: ## regenerate backport .dsc
 	scripts/build-source-package.sh
+
+.PHONY: binary lint
+binary: ## sbuild binary deb in trixie schroot
+	scripts/build-binary.sh
+lint: ## lintian on .changes (errors fatal)
+	scripts/lint-package.sh
