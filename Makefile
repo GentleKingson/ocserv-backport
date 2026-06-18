@@ -24,3 +24,10 @@ binary: ## sbuild binary deb in trixie schroot
 	scripts/build-binary.sh
 lint: ## lintian on .changes (errors fatal)
 	scripts/lint-package.sh
+
+.PHONY: smoke smoke-basic smoke-service
+smoke: smoke-basic           ## alias: smoke-basic
+smoke-basic:                 ## container smoke (no systemd)
+	scripts/smoke-test.sh basic
+smoke-service:               ## host smoke (needs systemd VM)
+	scripts/smoke-test.sh service
