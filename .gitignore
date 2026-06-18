@@ -3,3 +3,6 @@
 
 # real bootstrap values
 .env
+
+# build artifacts (deb/dsc/changes produced by fetch/src-pkg/binary)
+build/
