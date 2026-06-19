@@ -308,7 +308,19 @@ verify_chroot_sources() {
       log "DRY-RUN: would verify chroot sources after creation (none found yet)"
       return
     fi
-    die "no apt sources found in ${etc}"
+    # Sources not visible to the current user. Distinguish "exist but unreadable"
+    # (group membership problem) from "genuinely absent" (incomplete chroot).
+    # Do NOT sudo-cat to bypass verification — the fix is to fix the group.
+    if sudo test -f "${etc}/sources.list" 2>/dev/null \
+       || { sudo test -d "${etc}/sources.list.d" 2>/dev/null \
+            && sudo find "${etc}/sources.list.d" -maxdepth 1 \
+                 \( -name '*.list' -o -name '*.sources' \) -type f -print 2>/dev/null \
+               | grep -q .; }; then
+      die "apt sources exist under ${etc} but current user cannot read them. \
+Ensure ${BUILDER_USER} is in the sbuild group and start a new login session: \
+'sudo sbuild-adduser ${BUILDER_USER}', then log out/in or run 'newgrp sbuild'."
+    fi
+    die "no apt sources found in ${etc}; chroot may be incomplete"
   fi
   local f line bad=""
   for f in "${files[@]}"; do
