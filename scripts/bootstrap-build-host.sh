@@ -115,16 +115,116 @@ run_stage() {
 }
 
 # ---- stub stages (replaced in Tasks 5-7) ----------------------------------
-stage_preflight()               { log "TODO stage_preflight"; }
+stage_preflight() {
+  log "stage: preflight"
+  # OS + codename
+  local id codename
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    id="${ID:-}"; codename="${VERSION_CODENAME:-}"
+  fi
+  [[ "${id}" == "debian" ]] || die "OS must be debian (got '${id:-empty}')"
+  [[ "${codename}" == "trixie" ]] || die "codename must be trixie (got '${codename:-empty}')"
+
+  # arch
+  [[ "$(uname -m)" == "x86_64" ]] || die "arch must be x86_64 (got $(uname -m))"
+
+  # current user == BUILDER_USER (spec §2.1; prevents ubuntu/builder role confusion)
+  local cur; cur="$(id -un)"
+  [[ "${cur}" != "root" ]] || die "do not run as root; run as ${BUILDER_USER} with passwordless sudo"
+  [[ "${cur}" == "${BUILDER_USER}" ]] \
+    || die "current user is '${cur}'; run as ${BUILDER_USER} with passwordless sudo"
+
+  # passwordless sudo
+  sudo -n true 2>/dev/null || die "passwordless sudo required for ${BUILDER_USER}"
+
+  # disk: APTLY_ROOT fs + chroot parent fs (spec §2.1 two-level threshold)
+  check_disk_threshold "${APTLY_ROOT}"
+  check_disk_threshold /var/lib/sbuild
+}
+
+check_disk_threshold() {
+  local path="$1"
+  [[ -d "$path" ]] || path="$(dirname "$path")"
+  local avail_kb avail_gb
+  avail_kb="$(df -Pk "${path}" 2>/dev/null | awk 'NR==2{print $4}')"
+  avail_gb=$(( avail_kb / 1024 / 1024 ))
+  if   (( avail_gb < 15 )); then die "less than 15GB free on ${path} (have ${avail_gb}GB)"
+  elif (( avail_gb < 30 )); then log "WARN: only ${avail_gb}GB free on ${path} (recommended >=30GB)"
+  else log "disk OK: ${avail_gb}GB free on ${path}"
+  fi
+}
+
+stage_check_runner() {
+  log "stage: check_runner"
+  local runner_dir="${BOOTSTRAP_RUNNER_DIR:-${HOME}/actions-runner}"
+  if [[ -f "${runner_dir}/.runner" ]]; then
+    log "runner already registered at ${runner_dir}"
+    local o; o="$(stat -c '%U' "${runner_dir}" 2>/dev/null || echo '?')"
+    [[ "$o" == "${BUILDER_USER}" ]] || log "WARN: runner dir owner='${o}' (expected ${BUILDER_USER})"
+  elif [[ -d "${runner_dir}" ]]; then
+    log "WARN: ${runner_dir} exists but not registered; see manual steps"
+  else
+    log "WARN: no runner detected at ${runner_dir}; register via GitHub UI (see manual steps)"
+  fi
+}
+
+stage_check_backups() {
+  log "stage: check_backups"
+  local runner_dir="${BOOTSTRAP_RUNNER_DIR:-${HOME}/actions-runner}"
+  local paths=(
+    "${APTLY_ROOT}"
+    "${APTLY_ROOT}/state"
+    "${HOME}/.gnupg"
+    "/etc/schroot/chroot.d"
+    "${HOME}/.config/rclone/rclone.conf"
+    "${runner_dir}"
+  )
+  local p
+  for p in "${paths[@]}"; do
+    if [[ -e "$p" ]]; then log "backup source exists: $p"
+    else log "WARN: backup source not found: $p (ensure your backup covers it)"; fi
+  done
+}
+
+stage_print_manual_github_steps() {
+  log "stage: print_manual_github_steps"
+  cat <<EOF
+
+=== Next manual GitHub steps ===
+
+1. Register self-hosted runner
+   GitHub UI: Repo -> Settings -> Actions -> Runners -> New self-hosted runner
+   Labels: self-hosted, builder
+   Run as user: ${BUILDER_USER}
+$([[ -n "${BOOTSTRAP_GITHUB_RUNNER_URL:-}" ]] && echo "   Runner URL hint: ${BOOTSTRAP_GITHUB_RUNNER_URL}")
+
+2. Configure GitHub secrets (repo or environment level):
+   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID, R2_BUCKET,
+   CF_API_TOKEN, CF_ZONE_ID, GPG_PASSPHRASE
+
+3. gh CLI (if authenticated):
+   gh secret set R2_ACCESS_KEY_ID
+   gh secret set R2_SECRET_ACCESS_KEY
+   gh secret set R2_ACCOUNT_ID
+   gh secret set R2_BUCKET
+   gh secret set CF_API_TOKEN
+   gh secret set CF_ZONE_ID
+   gh secret set GPG_PASSPHRASE
+
+4. Protected environment: name 'production', enable required reviewers.
+
+5. Verify runner labels: [self-hosted, builder]
+
+EOF
+}
 stage_install_packages()        { log "TODO stage_install_packages"; }
 stage_prepare_directories()     { log "TODO stage_prepare_directories"; }
 stage_setup_sbuild_chroot()     { log "TODO stage_setup_sbuild_chroot"; }
 stage_setup_gpg_key()           { log "TODO stage_setup_gpg_key"; }
 stage_setup_aptly()             { log "TODO stage_setup_aptly"; }
 stage_setup_rclone_skeleton()   { log "TODO stage_setup_rclone_skeleton"; }
-stage_check_runner()            { log "TODO stage_check_runner"; }
-stage_check_backups()           { log "TODO stage_check_backups"; }
-stage_print_manual_github_steps() { log "TODO stage_print_manual_github_steps"; }
 
 main() {
   local run=() s started
@@ -139,7 +239,18 @@ main() {
   else
     run=("${STAGES[@]}")
   fi
+
+  # load_config is infrastructure: every other stage depends on the aliases it
+  # sets (BUILDER_USER/APTLY_ROOT/etc.). Always run it first unless it IS the
+  # only requested stage, so --only-stage <other> doesn't trip set -u.
+  if [[ "${ONLY_STAGE}" != "load_config" ]]; then
+    run_stage load_config
+  fi
+
   for s in "${run[@]}"; do
+    # Skip load_config here only if the always-first block already ran it
+    # (i.e. the requested set wasn't ONLY load_config).
+    [[ "$s" == "load_config" && "${ONLY_STAGE}" != "load_config" ]] && continue
     run_stage "$s"
   done
 }
