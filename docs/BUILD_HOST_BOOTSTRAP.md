@@ -1,5 +1,8 @@
 # Build Host Bootstrap
 
+> 完整的从裸机到 dry-run 的线性操作手册见 `docs/trixie-builder-dryrun-runbook.md`。
+> 本文档是 bootstrap 脚本的快速参考。
+
 The builder is initialized by `scripts/bootstrap-build-host.sh` (run ON the
 trixie amd64 builder, as `BOOTSTRAP_BUILDER_USER` with passwordless sudo).
 
