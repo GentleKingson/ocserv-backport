@@ -35,7 +35,39 @@ EOF
 }
 
 # ---- pure functions (defined here, tested by bats) --------------------------
-# (filled in Task 2)
+validate_builder_user_name() {
+  local name="$1"
+  [[ "${name}" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || return 1
+  [[ "${name}" != "root" ]] || return 1
+  return 0
+}
+
+validate_pubkey_line() {
+  local line="$1"
+  local key_type key_body rest
+  # 拆字段: 第一字段必须直接是 key type (不支持 command=/from= 等 options 前缀)
+  read -r key_type key_body rest <<<"${line}"
+  # key type 和 key body 都必须非空 (拒绝 "ssh-ed25519 " / "ssh-ed25519")
+  [[ -n "${key_type:-}" && -n "${key_body:-}" ]] || return 1
+  case "${key_type}" in
+    ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  # 基础防呆: public key body 不应含空格, base64 字符集
+  [[ "${key_body}" =~ ^[A-Za-z0-9+/=]+$ ]] || return 1
+  return 0
+}
+
+check_disk_threshold_inner() {
+  local avail_gb="$1"
+  if   (( avail_gb < 15 )); then printf 'die'
+  elif (( avail_gb < 30 )); then printf 'warn'
+  else printf 'ok'
+  fi
+}
 
 # ---- side-effect functions ---------------------------------------------------
 # (filled in Tasks 3-5)
