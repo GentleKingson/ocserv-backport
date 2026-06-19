@@ -25,20 +25,23 @@ load_defaults_and_aliases() {
   export BUILDER_USER APTLY_ROOT REPO_NAME APT_BASE_URL R2_BUCKET
 }
 
-# Safe wrapper: write heredoc content to a temp file, run a command on it.
-# In dry-run, prints "DRY-RUN: would run <cmd>" WITHOUT the heredoc content.
-# Usage: run_safe_heredoc <tempfile-pattern> <content> <cmd...> ; cmd runs as: <cmd> <tempfile>
+# Safe wrapper: write heredoc content to a temp file, run a command on it,
+# capturing combined stdout+stderr (for error messages). In dry-run, prints
+# "DRY-RUN: would run <cmd>" WITHOUT the heredoc content.
+# Usage: out="$(run_safe_heredoc <tempfile> <content> <cmd...>)"
 run_safe_heredoc() {
   local tmpfile="$1" content="$2"; shift 2
   if [[ "${BOOTSTRAP_DRY_RUN:-0}" == "1" ]]; then
     printf 'DRY-RUN: would run'
     printf ' %q' "$@"
-    printf ' (with heredoc input, content suppressed)\n'
+    printf ' (with heredoc input, content suppressed)\n' >&2
     return
   fi
   printf '%s' "${content}" > "${tmpfile}"
-  "$@" "${tmpfile}"
+  "$@" "${tmpfile}" 2>&1
+  local rc=$?
   rm -f "${tmpfile}"
+  return $rc
 }
 
 # Stage: load_config (runs FIRST; preflight depends on these values).
@@ -339,12 +342,12 @@ gpg_generate() {
     export BOOTSTRAP_GPG_KEYID="DRYRUN-GPG-KEYID"
     return
   fi
-  read_secret_if_missing BOOTSTRAP_GPG_PASSPHRASE "GPG passphrase"
-  local keyfile content
+  # Generate an UNPROTECTED key on disk. The dedicated builder relies on disk
+  # encryption + gpg-agent for protection; BOOTSTRAP_GPG_PASSPHRASE is NOT used
+  # in generate mode (no prompt, no secret collected) — it is a CI secret
+  # consumed only when a passphrase-protected key is imported/reused. Spec §2.6.
+  local keyfile content err
   keyfile="$(mktemp)"
-  # %no-protection: non-interactive generation. If passphrase-protected keys are
-  # desired, replace with: Passphrase: ${BOOTSTRAP_GPG_PASSPHRASE}. GPG_PASSPHRASE
-  # is also stored as a GitHub secret for CI; local agent handles signing.
   content=$(cat <<EOF
 %no-protection
 Key-Type: RSA
@@ -355,12 +358,12 @@ Expire-Date: 0
 %commit
 EOF
 )
-  run_safe_heredoc "${keyfile}" "${content}" gpg --batch --generate-key \
-    || die "gpg generate-key failed"
+  err="$(run_safe_heredoc "${keyfile}" "${content}" gpg --batch --generate-key)" \
+    || die "gpg generate-key failed: ${err}"
   BOOTSTRAP_GPG_KEYID="$(gpg --list-secret-keys --with-colons 2>/dev/null \
     | awk -F: '/^fpr:/{print $10}' | tail -1)"
   export BOOTSTRAP_GPG_KEYID
-  log "generated signing key: ${BOOTSTRAP_GPG_KEYID}"
+  log "generated signing key (unprotected on disk): ${BOOTSTRAP_GPG_KEYID}"
 }
 
 gpg_import() {
