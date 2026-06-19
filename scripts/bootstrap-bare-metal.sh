@@ -69,8 +69,48 @@ check_disk_threshold_inner() {
   fi
 }
 
+_resolve_disk_path() {
+  local p="$1"
+  while [[ ! -d "$p" && "$p" != "/" ]]; do p="$(dirname "$p")"; done
+  printf '%s' "$p"
+}
+
+check_disk_threshold() {
+  local path avail_kb avail_gb status
+  path="$(_resolve_disk_path "$1")"
+  avail_kb="$(df -Pk "$path" 2>/dev/null | awk 'NR==2{print $4}')"
+  [[ "${avail_kb}" =~ ^[0-9]+$ ]] \
+    || die "failed to determine free disk space for ${path}"
+  avail_gb=$(( avail_kb / 1024 / 1024 ))
+  status="$(check_disk_threshold_inner "$avail_gb")"
+  case "$status" in
+    die)  die "less than 15GB free on ${path} (have ${avail_gb}GB)" ;;
+    warn) log "WARN: only ${avail_gb}GB free on ${path} (recommended >=30GB)" ;;
+    ok)   log "disk OK: ${avail_gb}GB free on ${path}" ;;
+  esac
+}
+
 # ---- side-effect functions ---------------------------------------------------
-# (filled in Tasks 3-5)
+run_preflight() {
+  log "stage: preflight"
+  [[ "$(id -u)" -eq 0 ]] || die "must run as root (this is the bare-metal setup script)"
+  . /etc/os-release
+  [[ "${ID:-}" == "debian" ]] || die "OS must be debian (got '${ID:-empty}')"
+  [[ "${VERSION_CODENAME:-}" == "trixie" ]] || die "codename must be trixie (got '${VERSION_CODENAME:-empty}')"
+  [[ "$(uname -m)" == "x86_64" ]] || die "arch must be x86_64 (got $(uname -m))"
+  check_disk_threshold /var/aptly
+  check_disk_threshold /var/lib/sbuild
+}
+
+get_builder_home() {
+  local home
+  home="$(getent passwd "${BUILDER_USER}" | cut -d: -f6)"
+  [[ -n "${home}" && "${home}" = /* ]] \
+    || die "cannot determine home directory for ${BUILDER_USER}"
+  [[ -d "${home}" ]] \
+    || die "home directory for ${BUILDER_USER} does not exist: ${home}"
+  printf '%s' "${home}"
+}
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -84,13 +124,49 @@ parse_args() {
       *)                 usage; die "unknown argument: $1" ;;
     esac
   done
-  # (full validation filled in Task 3)
+
+  # builder-user 校验
+  validate_builder_user_name "${BUILDER_USER}" \
+    || die "invalid --builder-user: '${BUILDER_USER}' (must match ^[a-z_][a-z0-9_-]*\$?\$ and not be root)"
+
+  # SSH 公钥来源互斥 (三选一, 不能多给, 不能一个都没有)
+  local sources=0
+  [[ -n "${SSH_PUBKEY_FILE}" ]] && sources=$((sources+1))
+  [[ -n "${SSH_PUBKEY}" ]]      && sources=$((sources+1))
+  [[ -n "${ADMIN_PUBKEY:-}" ]]  && sources=$((sources+1))
+  [[ "${sources}" -eq 1 ]] \
+    || die "provide exactly one SSH pubkey source: --ssh-pubkey-file / --ssh-pubkey / ADMIN_PUBKEY (got ${sources})"
+
+  # 解析公钥到 PUBKEYS (逐行读取 + 校验)
+  local raw=""
+  if [[ -n "${SSH_PUBKEY_FILE}" ]]; then
+    [[ -r "${SSH_PUBKEY_FILE}" ]] || die "cannot read --ssh-pubkey-file: ${SSH_PUBKEY_FILE}"
+    raw="$(cat "${SSH_PUBKEY_FILE}")"
+  elif [[ -n "${SSH_PUBKEY}" ]]; then
+    raw="${SSH_PUBKEY}"
+  else
+    raw="${ADMIN_PUBKEY}"
+  fi
+
+  PUBKEYS=""
+  local line
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue   # 跳过空行/注释
+    validate_pubkey_line "${line}" \
+      || die "invalid SSH public key line: ${line%% *}"
+    PUBKEYS+="${line}"$'\n'
+  done <<< "${raw}"
+  [[ -n "${PUBKEYS}" ]] || die "no valid SSH public keys provided"
+
+  if [[ "${BUILDER_USER}" != "builder" ]]; then
+    log "NOTE: --builder-user=${BUILDER_USER}; ensure BOOTSTRAP_BUILDER_USER in .bootstrap.env matches"
+  fi
 }
 
 main() {
   parse_args "$@"
-  # (stages filled in Tasks 3-5)
-  :
+  run_preflight
+  # (后续 stages 在 Task 4-5 接入)
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
