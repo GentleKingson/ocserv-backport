@@ -89,7 +89,8 @@ scripts/bootstrap-bare-metal.sh
 
 可选:
   --builder-user <name>       builder 用户名, 默认 builder
-  --repo-url <url>            提供则 clone 到 /home/<builder>/ocserv-backport; 不提供则跳过
+  --repo-url <url>            提供则 clone 到 <builder-home>/ocserv-backport; 不提供则跳过
+  --host-hint <host>          仅用于打印下一步 ssh 命令; 不参与实际连接 (默认 <host> 占位符)
   -h, --help
 ```
 
@@ -109,6 +110,15 @@ SSH 公钥输入来源三选一 (互斥, 不允许多个):
   禁止 root
   校验失败 → die
   若改非默认值, 后续 .bootstrap.env 的 BOOTSTRAP_BUILDER_USER 必须一致 (打印提醒)
+
+--repo-url:
+  不提供 → 跳过 clone
+  提供 → clone 到 <builder-home>/ocserv-backport (home 由 get_builder_home 取)
+
+--host-hint:
+  默认 <host> 占位符
+  仅用于 print_next_steps 打印 ssh 命令, 不参与实际连接, 不校验可达性
+  解析后存入 HOST_HINT 变量供 print_next_steps 读取
 
 未知参数 → die, 列出合法参数 (与 bootstrap-build-host.sh 一致)
 ```
@@ -211,6 +221,9 @@ check_disk_threshold() {
   local path avail_kb avail_gb status
   path="$(_resolve_disk_path "$1")"
   avail_kb="$(df -Pk "$path" 2>/dev/null | awk 'NR==2{print $4}')"
+  # 校验 df 输出是整数, 避免空/异常值导致 arithmetic error
+  [[ "${avail_kb}" =~ ^[0-9]+$ ]] \
+    || die "failed to determine free disk space for ${path}"
   avail_gb=$(( avail_kb / 1024 / 1024 ))
   status="$(check_disk_threshold_inner "$avail_gb")"
   case "$status" in
@@ -258,6 +271,26 @@ ensure_builder_user() {
 }
 ```
 
+### 2.5b get_builder_home (不假设 home 是 /home/${BUILDER_USER})
+
+```bash
+get_builder_home() {
+  local home
+  home="$(getent passwd "${BUILDER_USER}" | cut -d: -f6)"
+  [[ -n "${home}" && "${home}" = /* ]] \
+    || die "cannot determine home directory for ${BUILDER_USER}"
+  [[ -d "${home}" ]] \
+    || die "home directory for ${BUILDER_USER} does not exist: ${home}"
+  printf '%s' "${home}"
+}
+```
+
+> 为什么不硬编码 /home/${BUILDER_USER}: 新建用户 (useradd -m) 默认建 /home/<name>,
+> 但已存在用户的 home 可能是 /srv/builder、/home/build 或其他。getent passwd 读实际
+> home, 对新建和已存在两种情况都正确。和 id -gn (§2.7) 不假设组名同理。
+> 校验非空 + 绝对路径 + 目录存在: 防 getent 返回空或 home 未创建的边界情况早失败。
+> 此函数在 ensure_builder_user 之后调用 (用户必须已存在, getent 才有结果)。
+
 ### 2.6 configure_passwordless_sudo (临时文件 + visudo -cf + install)
 
 ```bash
@@ -275,7 +308,11 @@ configure_passwordless_sudo() {
   fi
 
   # 验证通过才安装到最终路径 (覆盖式, 幂等)
-  install -o root -g root -m 0440 "${tmp}" "${sudoers_file}"
+  # install 失败也要清理临时文件 (set -e 下失败会直接退出, 必须显式 if 包住)
+  if ! install -o root -g root -m 0440 "${tmp}" "${sudoers_file}"; then
+    rm -f "${tmp}"
+    die "failed to install sudoers file: ${sudoers_file}"
+  fi
   rm -f "${tmp}"
 
   # 安装后再做一次系统级全量校验
@@ -292,10 +329,11 @@ configure_passwordless_sudo() {
 
 ```bash
 configure_authorized_keys() {
-  local ssh_dir="/home/${BUILDER_USER}/.ssh"
-  local auth_file="${ssh_dir}/authorized_keys"
-  local builder_group
-  builder_group="$(id -gn "${BUILDER_USER}")"   # 不假设主组名 == 用户名
+  local builder_home ssh_dir auth_file builder_group
+  builder_home="$(get_builder_home)"              # 不假设 home 是 /home/<name>
+  ssh_dir="${builder_home}/.ssh"
+  auth_file="${ssh_dir}/authorized_keys"
+  builder_group="$(id -gn "${BUILDER_USER}")"     # 不假设主组名 == 用户名
 
   install -d -o "${BUILDER_USER}" -g "${builder_group}" -m 0700 "${ssh_dir}"
   touch "${auth_file}"
@@ -330,7 +368,9 @@ clone_repo_if_requested() {
     return
   fi
 
-  local repo_dir="/home/${BUILDER_USER}/ocserv-backport"
+  local builder_home repo_dir
+  builder_home="$(get_builder_home)"
+  repo_dir="${builder_home}/ocserv-backport"
   if [[ -d "${repo_dir}/.git" ]]; then
     log "repo already cloned at ${repo_dir}, skipping"
     return
@@ -358,9 +398,10 @@ clone_repo_if_requested() {
 
 ```bash
 print_next_steps() {
-  local host_hint="${HOST_HINT:-<host>}"   # hostname 不一定是可达地址, 用占位符
-  local repo_note
-  if [[ -d "/home/${BUILDER_USER}/ocserv-backport/.git" ]]; then
+  local host_hint="${HOST_HINT:-<host>}"   # --host-hint 解析值, 或占位符
+  local repo_dir repo_note
+  repo_dir="$(get_builder_home)/ocserv-backport"
+  if [[ -d "${repo_dir}/.git" ]]; then
     repo_note="(already cloned)"
   else
     repo_note="(clone the repo first, or rerun this script with --repo-url)"
@@ -381,8 +422,9 @@ print_next_steps() {
 }
 ```
 
-> 为什么 hostname 用占位符: hostname 不一定是公网 DNS 或用户实际 SSH 地址。用 <host>
-> 占位符 + 可选 HOST_HINT 环境变量, 让操作者填真实地址。
+> 为什么 host 用占位符 / --host-hint: hostname 不一定是公网 DNS 或用户实际 SSH 地址。
+> --host-hint (可选参数, 仅用于打印 ssh 命令, 不参与实际连接) 让操作者填真实地址;
+> 未提供则用 <host> 占位符。
 > 为什么不自动继续: 裸机脚本边界到此 (runbook 第 1 步)。下一步必须切 builder 身份,
 > 且后续 GPG 模式 / .bootstrap.env 是操作者决策。
 
@@ -422,7 +464,6 @@ main() {
   configure_authorized_keys
   clone_repo_if_requested
   print_next_steps
-  log "bare-metal setup complete"
 }
 ```
 
@@ -553,14 +594,25 @@ validate_builder_user_name() {
 
 validate_pubkey_line() {
   local line="$1"
-  # 至少 2 字段, 不支持 options 前缀; case 匹配 keytype + 尾空格
-  case "$line" in
-    "ssh-ed25519 "*|"ssh-rsa "*|"ecdsa-sha2-nistp256 "*|"ecdsa-sha2-nistp384 "*|\
-    "ecdsa-sha2-nistp521 "*|"sk-ssh-ed25519@openssh.com "*|"sk-ecdsa-sha2-nistp256@openssh.com "*)
-      return 0 ;;
+  local key_type key_body rest
+
+  # 拆字段: 第一字段必须直接是 key type (不支持 command=/from= 等 options 前缀)
+  read -r key_type key_body rest <<<"${line}"
+
+  # key type 和 key body 都必须非空 (拒绝 "ssh-ed25519 " / "ssh-ed25519")
+  [[ -n "${key_type:-}" && -n "${key_body:-}" ]] || return 1
+
+  case "${key_type}" in
+    ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)
+      ;;
     *)
-      return 1 ;;
+      return 1
+      ;;
   esac
+
+  # 基础防呆: public key body 不应含空格, base64 字符集
+  [[ "${key_body}" =~ ^[A-Za-z0-9+/=]+$ ]] || return 1
+  return 0
 }
 
 check_disk_threshold_inner() {
@@ -612,7 +664,7 @@ setup() { cd "${REPO_ROOT}"; }
   [ "$status" -eq 0 ]
 }
 
-@test "validate_pubkey_line: rejects ssh-dss / empty / options prefix / garbage" {
+@test "validate_pubkey_line: rejects ssh-dss / empty / options prefix / garbage / keytype-only" {
   run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line "ssh-dss AAAA"'
   [ "$status" -ne 0 ]
   run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line ""'
@@ -620,6 +672,10 @@ setup() { cd "${REPO_ROOT}"; }
   run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line "command=foo ssh-ed25519 AAAA"'
   [ "$status" -ne 0 ]
   run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line "not-a-key"'
+  [ "$status" -ne 0 ]
+  run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line "ssh-ed25519"'
+  [ "$status" -ne 0 ]
+  run bash -c 'source scripts/bootstrap-bare-metal.sh; validate_pubkey_line "ssh-ed25519 "'
   [ "$status" -ne 0 ]
 }
 
