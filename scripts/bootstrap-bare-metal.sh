@@ -112,6 +112,64 @@ get_builder_home() {
   printf '%s' "${home}"
 }
 
+install_minimal_packages() {
+  log "stage: install_minimal_packages"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y sudo ca-certificates git
+}
+
+ensure_builder_user() {
+  log "stage: ensure_builder_user"
+  if id -u "${BUILDER_USER}" >/dev/null 2>&1; then
+    log "user ${BUILDER_USER} already exists, skipping useradd"
+  else
+    useradd -m -s /bin/bash -U "${BUILDER_USER}"
+    log "created user ${BUILDER_USER}"
+  fi
+}
+
+configure_passwordless_sudo() {
+  log "stage: configure_passwordless_sudo"
+  local sudoers_file="/etc/sudoers.d/bootstrap-${BUILDER_USER}"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s ALL=(ALL) NOPASSWD: ALL\n' "${BUILDER_USER}" >"${tmp}"
+  if ! visudo -cf "${tmp}" >/dev/null; then
+    rm -f "${tmp}"
+    die "generated sudoers file failed validation"
+  fi
+  if ! install -o root -g root -m 0440 "${tmp}" "${sudoers_file}"; then
+    rm -f "${tmp}"
+    die "failed to install sudoers file: ${sudoers_file}"
+  fi
+  rm -f "${tmp}"
+  visudo -c >/dev/null || die "system sudoers validation failed after installing ${sudoers_file}"
+}
+
+configure_authorized_keys() {
+  log "stage: configure_authorized_keys"
+  local builder_home ssh_dir auth_file builder_group
+  builder_home="$(get_builder_home)"
+  ssh_dir="${builder_home}/.ssh"
+  auth_file="${ssh_dir}/authorized_keys"
+  builder_group="$(id -gn "${BUILDER_USER}")"
+  install -d -o "${BUILDER_USER}" -g "${builder_group}" -m 0700 "${ssh_dir}"
+  touch "${auth_file}"
+  chown "${BUILDER_USER}:${builder_group}" "${auth_file}"
+  chmod 0600 "${auth_file}"
+  local key_line
+  while IFS= read -r key_line; do
+    [[ -n "${key_line}" ]] || continue
+    if grep -qxF -- "${key_line}" "${auth_file}" 2>/dev/null; then
+      log "pubkey already present, skipping: ${key_line%% *}"
+    else
+      printf '%s\n' "${key_line}" >>"${auth_file}"
+      log "added pubkey: ${key_line%% *}"
+    fi
+  done <<< "${PUBKEYS}"
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -166,7 +224,11 @@ parse_args() {
 main() {
   parse_args "$@"
   run_preflight
-  # (后续 stages 在 Task 4-5 接入)
+  install_minimal_packages
+  ensure_builder_user
+  configure_passwordless_sudo
+  configure_authorized_keys
+  # (clone + next_steps 在 Task 5 接入)
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
