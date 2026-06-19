@@ -170,6 +170,50 @@ configure_authorized_keys() {
   done <<< "${PUBKEYS}"
 }
 
+clone_repo_if_requested() {
+  if [[ -z "${REPO_URL:-}" ]]; then
+    log "no --repo-url provided, skipping clone"
+    return
+  fi
+  log "stage: clone_repo_if_requested"
+  local builder_home repo_dir
+  builder_home="$(get_builder_home)"
+  repo_dir="${builder_home}/ocserv-backport"
+  if [[ -d "${repo_dir}/.git" ]]; then
+    log "repo already cloned at ${repo_dir}, skipping"
+    return
+  fi
+  if [[ -e "${repo_dir}" ]]; then
+    die "${repo_dir} exists but is not a git repo; inspect it or remove it manually:
+  rm -rf ${repo_dir}"
+  fi
+  sudo -H -u "${BUILDER_USER}" git clone "${REPO_URL}" "${repo_dir}" \
+    || die "git clone failed: ${REPO_URL}"
+  log "cloned ${REPO_URL} -> ${repo_dir}"
+}
+
+print_next_steps() {
+  local repo_dir repo_note
+  repo_dir="$(get_builder_home)/ocserv-backport"
+  if [[ -d "${repo_dir}/.git" ]]; then
+    repo_note="(already cloned)"
+  else
+    repo_note="(clone the repo first, or rerun this script with --repo-url)"
+  fi
+  log "========================================================"
+  log "bare-metal setup complete"
+  log "next steps (as ${BUILDER_USER}):"
+  log "  ssh ${BUILDER_USER}@${HOST_HINT}"
+  log "  cd ~/ocserv-backport   ${repo_note}"
+  log "  cp .bootstrap.env.example .bootstrap.env && chmod 600 .bootstrap.env"
+  log "  # edit .bootstrap.env (BOOTSTRAP_BUILDER_USER=${BUILDER_USER})"
+  log "  scripts/bootstrap-build-host.sh --dry-run --generate-gpg-key"
+  log "  # then follow docs/trixie-builder-dryrun-runbook.md step 2-4"
+  log "========================================================"
+  log "NOTE: this script stops before bootstrap-build-host.sh."
+  log "      bootstrap must run as ${BUILDER_USER} (not root)."
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -228,7 +272,8 @@ main() {
   ensure_builder_user
   configure_passwordless_sudo
   configure_authorized_keys
-  # (clone + next_steps 在 Task 5 接入)
+  clone_repo_if_requested
+  print_next_steps
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
