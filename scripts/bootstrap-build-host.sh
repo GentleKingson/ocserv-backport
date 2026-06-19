@@ -246,6 +246,18 @@ stage_install_packages() {
     build-essential devscripts debhelper debhelper-compat \
     dpkg-dev fakeroot lintian quilt \
     rclone aptly gnupg jq docker.io git curl ca-certificates
+  ensure_sbuild_group_membership
+}
+
+# Ensure BUILDER_USER is in the sbuild group so non-sudo sbuild can read the
+# chroot (chroot files are root:sbuild, mode 0640). Idempotent.
+ensure_sbuild_group_membership() {
+  if id -nG "${BUILDER_USER}" | tr ' ' '\n' | grep -qx sbuild; then
+    log "${BUILDER_USER} already in sbuild group"
+    return
+  fi
+  run_cmd sudo sbuild-adduser "${BUILDER_USER}"
+  log "WARN: ${BUILDER_USER} was added to sbuild group; log out and back in, or run 'newgrp sbuild', before using sbuild without sudo"
 }
 
 stage_prepare_directories() {
