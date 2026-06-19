@@ -25,6 +25,22 @@ load_defaults_and_aliases() {
   export BUILDER_USER APTLY_ROOT REPO_NAME APT_BASE_URL R2_BUCKET
 }
 
+# Safe wrapper: write heredoc content to a temp file, run a command on it.
+# In dry-run, prints "DRY-RUN: would run <cmd>" WITHOUT the heredoc content.
+# Usage: run_safe_heredoc <tempfile-pattern> <content> <cmd...> ; cmd runs as: <cmd> <tempfile>
+run_safe_heredoc() {
+  local tmpfile="$1" content="$2"; shift 2
+  if [[ "${BOOTSTRAP_DRY_RUN:-0}" == "1" ]]; then
+    printf 'DRY-RUN: would run'
+    printf ' %q' "$@"
+    printf ' (with heredoc input, content suppressed)\n'
+    return
+  fi
+  printf '%s' "${content}" > "${tmpfile}"
+  "$@" "${tmpfile}"
+  rm -f "${tmpfile}"
+}
+
 # Stage: load_config (runs FIRST; preflight depends on these values).
 stage_load_config() {
   log "stage: load_config"
@@ -294,9 +310,154 @@ ${bad}"
   log "chroot sources OK (trixie-only)"
 }
 
-stage_setup_gpg_key()           { log "TODO stage_setup_gpg_key"; }
-stage_setup_aptly()             { log "TODO stage_setup_aptly"; }
-stage_setup_rclone_skeleton()   { log "TODO stage_setup_rclone_skeleton"; }
+stage_setup_gpg_key() {
+  log "stage: setup_gpg_key"
+  # lazy mode validation (spec §1.1): only here, not at parse time
+  [[ -n "${GPG_MODE}" ]] \
+    || die "specify one of --generate-gpg-key / --import-gpg-key <path> / --reuse-gpg-key <KEYID>"
+
+  case "${GPG_MODE}" in
+    generate) gpg_generate ;;
+    import)   gpg_import ;;
+    reuse)    gpg_reuse ;;
+  esac
+  export_pubkey
+}
+
+gpg_secret_exists_for_keyid() { gpg --list-secret-keys --with-colons "$1" 2>/dev/null | grep -q '^sec'; }
+gpg_secret_exists_for_uid()   { gpg --list-secret-keys --with-colons 2>/dev/null | grep -iE 'THEHKUS-Backports|master@thehkus.com' | grep -q '^uid'; }
+
+gpg_generate() {
+  if [[ -n "${BOOTSTRAP_GPG_KEYID:-}" ]] && gpg_secret_exists_for_keyid "${BOOTSTRAP_GPG_KEYID}"; then
+    die "key ${BOOTSTRAP_GPG_KEYID} already exists; use --reuse-gpg-key ${BOOTSTRAP_GPG_KEYID} (do NOT regenerate)"
+  fi
+  if gpg_secret_exists_for_uid; then
+    die "signing key already exists for THEHKUS-Backports; use --reuse-gpg-key <KEYID> (do NOT regenerate)"
+  fi
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would generate GPG signing key for THEHKUS-Backports"
+    export BOOTSTRAP_GPG_KEYID="DRYRUN-GPG-KEYID"
+    return
+  fi
+  read_secret_if_missing BOOTSTRAP_GPG_PASSPHRASE "GPG passphrase"
+  local keyfile content
+  keyfile="$(mktemp)"
+  # %no-protection: non-interactive generation. If passphrase-protected keys are
+  # desired, replace with: Passphrase: ${BOOTSTRAP_GPG_PASSPHRASE}. GPG_PASSPHRASE
+  # is also stored as a GitHub secret for CI; local agent handles signing.
+  content=$(cat <<EOF
+%no-protection
+Key-Type: RSA
+Key-Length: 4096
+Name-Real: THEHKUS-Backports
+Name-Email: master@thehkus.com
+Expire-Date: 0
+%commit
+EOF
+)
+  run_safe_heredoc "${keyfile}" "${content}" gpg --batch --generate-key \
+    || die "gpg generate-key failed"
+  BOOTSTRAP_GPG_KEYID="$(gpg --list-secret-keys --with-colons 2>/dev/null \
+    | awk -F: '/^fpr:/{print $10}' | tail -1)"
+  export BOOTSTRAP_GPG_KEYID
+  log "generated signing key: ${BOOTSTRAP_GPG_KEYID}"
+}
+
+gpg_import() {
+  require_var BOOTSTRAP_GPG_KEYID
+  if gpg_secret_exists_for_keyid "${BOOTSTRAP_GPG_KEYID}"; then
+    log "key ${BOOTSTRAP_GPG_KEYID} already in keyring; treating import as reuse"
+    return
+  fi
+  [[ -r "${GPG_IMPORT_PATH}" ]] || die "import file not readable: ${GPG_IMPORT_PATH}"
+  # pre-check: confirm the file actually contains this KEYID (spec advice #7)
+  if ! gpg --show-keys --with-colons "${GPG_IMPORT_PATH}" 2>/dev/null | grep -q ":${BOOTSTRAP_GPG_KEYID}:"; then
+    die "key in ${GPG_IMPORT_PATH} does not match BOOTSTRAP_GPG_KEYID=${BOOTSTRAP_GPG_KEYID}"
+  fi
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would gpg --import ${GPG_IMPORT_PATH}"
+    return
+  fi
+  gpg --import "${GPG_IMPORT_PATH}" || die "gpg import failed"
+  gpg_secret_exists_for_keyid "${BOOTSTRAP_GPG_KEYID}" \
+    || die "imported key has no secret part for ${BOOTSTRAP_GPG_KEYID}"
+}
+
+gpg_reuse() {
+  BOOTSTRAP_GPG_KEYID="${GPG_REUSE_KEYID}"; export BOOTSTRAP_GPG_KEYID
+  require_var BOOTSTRAP_GPG_KEYID
+  gpg_secret_exists_for_keyid "${BOOTSTRAP_GPG_KEYID}" \
+    || die "no secret key for ${BOOTSTRAP_GPG_KEYID}"
+}
+
+export_pubkey() {
+  require_var BOOTSTRAP_GPG_KEYID
+  local out="ansible/roles/ocserv_backport/files/thehkus-backports.asc"
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would export pubkey ${BOOTSTRAP_GPG_KEYID} -> ${out}"
+    return
+  fi
+  gpg --armor --export "${BOOTSTRAP_GPG_KEYID}" > "${out}" || die "pubkey export failed"
+  log "exported pubkey -> ${out}"
+}
+
+stage_setup_aptly() {
+  log "stage: setup_aptly"
+  require_var BOOTSTRAP_GPG_KEYID
+  local cfg="${APTLY_CONFIG:-${HOME}/.aptly.conf}"
+
+  # 1. config validate or generate (BEFORE repo; spec §2.7)
+  if [[ -f "${cfg}" ]]; then
+    local root gpgkey
+    root="$(jq -r '.rootDir // empty' "${cfg}")"
+    gpgkey="$(jq -r '.gpgKey // empty' "${cfg}")"
+    [[ "${root}" == "${APTLY_ROOT}" ]] \
+      || die "aptly config rootDir='${root}' != ${APTLY_ROOT}; manual review (refuse to rewrite)"
+    [[ "${gpgkey}" == "${BOOTSTRAP_GPG_KEYID}" ]] \
+      || die "aptly config gpgKey='${gpgkey}' != ${BOOTSTRAP_GPG_KEYID}; manual review"
+  else
+    if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+      log "DRY-RUN: would generate ${cfg}"
+    else
+      jq -n --arg root "${APTLY_ROOT}" --arg key "${BOOTSTRAP_GPG_KEYID}" \
+        '{rootDir:$root, gpgProvider:"gpg", gpgKey:$key}' > "${cfg}"
+      log "generated minimal aptly config -> ${cfg}"
+    fi
+  fi
+
+  # 2. repo show/create (skip-if-exists)
+  if aptly repo show "${REPO_NAME}" >/dev/null 2>&1; then
+    log "aptly repo '${REPO_NAME}' exists; skipping"
+    return
+  fi
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would aptly repo create ${REPO_NAME}"
+    return
+  fi
+  aptly repo create "${REPO_NAME}" || die "aptly repo create failed"
+  log "created aptly repo '${REPO_NAME}'"
+}
+
+stage_setup_rclone_skeleton() {
+  log "stage: setup_rclone_skeleton"
+  local conf="${HOME}/.config/rclone/rclone.conf"
+  if [[ -f "${conf}" ]] && grep -q '^\[r2\]' "${conf}" 2>/dev/null; then
+    log "rclone skeleton [r2] already present"
+    return
+  fi
+  if [[ -z "${BOOTSTRAP_R2_ACCOUNT_ID:-}" ]]; then
+    log "WARN: BOOTSTRAP_R2_ACCOUNT_ID not set; skipping rclone skeleton (r2-sync.sh injects creds at runtime anyway)"
+    return
+  fi
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would rclone config create r2 s3 (Cloudflare, no secrets)"
+    return
+  fi
+  rclone config create r2 s3 provider Cloudflare \
+    endpoint "https://${BOOTSTRAP_R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+    no_check_bucket true >/dev/null
+  log "rclone skeleton created (no secrets stored)"
+}
 
 main() {
   local run=() s started
