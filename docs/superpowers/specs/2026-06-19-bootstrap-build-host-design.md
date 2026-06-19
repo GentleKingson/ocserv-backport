@@ -1,6 +1,6 @@
 # trixie 构建主机 bootstrap 自动化 — 设计文档
 
-- 状态: 已确认 (待 writing-plans)
+- 状态: 已确认 v2 (评审修正已并入,待 writing-plans)
 - 日期: 2026-06-19
 - 范围: 把现有 `docs/BUILD_HOST_BOOTSTRAP.md`(纯手动 10 段命令)转化为一个幂等、可重跑、阶段化的自动化脚本 `scripts/bootstrap-build-host.sh`,用于在 dedicated trixie amd64 builder 上完成本机初始化
 - 父 spec: `docs/superpowers/specs/2026-06-18-ocserv-backport-design.md` §6.1
@@ -70,18 +70,21 @@ scripts/bootstrap-build-host.sh
 ### 1.2 阶段定义(固定顺序)
 
 ```text
-preflight              只读: OS=trixie、架构=amd64、非 root + 有 sudo、磁盘两级阈值
 load_config            幂等: 加载 .bootstrap.env (权限校验) + 默认值;不主动 read -s
+                       (必须在 preflight 前,因为 preflight 需要 BUILDER_USER/APTLY_ROOT 等)
+preflight              只读: OS=trixie、架构=amd64、当前用户==BUILDER_USER、有 sudo、磁盘两级阈值
 install_packages       safe-repeat: apt install -y 一组包
 prepare_directories    safe-repeat: mkdir + chown /var/aptly/{public,.locks,state}
 setup_sbuild_chroot    skip-if-exists: chroot 存在则校验 sources、跳过;否则创建
 setup_gpg_key          三模式互斥: generate/import/reuse (此阶段才校验模式)
-setup_aptly            skip-if-exists: repo 存在跳过;config 校验
+setup_aptly            skip-if-exists: config 先校验/生成,再 repo show/create
 setup_rclone_skeleton  skip-if-exists: rclone.conf 只放 remote 名骨架,不存凭据
 check_runner           只读: 检测本地 .runner 是否已注册 (已注册=info,非 fail)
 check_backups          只读: 检查备份源路径存在性,缺失只 warn 不 die
 print_manual_github_steps  纯输出: 打印 GitHub 手动清单 (按 --only-stage 条件执行)
 ```
+
+**为什么 load_config 在 preflight 前:** preflight 需要用 `BOOTSTRAP_BUILDER_USER`(校验当前用户)、`BOOTSTRAP_APTLY_ROOT`(磁盘检查的目标文件系统)、`BOOTSTRAP_RUNNER_DIR` 等值;这些默认值与 `.bootstrap.env` 覆盖逻辑都在 load_config 里。若 preflight 先跑,会按默认值检查错误的用户/路径。
 
 **main() 流程:**
 
@@ -141,20 +144,28 @@ bootstrap 不实际消费(仅 rclone skeleton 或手动清单提示):
 
 ## 第 2 节: 各阶段行为与守卫逻辑
 
-### 2.1 preflight(只读校验)
+### 2.1 preflight(只读校验,依赖 load_config 已设置 BOOTSTRAP_BUILDER_USER/APTLY_ROOT)
 
 ```text
 检查:
   /etc/os-release: ID=debian, VERSION_CODENAME=trixie
   架构: uname -m == x86_64
-  运行用户: 当前不是 root (die "run as ${BUILDER_USER} with passwordless sudo, not root")
+  运行用户 (硬性):
+    id -un == ${BOOTSTRAP_BUILDER_USER}
+      否则 die "run as ${BOOTSTRAP_BUILDER_USER} with passwordless sudo, not as $(id -un)"
+    当前不是 root (root 直接运行会造成 GPG 落 /root/.gnupg、runner 落 /root/actions-runner,
+                    与 builder host 角色不符)
   权限: 有 passwordless sudo (sudo -n true 成功)
   磁盘 (检查 BOOTSTRAP_APTLY_ROOT 与 chroot 目录所在文件系统):
     < 15GB available → die
     15GB–30GB      → warn
     >= 30GB        → pass
 行为: 任一 hard 项不满足 → die,明确说明缺什么
-理由: 假设目标机是干净 trixie amd64 builder;提前失败比中途失败友好
+理由:
+  假设目标机是干净 trixie amd64 builder;提前失败比中途失败友好。
+  强制当前用户==BUILDER_USER 是为防止角色错乱: 若当前用户是 ubuntu 而
+  BUILDER_USER=builder,GPG 会落 /home/ubuntu/.gnupg、runner 落 /home/ubuntu/actions-runner,
+  而 /var/aptly 却 chown 给 builder,完全错乱。
 ```
 
 ### 2.2 load_config(见 §1.3)
@@ -201,9 +212,13 @@ bootstrap 不实际消费(仅 rclone skeleton 或手动清单提示):
     trixie ${CHROOT_DIR} http://deb.debian.org/debian
   verify_chroot_sources
 verify_chroot_sources():
-  读取 ${CHROOT_DIR}/etc/apt/sources.list (及 sources.list.d/*.sources)
-  断言只含 trixie / trixie-updates / trixie-security
-  含 sid / testing / forky → die "chroot sources contaminated; manual fix"
+  读取所有 sources 文件 (Debian 真实形态,两种格式都查):
+    ${CHROOT_DIR}/etc/apt/sources.list
+    ${CHROOT_DIR}/etc/apt/sources.list.d/*.list
+    ${CHROOT_DIR}/etc/apt/sources.list.d/*.sources
+  解析时忽略空行和注释行 (# 开头)
+  断言只含 trixie / trixie-updates / trixie-security (suite/codename)
+  含 sid / unstable / testing / forky → die "chroot sources contaminated; manual fix"
 理由: chroot 重建耗时且可能破坏正在用的 chroot;存在则只校验不重建
 ```
 
@@ -237,19 +252,20 @@ verify_chroot_sources():
     导出公钥 → ansible/roles/ocserv_backport/files/thehkus-backports.asc
 
   --import-gpg-key <path>:
-    require BOOTSTRAP_GPG_KEYID (非敏感必填,缺失 die)
+    require BOOTSTRAP_GPG_KEYID (非敏感必填,缺失 die;推荐用 full fingerprint,短 keyid 有碰撞风险)
     gpg --list-secret-keys ${KEYID} 已存在:
       log "key already in keyring; treating import as reuse"
       导出公钥 → return    (重跑幂等,不 die)
-    校验:
+    预检查导入文件 (导入前确认 KEYID 匹配,避免导入错误 key 后才发现):
+      gpg --show-keys --with-colons <path>  解析 fingerprint
+      与 BOOTSTRAP_GPG_KEYID 比较;不匹配 → die "key in <path> does not match ${KEYID}"
       <path> 不存在或不可读 → die
-      gpg --import <path>
-      gpg --list-secret-keys ${KEYID} 无 private key → die "imported key has no private part"
-      KEYID 与导入文件不匹配 → die
+    gpg --import <path>
+    gpg --list-secret-keys ${KEYID} 无 private key → die "imported key has no private part"
     导出公钥 → .../thehkus-backports.asc
 
   --reuse-gpg-key <KEYID>:
-    require BOOTSTRAP_GPG_KEYID (== 参数值或 env)
+    require BOOTSTRAP_GPG_KEYID (== 参数值或 env;推荐 full fingerprint)
     gpg --list-secret-keys ${KEYID} 无 private key → die "no private key for ${KEYID}"
     导出公钥 → .../thehkus-backports.asc (覆盖 placeholder)
 
@@ -260,22 +276,26 @@ verify_chroot_sources():
     不打印 keyfile 内容
 ```
 
-### 2.7 setup_aptly(skip-if-exists + config 校验)
+### 2.7 setup_aptly(config 先校验/生成,再 repo show/create)
 
 ```text
-行为:
-  aptly repo show ${REPO_NAME} 成功 → log "repo exists; skipping" → 进入 config 校验
-  否则 aptly repo create ${REPO_NAME}
+前置: require BOOTSTRAP_GPG_KEYID (setup_gpg_key 已设置;此阶段缺失则 die)
 
-aptly config 校验/生成:
-  config 文件 (~/.aptly.conf 或 $APTLY_CONFIG) 存在:
-    断言 rootDir == ${BOOTSTRAP_APTLY_ROOT} (/var/aptly)
-    断言 gpgKey == ${BOOTSTRAP_GPG_KEYID}
-    不匹配 → die "aptly config mismatch; manual review (refuse to auto-rewrite)"
-  config 文件不存在:
-    生成最小配置 (不要求人工 aptly config edit):
-      { "rootDir": "/var/aptly", "gpgProvider": "gpg", "gpgKey": "<KEYID>" }
-理由: repo create 幂等可跳过;config 错配影响发布不自动改;缺失则生成最小配置
+顺序 (config 是 repo 的前置条件,必须先处理):
+  1. config 文件 (~/.aptly.conf 或 $APTLY_CONFIG) 存在:
+       断言 rootDir == ${BOOTSTRAP_APTLY_ROOT} (/var/aptly)
+       断言 gpgKey == ${BOOTSTRAP_GPG_KEYID}
+       不匹配 → die "aptly config mismatch; manual review (refuse to auto-rewrite)"
+  2. config 文件不存在:
+       生成最小配置 (不要求人工 aptly config edit):
+         { "rootDir": "/var/aptly", "gpgProvider": "gpg", "gpgKey": "<KEYID>" }
+  3. aptly repo show ${REPO_NAME} 成功 → log "repo exists; skipping"
+     否则 aptly repo create ${REPO_NAME}
+
+为什么 config 在前:
+  若 ~/.aptly.conf 不存在就先 aptly repo create,aptly 会用默认 rootDir (~/.aptly),
+  把 repo 创建到错误位置;后续再补 config 也无法纠正已创建在错误位置的 repo。
+  config 是 repo 的前置条件。
 ```
 
 ### 2.8 setup_rclone_skeleton(skip-if-exists)
@@ -384,6 +404,9 @@ read_secret_if_missing() {
 # 只为当前未设置的变量填入 <file> 的值,不覆盖已有环境变量
 # key 校验: 只接受 BOOTSTRAP_[A-Z0-9_]+
 # 值解析: 用 ${line%%=*} / ${line#*=} 避免 IFS='=' 截断含 = 的 token
+# 语法限制: .bootstrap.env 只支持简单 KEY=value / KEY="value" 行;
+#   不执行 shell 表达式;不支持 export KEY=value;不支持多行值。
+#   (避免为兼容复杂 .env 语法而过度工程)
 load_bootstrap_env_defaults() {
   local file="$1" line key val
   [[ -f "${file}" ]] || return 0
@@ -516,17 +539,37 @@ scripts/bootstrap-build-host.sh --only-stage install_packages
   --dry-run 跑一遍全流程,确认无副作用
 ```
 
-### 3.7 `--dry-run` 语义(修改 2)
+### 3.7 `--dry-run` 语义(修改 2 + 评审修正)
 
 ```text
 BOOTSTRAP_DRY_RUN=1:
   修改状态的命令 (sudo apt-get install / sbuild-createchroot / gpg --generate-key /
-    aptly repo create / rclone config / chown): 经 run_cmd 只打印,不执行
-  只读检查 (preflight / verify_chroot_sources / config 校验 / check_runner /
+    aptly repo create / aptly config 生成 / rclone config / chown): 经 run_cmd 只打印,不执行
+  只读检查 (preflight / 已存在资源的 verify_chroot_sources / config 校验 / check_runner /
     check_backups): 正常执行 (无副作用)
   含 secret 的命令: 不打印 secret 值
     GPG: 打印 "DRY-RUN: would generate GPG signing key for THEHKUS-Backports",
          不打印 keyfile 内容
+
+依赖性只读检查的例外 (评审必须修改 4):
+  若某只读检查依赖"本轮 dry-run 本应创建、但实际未创建"的资源,不能硬跑并失败:
+    打印 "DRY-RUN: would verify <resource> after creation"
+    不 die,继续
+  典型场景:
+    setup_sbuild_chroot: dry-run 跳过 sbuild-createchroot 后,若 chroot 目录本就不存在,
+      verify_chroot_sources 走 "would verify after creation",不因目录缺失 die
+    setup_aptly: dry-run 不生成 config/repo 后,config/repo 校验走 would-verify
+
+GPG 阶段 dry-run (必须修改 4):
+  dry-run + --generate-gpg-key:
+    不 read -s GPG passphrase
+    不生成 key
+    设置 BOOTSTRAP_GPG_KEYID=DRYRUN-GPG-KEYID  (占位值,供 setup_aptly 的 gpgKey 校验通过)
+    打印 "would generate signing key"
+  dry-run + --import-gpg-key / --reuse-gpg-key:
+    目标 key 本就存在 → 正常校验复用
+    目标 key 不存在 → 走 would-verify,不 die
+  这样全流程 dry-run 能真正跑通,而不是半路因资源缺失中断。
 ```
 
 ---
@@ -553,4 +596,25 @@ bootstrap 不自动改写已有 aptly config (错配 die)
 bootstrap 不创建 /var/lib/ocserv-backport (那是 staging/prod 主机目录)
 bootstrap 不验证备份系统在跑 (只查源路径存在)
 bootstrap 不要求 R2/CF/GitHub secrets 存在 (只在手动清单提示)
+```
+
+## 附录: 修订记录
+
+### v2 (评审修正, 2026-06-19)
+
+按 v1 评审反馈并入 5 项必须修改 + 3 项建议,修正实现正确性:
+
+```text
+必须修改:
+1. 阶段顺序: load_config 移到 preflight 前 (preflight 需要 BUILDER_USER/APTLY_ROOT)
+2. preflight 增加当前用户必须 == BOOTSTRAP_BUILDER_USER (防 ubuntu/builder 角色错乱)
+3. setup_aptly 改为 config 先校验/生成,再 repo show/create (config 是 repo 前置)
+4. dry-run 增加"资源未实际创建时跳过依赖性只读检查"语义;
+   GPG generate 模式 dry-run 用 DRYRUN-GPG-KEYID 占位,不读 passphrase
+5. verify_chroot_sources 同时检查 .list 和 .sources,忽略空行和注释行
+
+建议修改:
+6. GPG KEYID 推荐用 full fingerprint (短 keyid 有碰撞风险)
+7. import 模式用 gpg --show-keys --with-colons 预检查文件再导入
+8. load_bootstrap_env_defaults 明确不支持复杂 shell 语法 (只 KEY=value / KEY="value")
 ```
