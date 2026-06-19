@@ -31,23 +31,22 @@ GitHub runner 注册与 secrets 配置。这些是 dry-run 之后的阶段，见
 
 ```text
 本步执行用户：root（SSH 登录即 root，或用云平台控制台账号）
-完成本步后：builder 用户就位、passwordless sudo 生效、仓库已克隆，
+完成本步后：builder 用户就位、passwordless sudo 生效、（可选）仓库已克隆，
             但 bootstrap 脚本尚未运行
 本步产出：正好满足 bootstrap 的 preflight 前置条件
           （OS=debian/trixie、arch=x86_64、user=builder、非 root、
            passwordless sudo、磁盘 ≥15GB）
 ```
 
-### 2.1 确认机器基础形态（root，只读检查）
+### 1.1 运行脚本前的只读确认
+
+先确认机器形态（脚本 preflight 也会查，但提前看一眼省得建完用户才发现机器不对）：
 
 ```bash
 . /etc/os-release; echo "$ID $VERSION_CODENAME"   # 期望：debian trixie
 uname -m                                            # 期望：x86_64
-df -h /                                             # 确认根盘（chroot + aptly 都落 /var）
+df -h /                                             # 确认根盘 ≥40GB（见磁盘阈值）
 ```
-
-> 为什么：这三项是 bootstrap preflight 的硬性校验。不满足就别往下走，换机器或重装系统
-> 比后面排查省事。
 
 **磁盘阈值（三层表述）：**
 
@@ -64,106 +63,54 @@ df -h /                                             # 确认根盘（chroot + ap
 
 > bootstrap preflight 的双阈值：<15GB die，15-30GB warn，≥30GB pass。
 
-✅ 验收：`ID=debian` / `VERSION_CODENAME=trixie` / `arch=x86_64` / 根盘 ≥40GB
+### 1.2 运行 bootstrap-bare-metal.sh
 
-### 2.2 安装 sudo + 创建 builder 用户并配置 passwordless sudo（root）
-
-> 时序前提：Debian minimal 裸机不一定预装 sudo，而 2.2 要用 visudo、后续 builder 要
-> 用 sudo。所以 sudo 必须在本节开头先装，不能放到 2.4。
-
-```bash
-# 先装 sudo（裸 Debian minimal 不一定有）；顺带装 git/ca-certificates 供 2.4 clone 用
-apt-get update
-apt-get install -y sudo ca-certificates git
-
-# 幂等：用户已存在则跳过（培训文档可能被重复执行）
-id -u builder >/dev/null 2>&1 || useradd -m -s /bin/bash builder
-
-# sudoers 覆盖式写入（重跑安全）
-cat >/etc/sudoers.d/builder <<'EOF'
-builder ALL=(ALL) NOPASSWD: ALL
-EOF
-chmod 0440 /etc/sudoers.d/builder
-visudo -c                                          # 语法校验 sudoers
-```
-
-> 为什么 builder 用户：bootstrap 与所有 CI 任务都以 builder 身份跑，GPG 落
-> `~/.gnupg`、runner 落 `~/actions-runner`、aptly chown 给 builder。preflight 显式
-> 断言当前用户 == BUILDER_USER 且不是 root（防止角色错乱）。
-> 为什么 NOPASSWD：bootstrap 的 install_packages/setup_sbuild_chroot 等阶段要
-> `sudo apt-get install` / `sudo sbuild-createchroot`，无密码才能非交互跑通。
-> 为什么 sudo 在 2.2 而非 2.4：本节就要用 visudo 校验 sudoers，builder 也要用
-> `sudo -n true` 验收。若放到 2.4 才装，2.2 的 visudo 和验收会失败。
-
-✅ 验收：
+脚本会装 sudo/git/ca-certificates、建 builder 用户、配 passwordless sudo（临时文件 +
+visudo -cf 验证）、配 SSH authorized_keys（追加去重，不覆盖已有 key）、可选 clone 仓库。
+全部幂等，可安全重跑。
 
 ```bash
-su - builder -c 'sudo -n true' && echo OK          # 必须无报错退出
+# 三种公钥来源任选其一（互斥）；--repo-url 可选（提供则自动 clone）
+# ⚠️ 占位符：公钥 / <仓库 URL> 必须替换为真实值
+scripts/bootstrap-bare-metal.sh --ssh-pubkey-file /path/to/id_ed25519.pub --repo-url <仓库 URL>
+# 或
+scripts/bootstrap-bare-metal.sh --ssh-pubkey 'ssh-ed25519 AAAA... replace-with-your-real-public-key' --repo-url <仓库 URL>
+# 或
+ADMIN_PUBKEY='ssh-ed25519 AAAA... replace-with-your-real-public-key' \
+  scripts/bootstrap-bare-metal.sh --repo-url <仓库 URL>
 ```
 
-### 2.3 配置 builder 的 SSH 访问（root）
+可选参数：
 
-主路径用变量写 authorized_keys（云主机初始交接场景最稳）：
+```text
+--builder-user <name>   builder 用户名（默认 builder；改了的话 .bootstrap.env 的
+                        BOOTSTRAP_BUILDER_USER 必须一致）
+--host-hint <host>      仅用于脚本结尾打印的 ssh 提示，不参与实际连接
+```
+
+> 脚本做了什么、为什么这么做：见 **附录 C** 的等价手动操作（排障/原理参考）。
+
+✅ 验收（脚本退出码 0 + 以下检查）：
 
 ```bash
-# ⚠️ 占位符：把 ADMIN_PUBKEY 替换为你的真实公钥；不要原样复制占位值
-ADMIN_PUBKEY='ssh-ed25519 AAAA... replace-with-your-real-public-key'
-install -d -o builder -g builder -m 0700 /home/builder/.ssh
-printf '%s\n' "$ADMIN_PUBKEY" > /home/builder/.ssh/authorized_keys
-chown builder:builder /home/builder/.ssh/authorized_keys
-chmod 0600 /home/builder/.ssh/authorized_keys
+su - builder -c 'sudo -n true' && echo "sudo OK"   # passwordless sudo 生效
+# ⚠️ 占位符：<host> 必须替换为构建机真实地址
+ssh builder@<host> whoami                            # 期望输出 builder
 ```
 
-可选方式（若你工作站已有 key 且能 ssh 到 root）：
-
-```bash
-# ⚠️ 占位符：<host> 必须替换为构建机的主机名或 IP
-ssh-copy-id builder@<host>
-```
-
-> 为什么：后续所有操作（bootstrap/dry-run）都以 builder 身份 SSH 进去做，不再用 root。
-> 这也呼应 preflight "禁止 root 直接运行"。
-
-✅ 验收：从你的工作站 `ssh builder@<host>` 能登录，且 `whoami` 显示 builder
-（`<host>` 必须替换为构建机真实地址）
-
-### 2.4 切 builder + 克隆仓库（root → 切 builder）
-
-> sudo / git / ca-certificates 已在 2.2 装好，本节不再重复安装。
-
-切到 builder 身份（用 `su -` 或重新 ssh）：
-
-```bash
-su - builder
-cd ~
-# ⚠️ 占位符：<仓库 URL> 必须替换为 ocserv-backport 仓库地址
-git clone <仓库 URL> ocserv-backport
-cd ocserv-backport
-```
-
-> 为什么不在本节再装包：完整构建工具链（sbuild/aptly/docker 等）不在本章手装，而是
-> 交给下一步 bootstrap 的 install_packages 阶段统一装，保持单一事实源。本章只装够
-> "克隆仓库 + 能 sudo" 的最小集（已在 2.2 装好）。
-
-✅ 验收（以 builder 身份）：
-
-```bash
-whoami                                             # builder（不是 root）
-sudo -n true && echo "passwordless sudo OK"        # 验证已脱离 root 且 sudo 可用
-cd ~/ocserv-backport && git status                # clean working tree
-```
-
-### 2.5 本步退出条件总览
+### 1.3 本步退出条件总览
 
 ```text
 进入第 2 步前，必须全部满足：
-  □ OS=debian trixie, arch=x86_64, 根盘 ≥40GB
-  □ builder 用户存在，shell=/bin/bash
-  □ builder 有 passwordless sudo（sudo -n true 成功）
+  □ bootstrap-bare-metal.sh 退出码 0
+  □ OS=debian trixie, arch=x86_64（脚本 preflight 已校验）
+  □ builder 用户存在，有 passwordless sudo（sudo -n true 成功）
   □ 能以 builder 身份 SSH 登录
-  □ ~/ocserv-backport 已克隆，git status clean
-  □ 当前 shell 身份是 builder（不是 root）
+  □ （若提供 --repo-url）~/ocserv-backport 已克隆，git status clean
+  □ 当前 shell 身份可切到 builder（准备进入第 2 步）
 ```
+
+> 排障 / 理解脚本原理：第 1 步的等价手敲命令见 **附录 C**。
 
 ---
 
@@ -772,7 +719,7 @@ docs/BUILD_HOST_BOOTSTRAP.md
 | 步 | 主题 | 执行用户 | 关键产出 |
 |----|------|---------|---------|
 | 引言 | 文档定位与读者约定 | — | 范围/终点/成功定义 |
-| 第 1 步 | 裸机准备 | root → builder | builder 用户 + sudo + SSH + 仓库 |
+| 第 1 步 | 裸机准备（`bootstrap-bare-metal.sh`） | root → builder | builder 用户 + sudo + SSH + 仓库 |
 | 第 2 步 | bootstrap 配置 + GPG 模式 + bootstrap dry-run 预演 | builder | .bootstrap.env + GPG 决策 + 无副作用预演 |
 | 第 3 步 | bootstrap 真实运行（分段） | builder | 机器状态全就位 |
 | 第 4 步 | make dry-run 端到端验收 | builder | 成功定义达成 |
@@ -812,3 +759,66 @@ scripts/bootstrap-build-host.sh --from-stage prepare_directories --reuse-gpg-key
 | `<仓库 URL>` | 第 1 步 2.4 git clone | ocserv-backport 仓库地址 |
 | `<FULL_FINGERPRINT>` | 第 2 步 3.3 / 第 3 步 4.4 reuse-gpg-key | GPG key 的完整 fingerprint（非短 keyid） |
 | `/path/to/private.asc` | 第 2 步 3.3 / 第 3 步 4.4 import-gpg-key | 待导入的 GPG 私钥文件路径 |
+| `/path/to/id_ed25519.pub` | 第 1 步 1.2 `--ssh-pubkey-file` | 管理员真实 SSH 公钥文件路径 |
+
+---
+
+## 附录 C：第 1 步等价手动操作（排障/原理参考）
+
+> 本附录是第 1 步 `bootstrap-bare-metal.sh` 的等价手敲命令，**非默认路径**。
+> 用途：脚本失败时排障、或想理解脚本每一步在做什么。默认请直接用脚本（见第 1 步 1.2）。
+> 所有命令以 root 执行，幂等可重跑。
+
+### C.1 安装 sudo + 创建 builder 用户 + 配置 passwordless sudo
+
+> 时序前提：Debian minimal 裸机不一定预装 sudo，而下面要用 visudo。所以 sudo 必须先装。
+
+```bash
+# 先装 sudo（裸 Debian minimal 不一定有）；顺带装 git/ca-certificates 供 C.3 clone 用
+apt-get update
+apt-get install -y sudo ca-certificates git
+
+# 幂等：用户已存在则跳过
+id -u builder >/dev/null 2>&1 || useradd -m -s /bin/bash builder
+
+# sudoers 覆盖式写入（重跑安全）
+cat >/etc/sudoers.d/builder <<'EOF'
+builder ALL=(ALL) NOPASSWD: ALL
+EOF
+chmod 0440 /etc/sudoers.d/builder
+visudo -c                                          # 语法校验 sudoers
+```
+
+> 脚本与手敲的差异：脚本把 sudoers 先写临时文件 + `visudo -cf` 验证后再 `install`，
+> 避免坏内容进入 `/etc/sudoers.d`；手敲版直接 cat 写入后 visudo -c 全量校验。
+> 脚本用 `useradd -U`（建同名主组）；手敲版省略 -U（Debian 默认也会建同名组）。
+
+### C.2 配置 builder 的 SSH authorized_keys
+
+```bash
+# ⚠️ 占位符：把 ADMIN_PUBKEY 替换为你的真实公钥；不要原样复制占位值
+ADMIN_PUBKEY='ssh-ed25519 AAAA... replace-with-your-real-public-key'
+install -d -o builder -g builder -m 0700 /home/builder/.ssh
+printf '%s\n' "$ADMIN_PUBKEY" > /home/builder/.ssh/authorized_keys
+chown builder:builder /home/builder/.ssh/authorized_keys
+chmod 0600 /home/builder/.ssh/authorized_keys
+```
+
+> 脚本与手敲的差异：脚本用 `id -gn` 取真实主组（不假设组名 == 用户名），
+> 且逐行追加 + `grep -qxF` 精确去重（不覆盖已有 key）；手敲版直接覆盖写。
+> 已存在用户的场景请优先用脚本。
+
+### C.3 切 builder + 克隆仓库
+
+```bash
+su - builder
+cd ~
+# ⚠️ 占位符：<仓库 URL> 必须替换为 ocserv-backport 仓库地址
+git clone <仓库 URL> ocserv-backport
+cd ocserv-backport
+```
+
+> 脚本与手敲的差异：脚本用 `sudo -H -u builder git clone`，文件 owner 直接是 builder；
+> 手敲版 `su - builder` 后 clone 同样让 owner 是 builder。脚本对"目录已存在但非 git"
+> 会 die 并提示 `rm -rf`，手敲版需自行判断。
+
