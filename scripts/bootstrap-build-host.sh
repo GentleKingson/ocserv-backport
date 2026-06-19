@@ -219,9 +219,81 @@ $([[ -n "${BOOTSTRAP_GITHUB_RUNNER_URL:-}" ]] && echo "   Runner URL hint: ${BOO
 
 EOF
 }
-stage_install_packages()        { log "TODO stage_install_packages"; }
-stage_prepare_directories()     { log "TODO stage_prepare_directories"; }
-stage_setup_sbuild_chroot()     { log "TODO stage_setup_sbuild_chroot"; }
+stage_install_packages() {
+  log "stage: install_packages"
+  run_cmd sudo apt-get update
+  run_cmd sudo apt-get install -y \
+    sbuild schroot debootstrap \
+    build-essential devscripts debhelper debhelper-compat \
+    dpkg-dev fakeroot lintian quilt \
+    rclone aptly gnupg jq docker.io git curl ca-certificates
+}
+
+stage_prepare_directories() {
+  log "stage: prepare_directories"
+  if [[ -d "${APTLY_ROOT}" && -n "$(ls -A "${APTLY_ROOT}" 2>/dev/null)" ]]; then
+    local o; o="$(stat -c '%U' "${APTLY_ROOT}")"
+    [[ "$o" == "root" || "$o" == "${BUILDER_USER}" ]] \
+      || die "unexpected ${APTLY_ROOT} owner='${o}'; refusing to chown (manual review)"
+  fi
+  run_cmd sudo mkdir -p "${APTLY_ROOT}/public/testing" "${APTLY_ROOT}/public/prod" \
+                        "${APTLY_ROOT}/.locks" "${APTLY_ROOT}/state"
+  run_cmd sudo chown -R "${BUILDER_USER}:${BUILDER_USER}" "${APTLY_ROOT}"
+  run_cmd sudo chmod 0755 "${APTLY_ROOT}/.locks"
+}
+
+stage_setup_sbuild_chroot() {
+  log "stage: setup_sbuild_chroot"
+  local chroot_dir="/var/lib/sbuild/trixie-amd64-sbuild"
+  if [[ -d "${chroot_dir}" ]]; then
+    log "chroot exists; verifying sources"
+    verify_chroot_sources "${chroot_dir}"
+    return
+  fi
+  log "creating trixie sbuild chroot"
+  run_cmd sudo sbuild-createchroot --arch=amd64 --components=main \
+    trixie "${chroot_dir}" http://deb.debian.org/debian
+  if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+    log "DRY-RUN: would verify chroot sources after creation"
+    return
+  fi
+  verify_chroot_sources "${chroot_dir}"
+}
+
+# verify_chroot_sources <chroot_dir> — scans .list + .sources; skips comments/blanks.
+# Allowed: trixie / trixie-updates / trixie-security. Forbidden: sid/unstable/testing/forky.
+verify_chroot_sources() {
+  local chroot_dir="$1"
+  local etc="${chroot_dir}/etc/apt"
+  local files=() g
+  [[ -f "${etc}/sources.list" ]] && files+=("${etc}/sources.list")
+  if [[ -d "${etc}/sources.list.d" ]]; then
+    shopt -s nullglob
+    g=( "${etc}/sources.list.d"/*.list "${etc}/sources.list.d"/*.sources ); shopt -u nullglob
+    files+=("${g[@]}")
+  fi
+  if [[ ${#files[@]} -eq 0 ]]; then
+    if [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]]; then
+      log "DRY-RUN: would verify chroot sources after creation (none found yet)"
+      return
+    fi
+    die "no apt sources found in ${etc}"
+  fi
+  local f line bad=""
+  for f in "${files[@]}"; do
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+      [[ -z "$line" || "$line" == \#* ]] && continue
+      if [[ "$line" =~ (sid|unstable|testing|forky) ]]; then
+        bad+="${f}: ${line}"$'\n'
+      fi
+    done < "$f"
+  done
+  [[ -z "$bad" ]] || die "chroot sources contaminated; manual fix:
+${bad}"
+  log "chroot sources OK (trixie-only)"
+}
+
 stage_setup_gpg_key()           { log "TODO stage_setup_gpg_key"; }
 stage_setup_aptly()             { log "TODO stage_setup_aptly"; }
 stage_setup_rclone_skeleton()   { log "TODO stage_setup_rclone_skeleton"; }
