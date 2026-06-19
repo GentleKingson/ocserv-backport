@@ -15,6 +15,22 @@ staging / production 或正式 aptly DB。
 - 凡占位符（如 `YYYYMMDDTHHMMSSZ`、`ssh-ed25519 AAAA...`、`<host>`）必须替换为
   真实值，不得原样复制执行。文档会在出现处明确提示。
 
+**访问方式与用户切换（重要）：**
+手册里的切换命令按你**怎么连到这台机器**分两种场景，请先确认你属于哪种：
+
+| 场景 | 怎么连进来的 | 切到 builder | 退出回 root |
+|------|-------------|-------------|-------------|
+| A. 远程工作站 | 从外部电脑 ssh 进这台机器 | `ssh builder@<host>`（外部连入）| `exit` 回到外部 |
+| B. 本机控制台 | 云平台 web shell / 控制台直登 / 本地终端 | `su - builder`（本机切换）| `exit` 回到 root |
+
+两种场景的命令不能混用——尤其**不要在机器内部 `ssh builder@<本机IP>`**：那是绕出去再连回来，
+要求 builder 配 authorized_keys 给本机 root 用，而这套 key 是给**外部**连入用的，本机
+root 不一定有匹配的私钥，会得到 `Permission denied (publickey)`。本机切换一律用 `su -`。
+
+文档后面遇到切换点会标注"（场景 A：ssh / 场景 B：su）"。**sbuild group 刷新**那个特定节点
+（第 3 步 4.3）两种场景都用同一个原理：退出当前 builder 会话再重开一个，让新会话重新读取
+`/etc/group` 拿到最新组成员身份。
+
 **成功定义：** 能在本机完成源码获取、changelog rewrap、source package、sbuild binary
 build、lint/smoke-basic、本地临时 aptly repo/snapshot 验证；dry-run 用临时 aptly root
 验证 repo/snapshot 逻辑，不 publish，不触碰正式 aptly DB。
@@ -94,8 +110,10 @@ ADMIN_PUBKEY='ssh-ed25519 AAAA... replace-with-your-real-public-key' \
 
 ```bash
 su - builder -c 'sudo -n true' && echo "sudo OK"   # passwordless sudo 生效
-# ⚠️ 占位符：<host> 必须替换为构建机真实地址
-ssh builder@<host> whoami                            # 期望输出 builder
+# 验证能切到 builder 身份（场景 A：从外部连 / 场景 B：本机切换）：
+#   场景 A: ssh builder@<host> whoami   # <host> 替换为构建机真实地址
+#   场景 B: su - builder -c whoami      # 本机切换
+# 期望输出 builder
 ```
 
 ### 1.3 本步退出条件总览
@@ -260,7 +278,8 @@ scripts/bootstrap-build-host.sh --dry-run --reuse-gpg-key <FULL_FINGERPRINT>
 **常见 dry-run 失败排查（本步预演阶段就会暴露）：**
 
 ```text
-- preflight die "current user is 'root'": 你在第 1 步没切到 builder，重新 ssh
+- preflight die "current user is 'root'": 你在第 1 步没切到 builder，重新切过去
+  （场景 A: ssh builder@<host> / 场景 B: su - builder）
 - preflight die "OS must be debian" / "codename must be trixie": 机器不对
 - preflight die "less than 15GB free": 磁盘不足（回到第 1 步 2.1 扩容或换盘）
 - load_config die "must be chmod 600": 3.1 的 chmod 漏了
@@ -398,23 +417,41 @@ install_packages：    apt-get update + install 一组包
 不会立即生效。setup_sbuild_chroot 和后续 make dry-run 里的 sbuild 都需要当前会话能以
 sbuild 组身份读 chroot（文件是 root:sbuild 0640）。
 
-命令（二选一）：
+原理：**退出当前 builder 会话，再重开一个**——新会话会重新走 PAM 读取 `/etc/group`，
+拿到刚加的 sbuild 成员身份。具体怎么"退出再重开"取决于你的访问方式（见开头约定区）。
+
+命令（按访问方式选一种；三种任选其一）：
 
 ```bash
-# 方式 1（推荐，最干净）：完全退出 SSH 再重新登录
+# 场景 A（远程工作站）：exit 退出 builder 回到外部，再 ssh 连入建立新 session
 exit                          # 退出 builder 会话
 # ⚠️ 占位符：<host> 必须替换为构建机的主机名或 IP
-ssh builder@<host>            # 重新登录
+ssh builder@<host>            # 从外部重新登录（新 session）
 cd ~/ocserv-backport
-id -nG | tr ' ' '\n' | grep -qx sbuild && echo "sbuild group OK"
 
-# 方式 2（不重连，当前 shell 生效）
+# 场景 B（本机控制台）：exit 退出 builder 回到 root，再 su 建立新 login shell
+exit                          # 退出 builder 会话，回到 root
+su - builder                  # 重新 su（新 login shell，重新读 /etc/group）
+cd ~/ocserv-backport
+
+# 场景 A/B 通用（不退出当前会话，当前 shell 直接刷新 group）
 newgrp sbuild
+```
+
+任一方式后，验证 sbuild 组已生效：
+
+```bash
 id -nG | tr ' ' '\n' | grep -qx sbuild && echo "sbuild group OK"
 ```
 
-> 方式 1 的优势：整个新会话都干净地带着 sbuild 组，后续 make dry-run 不会因
-> subshell/group 继承问题踩坑。培训场景优先用方式 1。
+> 为什么三种都行：核心是"拿到新的 group 快照"。场景 A 的 ssh 是全新网络 login session；
+> 场景 B 的 `su -` 是新 login shell（从 root 重新 su 进去，会重新走 PAM，**和 builder
+> 里再 `su - builder` 自己切自己不同**——后者不刷新 group）；newgrp 是显式刷新当前 shell。
+> 注意：**不要在机器内部 `ssh builder@<本机IP>`**——那是绕出去再连回来，本机 root 不一定
+> 有匹配 builder authorized_keys 的私钥，会得到 `Permission denied (publickey)`。本机切换
+> 一律用 `su -`。
+> 推荐场景 A/B 的 exit+重连而非 newgrp：整个新会话都干净地带着 sbuild 组，后续 make dry-run
+> 不会因 subshell/group 继承问题踩坑。
 
 ✅ 验收（必须输出 OK 才能进 4.4）：
 
@@ -734,8 +771,8 @@ scripts/bootstrap-build-host.sh --only-stage preflight
 scripts/bootstrap-build-host.sh --only-stage install_packages
 
 # 阶段间动作：重新登录让 sbuild 组生效（硬性）
-# ⚠️ 占位符：<host> 必须替换为构建机的主机名或 IP
-exit; ssh builder@<host>; cd ~/ocserv-backport
+# 场景 A（远程）: exit; ssh builder@<host>; cd ~/ocserv-backport   (<host> 替换为真实地址)
+# 场景 B（本机）: exit; su - builder; cd ~/ocserv-backport
 id -nG | tr ' ' '\n' | grep -qx sbuild && echo OK
 
 # 第二段前置检查（重新登录后再确认一次身份）
