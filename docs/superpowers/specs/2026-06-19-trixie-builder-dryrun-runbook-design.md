@@ -95,9 +95,16 @@ df -h /                                             # 确认根盘 (chroot + apt
 
 ✅ 验收: `ID=debian` / `VERSION_CODENAME=trixie` / `arch=x86_64` / 根盘 ≥40GB
 
-### 2.2 创建 builder 用户并配置 passwordless sudo (root)
+### 2.2 安装 sudo + 创建 builder 用户并配置 passwordless sudo (root)
+
+> 时序前提: Debian minimal 裸机不一定预装 sudo, 而 2.2 要用 visudo、后续 builder 要
+> 用 sudo。所以 sudo 必须在本节开头先装, 不能放到 2.4。
 
 ```bash
+# 先装 sudo (裸 Debian minimal 不一定有); 顺带装 git/ca-certificates 供 2.4 clone 用
+apt-get update
+apt-get install -y sudo ca-certificates git
+
 # 幂等: 用户已存在则跳过 (培训文档可能被重复执行)
 id -u builder >/dev/null 2>&1 || useradd -m -s /bin/bash builder
 
@@ -114,6 +121,8 @@ visudo -c                                          # 语法校验 sudoers
 > 断言当前用户 == BUILDER_USER 且不是 root (防止角色错乱)。
 > 为什么 NOPASSWD: bootstrap 的 install_packages/setup_sbuild_chroot 等阶段要
 > `sudo apt-get install` / `sudo sbuild-createchroot`, 无密码才能非交互跑通。
+> 为什么 sudo 在 2.2 而非 2.4: 本节就要用 visudo 校验 sudoers, builder 也要用
+> `sudo -n true` 验收。若放到 2.4 才装, 2.2 的 visudo 和验收会失败。
 
 ✅ 验收:
 
@@ -145,12 +154,9 @@ ssh-copy-id builder@<host>
 
 ✅ 验收: 从你的工作站 `ssh builder@<host>` 能登录, 且 `whoami` 显示 builder
 
-### 2.4 安装最小工具集 + 克隆仓库 (root → 切 builder)
+### 2.4 切 builder + 克隆仓库 (root → 切 builder)
 
-```bash
-# root, 装最小工具让 builder 能 git clone
-apt-get update && apt-get install -y git ca-certificates sudo
-```
+> sudo / git / ca-certificates 已在 2.2 装好, 本节不再重复安装。
 
 切到 builder 身份 (用 `su -` 或重新 ssh):
 
@@ -161,9 +167,9 @@ git clone <仓库 URL> ocserv-backport
 cd ocserv-backport
 ```
 
-> 为什么这里只装 git: 完整构建工具链 (sbuild/aptly/docker 等) 不在本章手装, 而是交给
-> 下一章 bootstrap 的 install_packages 阶段统一装, 保持单一事实源。本章只装够
-> "克隆仓库 + 能 sudo" 的最小集。
+> 为什么不在本节再装包: 完整构建工具链 (sbuild/aptly/docker 等) 不在本章手装, 而是
+> 交给下一章 bootstrap 的 install_packages 阶段统一装, 保持单一事实源。本章只装够
+> "克隆仓库 + 能 sudo" 的最小集 (已在 2.2 装好)。
 
 ✅ 验收 (以 builder 身份):
 
@@ -221,7 +227,8 @@ cd ~/ocserv-backport && git status                # clean working tree
 
 ```bash
 cd ~/ocserv-backport
-cp .bootstrap.env.example .bootstrap.env
+# 幂等: 已存在则不覆盖 (避免重跑冲掉本地填的真实值)
+[[ -f .bootstrap.env ]] || cp .bootstrap.env.example .bootstrap.env
 chmod 600 .bootstrap.env
 ```
 
@@ -395,9 +402,11 @@ echo $?                                       # 期望 0
 bootstrap 支持两种真实运行方式, 首次裸机必须用 A:
 
 A. 分段跑 (首次裸机推荐, 培训默认):
-   第一段:  scripts/bootstrap-build-host.sh --only-stage install_packages
+   第一段前置: scripts/bootstrap-build-host.sh --only-stage preflight
+   第一段:     scripts/bootstrap-build-host.sh --only-stage install_packages
    [阶段间动作: 重新登录 / newgrp sbuild, 见 4.3]
-   第二段:  scripts/bootstrap-build-host.sh --from-stage prepare_directories --generate-gpg-key
+   第二段前置: scripts/bootstrap-build-host.sh --only-stage preflight
+   第二段:     scripts/bootstrap-build-host.sh --from-stage prepare_directories --generate-gpg-key
 
 B. 一次全跑 (仅适用于 builder 已在 sbuild group 且当前会话已生效):
    前置确认:
@@ -428,10 +437,18 @@ scripts/bootstrap-build-host.sh --only-stage preflight
 scripts/bootstrap-build-host.sh --only-stage install_packages
 ```
 
-**预期输出:**
+**预期输出 (两条命令分开看):**
+
+命令 1 (`--only-stage preflight`) 预期:
 
 ```text
+load_config (自动):  加载 .bootstrap.env
 preflight (显式):    OS=debian/trixie, arch=x86_64, user=builder, disk OK
+```
+
+命令 2 (`--only-stage install_packages`) 预期:
+
+```text
 load_config (自动):  加载 .bootstrap.env
 install_packages:    apt-get update + install 一组包
                      (sbuild schroot debootstrap build-essential devscripts
@@ -499,10 +516,18 @@ scripts/bootstrap-build-host.sh --from-stage prepare_directories --import-gpg-ke
 scripts/bootstrap-build-host.sh --from-stage prepare_directories --reuse-gpg-key <FULL_FINGERPRINT>
 ```
 
-**预期输出 (逐阶段):**
+**预期输出 (两条命令分开看):**
+
+命令 1 (`--only-stage preflight`) 预期:
 
 ```text
-preflight (显式):     再次确认重新登录后 user/disk/sudo 仍正确
+load_config (自动):  重新加载 .bootstrap.env
+preflight (显式):    再次确认重新登录后 user/disk/sudo 仍正确
+```
+
+命令 2 (`--from-stage prepare_directories [GPG模式]`) 预期:
+
+```text
 load_config (自动):   重新加载 .bootstrap.env
 prepare_directories:  mkdir + chown /var/aptly/{public,.locks,state}
 setup_sbuild_chroot:  首次 sbuild-createchroot (耗时 5-15 分钟, 下 debootstrap)
