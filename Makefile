@@ -64,3 +64,7 @@ rollback-prod-auto: ## rollback production using previous-good manifest
 .PHONY: dry-run
 dry-run: ## end-to-end local dry-run (no real aptly/R2/staging/prod)
 	scripts/dry-run.sh
+
+.PHONY: bootstrap-build-host
+bootstrap-build-host: ## Bootstrap the trixie build host (run ON the builder)
+	scripts/bootstrap-build-host.sh $(ARGS)
