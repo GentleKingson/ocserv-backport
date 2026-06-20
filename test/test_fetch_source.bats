@@ -122,3 +122,45 @@ DSC
   rm -rf "$tmpd"
   [ "$f_norm" != "$s_norm" ]
 }
+
+# ---- validate_artifact_basenames (spec §3.4c, case 10) ----
+
+@test "validate_artifact_basenames: accepts normal basenames" {
+  call_func "validate_artifact_basenames 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_artifact_basenames: rejects path traversal (../)" {
+  call_func "validate_artifact_basenames 'ocserv_1.5.0.orig.tar.xz ../../etc/passwd'"
+  [ "$status" -ne 0 ]
+}
+
+@test "validate_artifact_basenames: rejects filename containing slash" {
+  call_func "validate_artifact_basenames 'sub/dir/file.tar.xz'"
+  [ "$status" -ne 0 ]
+}
+
+@test "validate_artifact_basenames: rejects empty and duplicates" {
+  call_func "validate_artifact_basenames ''"
+  [ "$status" -ne 0 ]
+  call_func "validate_artifact_basenames 'a.tar a.tar'"
+  [ "$status" -ne 0 ]
+}
+
+# ---- verify_cache_artifacts (spec §3.4d, cases 4/5) ----
+# Uses a temp dir as fake cache. $tmpd set in bats, passed into call_func's
+# bash -c via single-quote expansion (bats expands it before bash sees it).
+
+@test "verify_cache_artifacts: passes when all files present" {
+  tmpd="$(mktemp -d)"
+  touch "$tmpd/ocserv_1.5.0.orig.tar.xz" "$tmpd/ocserv_1.5.0-1.debian.tar.xz"
+  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
+  rm -rf "$tmpd"; [ "$status" -eq 0 ]
+}
+
+@test "verify_cache_artifacts: dies naming missing files" {
+  tmpd="$(mktemp -d)"
+  touch "$tmpd/ocserv_1.5.0.orig.tar.xz"
+  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}

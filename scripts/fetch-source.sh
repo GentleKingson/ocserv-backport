@@ -100,6 +100,35 @@ parse_dsc_artifacts() {
   [[ -n "$s_set" ]] || die "cached .dsc lacks Checksums-Sha256 stanza (too weak): ${dsc_path}"
   printf '%s\n%s\n' "$f_set" "$s_set"
 }
+
+# Spec §3.4c. Validate every artifact filename is a safe basename before cp.
+# Arg 1: space-separated filenames. Dies on any unsafe entry.
+validate_artifact_basenames() {
+  local names="$1"
+  [[ -n "$names" ]] || die "no artifacts parsed from cached .dsc"
+  local seen="" name
+  for name in $names; do
+    [[ -n "$name" ]] || die "empty artifact filename in cached .dsc"
+    [[ "$name" == "." || "$name" == ".." ]] && die "unsafe artifact filename ('.' or '..') in cached .dsc"
+    [[ "$name" == */* || "$name" == *\\* ]] && die "unsafe artifact filename (contains '/' or '\\'): ${name}"
+    [[ " ${seen} " == *" ${name} "* ]] && die "duplicate artifact filename in cached .dsc: ${name}"
+    seen="${seen} ${name}"
+  done
+}
+
+# Spec §3.4d. Verify each artifact exists in CACHE_DIR. Dies naming missing ones.
+# Arg 1: cache dir.  Arg 2: space-separated filenames.
+verify_cache_artifacts() {
+  local cache_dir="$1" names="$2" missing=""
+  local name
+  for name in $names; do
+    [[ -f "${cache_dir}/${name}" ]] || missing="${missing} ${name}"
+  done
+  if [[ -n "$missing" ]]; then
+    die "missing cached artifacts:${missing}
+Fetch them from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${cache_dir}/"
+  fi
+}
 main() {
   mkdir -p build/source
   cd build/source
