@@ -45,7 +45,7 @@ Source: ocserv
 Version: 1.5.0-1
 DSC
   call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
-  rc=$?; rm -rf "$tmpd"; [ "$rc" -eq 0 ]
+  rm -rf "$tmpd"; [ "$status" -eq 0 ]
 }
 
 @test "validate_dsc_metadata: rejects wrong Source" {
@@ -55,7 +55,7 @@ Source: otherpkg
 Version: 1.5.0-1
 DSC
   call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
-  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }
 
 @test "validate_dsc_metadata: rejects wrong Version" {
@@ -65,7 +65,7 @@ Source: ocserv
 Version: 1.4.0-1
 DSC
   call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
-  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }
 
 # ---- parse_dsc_artifacts (spec §3.4c) ----
@@ -87,8 +87,7 @@ Checksums-Sha256:
  ef01 ocserv_1.5.0-1.debian.tar.xz
 DSC
   call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  rc=$?
-  if [ "$rc" -ne 0 ]; then rm -rf "$tmpd"; fail "parse failed"; fi
+  if [ "$status" -ne 0 ]; then rm -rf "$tmpd"; fail "parse failed"; fi
   f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
   s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
   rm -rf "$tmpd"
@@ -104,7 +103,7 @@ Files:
  1234 ocserv_1.5.0.orig.tar.xz
 DSC
   call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }
 
 @test "parse_dsc_artifacts: unequal F/S when SHA256 partial (case 9)" {
@@ -117,8 +116,7 @@ Checksums-Sha256:
  abcd ocserv_1.5.0.orig.tar.xz
 DSC
   call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  rc=$?
-  if [ "$rc" -ne 0 ]; then rm -rf "$tmpd"; fail "parse should succeed (unequal sets detected by caller)"; fi
+  if [ "$status" -ne 0 ]; then rm -rf "$tmpd"; fail "parse should succeed (unequal sets detected by caller)"; fi
   f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
   s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
   rm -rf "$tmpd"
