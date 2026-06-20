@@ -322,7 +322,7 @@ echo $?                                       # 期望 0
     → 从 prepare_directories 继续（setup_sbuild_chroot 现在能读 chroot 了）
 ```
 
-### 4.0 阶段执行规则（全步适用）
+### 3.0 阶段执行规则（全步适用）
 
 ```text
 ╔══════════════════════════════════════════════════════════════╗
@@ -335,7 +335,7 @@ echo $?                                       # 期望 0
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 4.1 运行方式选择
+### 3.1 运行方式选择
 
 ```text
 bootstrap 支持两种真实运行方式，首次裸机必须用 A：
@@ -343,7 +343,7 @@ bootstrap 支持两种真实运行方式，首次裸机必须用 A：
 A. 分段跑（首次裸机推荐，培训默认）：
    第一段前置：scripts/bootstrap-build-host.sh --only-stage preflight
    第一段：    scripts/bootstrap-build-host.sh --only-stage install_packages
-   [阶段间动作：重新登录 / newgrp sbuild，见 4.3]
+   [阶段间动作：重新登录 / newgrp sbuild，见 3.3]
    第二段前置：scripts/bootstrap-build-host.sh --only-stage preflight
    第二段：    scripts/bootstrap-build-host.sh --from-stage prepare_directories --generate-gpg-key
 
@@ -363,12 +363,12 @@ B. 一次全跑（仅适用于 builder 已在 sbuild group 且当前会话已生
 > B 适用场景：机器重装/迁移后，之前已 sbuild-adduser 且新会话已加载组。这是
 > "已生效" 的机器，不是首次裸机。
 
-本步按 A 展开（4.2 第一段 → 4.3 阶段间动作 → 4.4 第二段）。
+本步按 A 展开（3.2 第一段 → 3.3 阶段间动作 → 3.4 第二段）。
 
-### 4.2 第一段：install_packages（装包 + 加入 sbuild 组）
+### 3.2 第一段：install_packages（装包 + 加入 sbuild 组）
 
 ```bash
-# 显式 preflight 前置（preflight 不自动带，见 4.0）
+# 显式 preflight 前置（preflight 不自动带，见 3.0）
 scripts/bootstrap-build-host.sh --only-stage preflight
 
 # 第一段：装包 + 加入 sbuild 组
@@ -402,18 +402,18 @@ install_packages：    apt-get update + install 一组包
 > （bootstrap 脚本只强制 load_config 前置，preflight 不在其中）。所以 preflight 必须
 > 显式单独跑一次。这也顺带验证了磁盘/sudo/user 仍 OK。
 > install_packages 末尾的 WARN 容易被滚动的 apt 输出淹没。无论是否看到 WARN，
-> 都必须执行 4.3 的验收，不能跳过。
+> 都必须执行 3.3 的验收，不能跳过。
 
-退出码 0 后，不要继续直接跑 chroot —— 先做 4.3。
+退出码 0 后，不要继续直接跑 chroot —— 先做 3.3。
 
-### 4.3 阶段间动作：重新登录让 sbuild group 生效（硬性，必做）
+### 3.3 阶段间动作：重新登录让 sbuild group 生效（硬性，必做）
 
 ```text
 这是首次裸机流程的必做步骤。
-没有完成本节验收，不要进入 setup_sbuild_chroot（4.4）。
+没有完成本节验收，不要进入 setup_sbuild_chroot（3.4）。
 ```
 
-背景：4.2 把 builder 加入了 sbuild group，但 Linux group 成员身份在当前登录会话中
+背景：3.2 把 builder 加入了 sbuild group，但 Linux group 成员身份在当前登录会话中
 不会立即生效。setup_sbuild_chroot 和后续 make dry-run 里的 sbuild 都需要当前会话能以
 sbuild 组身份读 chroot（文件是 root:sbuild 0640）。
 
@@ -453,13 +453,13 @@ id -nG | tr ' ' '\n' | grep -qx sbuild && echo "sbuild group OK"
 > 推荐场景 A/B 的 exit+重连而非 newgrp：整个新会话都干净地带着 sbuild 组，后续 make dry-run
 > 不会因 subshell/group 继承问题踩坑。
 
-✅ 验收（必须输出 OK 才能进 4.4）：
+✅ 验收（必须输出 OK 才能进 3.4）：
 
 ```bash
 id -nG | tr ' ' '\n' | grep -qx sbuild && echo OK
 ```
 
-### 4.4 第二段：从 prepare_directories 继续（builder）
+### 3.4 第二段：从 prepare_directories 继续（builder）
 
 ```bash
 # 显式 preflight 前置（重新登录后再确认一次身份/磁盘/sudo）
@@ -520,7 +520,7 @@ print_manual_github_steps：打印 5 段手动清单（runner/secrets/environmen
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 4.5 drift 检查（可选，builder，幂等重跑）
+### 3.5 drift 检查（可选，builder，幂等重跑）
 
 ```text
 可选。不是第 4 步 make dry-run 的硬性前置。
@@ -547,7 +547,7 @@ skip-if-exists (setup_sbuild_chroot / setup_aptly / setup_rclone_skeleton)：
 fail-if-exists (GPG generate)：已有 key 会 die，drift 时用 --reuse-gpg-key
 ```
 
-### 4.6 本步退出条件总览
+### 3.6 本步退出条件总览
 
 ```text
 进入第 4 步前，必须全部满足：
