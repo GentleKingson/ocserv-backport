@@ -605,7 +605,11 @@ snapshot.debian.org 对高频请求的 IP 会返回 HTTP 509（"abusive network 
     cd build/source-cache
     wget https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.dsc
     wget https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0.orig.tar.xz
+    wget https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0.orig.tar.xz.asc
     wget https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.debian.tar.xz
+
+（ocserv 1.5.0-1 的真实 .dsc 引用 4 个文件：.orig.tar.xz / .orig.tar.xz.asc / .debian.tar.xz，
+加上 .dsc 本身。务必下齐——以 cached .dsc 的 Checksums-Sha256 stanza 为准。）
 
 注意：
 - 所需文件以 cached .dsc 的 Checksums-Sha256 stanza 为准，不要假设永远是这三个文件名。
