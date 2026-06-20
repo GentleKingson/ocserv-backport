@@ -67,7 +67,7 @@ debian, trixie, ocserv, openconnect, backport, sbuild, aptly
 | Setting | Current | Target | Rationale |
 |---------|---------|--------|-----------|
 | Wiki | enabled | **disable** | Repo already has versioned `docs/` (runbook, bootstrap ref, specs, plans); Wiki would create a second doc entry point without git-tracked review. Temporary notes belong in issues/PRs/commits/in-repo docs. |
-| Projects | enabled | **disable** | No usage; empty Projects tab is navigation noise. Re-enable later if cross-issue kanban is needed. Verify no active linked boards before disabling. |
+| Projects | enabled | **disable** | No usage; empty Projects tab is navigation noise. Re-enable later if cross-issue kanban is needed. Owner-level Project inspection is informational only; disabling does not delete linked Projects. |
 | Issues | enabled | **keep enabled** | Appropriate for build failures, backport drift, runbook revisions, CI problems. |
 | Discussions | disabled | **keep disabled** | Docs + issues + PRs suffice at current team size; no need for an unstructured discussion surface. |
 | Homepage URL | null | **leave null** | APT repo endpoint is publish infrastructure, not a project homepage; README already serves as project entry. |
@@ -148,7 +148,7 @@ gh api repos/GentleKingson/ocserv-backport --jq '.topics'
 ### 4.2 Inspect owner-level Projects (optional, informational only)
 
 ```bash
-gh project list --owner GentleKingson --format json 2>/dev/null || echo "(no classic projects API access / none exist)"
+gh project list --owner GentleKingson --format json 2>/dev/null || echo "(could not list owner-level Projects, or none are accessible)"
 ```
 
 Caveats (do not treat as blocking):
