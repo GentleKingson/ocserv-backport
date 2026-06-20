@@ -199,7 +199,7 @@ f. Extract with checksum enforcement:
    - Combined with step c's F==S enforcement, every artifact is SHA-256-verified.
    - Extraction failure (checksum mismatch, corrupt file) → die, no ready log.
 
-g. Verify extracted tree: $STAGING/ocserv-${UPSTREAM}/ exists and is non-empty.
+g. Verify extracted tree: ${CACHE_STAGE}/ocserv-${UPSTREAM}/ exists and is non-empty.
    - Missing/empty → die.
 
 h. Publish: publish_source_tree() moves validated source tree to build/source/
@@ -348,6 +348,19 @@ implemented first (TDD: write them before the orchestrator tests).
   (input → output, no side effects). Keep `fetch_via_snapshot()` and
   `fetch_via_cache()` as the side-effect orchestrators. Main body becomes a
   thin dispatcher under the SOURCE_GUARD (`if [[ "${BASH_SOURCE[0]}" == "${0}" ]]`).
+- **Deb822-aware `.dsc` parsing (hard constraint, review point #4):** a `.dsc`
+  is a Deb822 control file. `Files` and `Checksums-Sha256` are multiline fields
+  with continuation lines; `Source`/`Version` are single-line fields. Parsing
+  MUST be Deb822-aware:
+    - Use `dpkg-parsecontrol` (or an equivalently strict parser) to read
+      `Source` and `Version`.
+    - Parse `Files` and `Checksums-Sha256` only within their bounded
+      continuation stanzas (lines beginning with a space, following the field
+      header up to the next non-continuation line / end of file).
+    - **Do NOT use broad whole-file `grep` patterns** — they can match adjacent
+      fields, OpenPGP armor lines, or other control fields and produce wrong
+      artifact lists. This is a correctness and security requirement (bad
+      filenames feed into `cp "${CACHE_DIR}/${name}"`).
 - **trap cleanup:** single `trap 'rm -rf -- "${TMP_ROOT}"' EXIT` in main (§3.2).
   Never reassign TMP_ROOT. SNAPSHOT_STAGE / CACHE_STAGE are subdirs of TMP_ROOT,
   so both are cleaned by the one trap. `build/source/` and `build/source-cache/`
@@ -428,14 +441,55 @@ snapshot.debian.org 对高频请求的 IP 会返回 HTTP 509（"abusive network 
 
 注意：
 - 所需文件以 cached .dsc 的 Checksums-Sha256 stanza 为准，不要假设永远是这三个文件名。
-- 缓存验证的是 artifacts 与 cached .dsc 的一致性（checksum + Source/Version），
-  不能在线重新证明 cached .dsc 来自所配置 timestamp 的 snapshot。这是受信任的本地 seed。
-- 对 ocserv 1.5.0-1（immutable 发布版本），Debian pool 副本与 snapshot 副本字节一致。
+- 缓存恢复依赖操作者批准的本地 seed。脚本验证 cached .dsc 与 artifacts 的 checksum、
+  Source 和 Version 一致性，但不能在线重新证明 cached .dsc 来自当前配置的 snapshot timestamp。
 ```
 
-### 7.3 Non-goals for the runbook change
+### 7.3 Update fetch output and idempotence wording (behavior change sync)
+
+§3.7's locked decision (only publish the extracted source tree, not raw
+`.dsc`/tarballs) makes two existing runbook passages inaccurate. Both must be
+updated in the same runbook change.
+
+**(a) Fetch expected-output table (runbook §4.2, L633):**
+
+Current row:
+```text
+| 1 | fetch | `build/source/ocserv-1.5.0/` + `ocserv_1.5.0-1.dsc` | 不启用 sid apt 源（只 dget 源码） |
+```
+
+Replace with (drop the raw `.dsc` — it stays in staging, cleaned by trap):
+```text
+| 1 | fetch | `build/source/ocserv-1.5.0/` | 不启用 sid apt 源（只 dget 源码）；只发布 source tree，raw .dsc/tarballs 留在临时 staging |
+```
+
+**(b) Idempotence/retry wording (runbook §4.3, L694-696):**
+
+Current text:
+```text
+> 通用排查：任一步失败后，产物目录 `build/source/` 和 `build/binary/` 会保留到失败点，
+> 可直接检查半成品。重跑前手动 `rm -rf build/` 再来一次。（fetch 是幂等的：
+> `dget -x -u` 对已存在文件会跳过。）
+```
+
+The parenthetical "`fetch 是幂等的：dget -x -u 对已存在文件会跳过`" is no longer
+accurate: the new design runs `dget` in a fresh staging workspace each time and
+does NOT rely on skip-existing behavior in `build/source/`. Replace with:
+```text
+> 通用排查：任一步失败后，产物目录 `build/source/` 和 `build/binary/` 会保留到失败点，
+> 可直接检查半成品。fetch 每次都在新的临时 staging 目录中完成下载和解包；只有完整
+> source tree 通过验证后，才会替换 build/source/ocserv-1.5.0/。若需彻底重置本地构建状态，
+> 重跑前可手动执行 rm -rf build/。
+```
+
+Note: the existing `build/source/ocserv_1.5.0-1~bpo13+1.dsc` references at
+runbook L723 (§4.4 acceptance checklist) and L635 (src-pkg row) are produced by
+the **rewrap/src-pkg** stages, NOT by fetch — those remain correct and are
+out of scope for this change.
+
+### 7.4 Non-goals for the runbook change
 
 - Do NOT renumber existing runbook sections (the renumber project already fixed
-  §4.3 etc. — this change only inserts content within existing sections).
+  §4.3 etc. — this change only inserts/updates content within existing sections).
 - Do NOT add the cache-fallback logic to the "quick-ref" appendix unless the
   operator explicitly wants it surfaced there.
