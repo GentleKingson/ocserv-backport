@@ -8,6 +8,8 @@ CHANGES="$(ls build/binary/ocserv_${BACKPORT_VERSION}_amd64.changes 2>/dev/null 
 [[ -n "${CHANGES}" ]] || die "no .changes found in build/binary"
 
 log "lintian ${CHANGES}"
-# --fail-on-error: nonzero exit if any E: tag. Warnings are printed but pass.
-lintian --fail-on-error "${CHANGES}" || die "lintian reported errors"
+# --fail-on error: nonzero exit (status 2) if any E: tag. Warnings are printed
+# but pass. ('error' is lintian's default severity; explicit for clarity.)
+# NOTE: --fail-on <level>, NOT --fail-on-error (invalid option on lintian >=2.5).
+lintian --fail-on error "${CHANGES}" || die "lintian reported errors"
 log "lintian: no errors"
