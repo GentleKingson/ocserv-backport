@@ -39,7 +39,8 @@ point and navigation layer**, not a substitute for the existing 862-line runbook
 ## 3. README Structure & Content
 
 The README has exactly six sections in this order. Approximate line budget: ~60
-lines of prose + 1 code block + 1 table.
+lines of prose, two fenced blocks (Pipeline text diagram, Quick start bash),
+and one table (Repo layout).
 
 ### 3.1 Title + what/why (~4 lines)
 
@@ -51,8 +52,10 @@ lines of prose + 1 code block + 1 table.
     trixie as `1.5.0-1~bpo13+1`.
   - Local entry point is `make dry-run`; CI owns testing publish, production
     promotion, and rollback.
-- Mention the local==CI principle in one phrase (CI invokes the same build
-  stages used locally).
+- Mention the local==CI principle in one phrase: local and CI share the same
+  core build-validation stages. Do NOT phrase it as an absolute guarantee
+  ("what passes locally passes in CI") — CI is also affected by runner,
+  credentials, publish infrastructure, network, and protected environments.
 
 **Draft text:**
 
@@ -62,8 +65,8 @@ lines of prose + 1 code block + 1 table.
 Reproducible build, validation, and CI publishing pipeline that backports
 ocserv (the OpenConnect VPN server) from Debian sid source to Debian trixie as
 `1.5.0-1~bpo13+1`. The local entry point is `make dry-run`; CI owns testing
-publish, production promotion, and rollback. Local and CI run the same build
-stages — what passes locally passes in CI.
+publish, production promotion, and rollback. Local and CI share the same core
+build-validation stages.
 ```
 
 ### 3.2 Pipeline (~6 lines)
@@ -71,21 +74,24 @@ stages — what passes locally passes in CI.
 **Content requirements:**
 - Arrow diagram inside a ```text fence (prevents reflow).
 - 8 stages in dry-run.sh order: fetch → rewrap → src-pkg → binary (sbuild) →
-  lint → smoke-basic → aptly snapshot → R2 sync.
-- One boundary sentence below: each stage has a Make target; CI invokes the
-  same stages used locally.
+  lint → smoke-basic → temporary aptly snapshot → snapshot-name check.
+  These are the stages `make dry-run` actually runs. R2 sync is NOT a dry-run
+  stage — it belongs to the CI publishing path. The diagram must match the
+  Quick start boundary note ("does not touch R2 ...").
+- One boundary sentence below: each stage has a Make target; CI reuses the
+  same core build-validation stages before publishing the testing channel.
 
 **Draft text:**
 
-```markdown
+````markdown
 ## Pipeline
 
 ```text
-fetch → rewrap → src-pkg → binary (sbuild) → lint → smoke-basic → aptly snapshot → R2 sync
+fetch → rewrap → src-pkg → binary (sbuild) → lint → smoke-basic → temporary aptly snapshot → snapshot-name check
 ```
 
-Each stage has a corresponding Make target; CI invokes the same build stages used locally.
-```
+Each stage has a corresponding Make target. CI reuses the same core build-validation stages before publishing the testing channel.
+````
 
 ### 3.3 Quick start (~5 lines)
 
@@ -102,7 +108,7 @@ Each stage has a corresponding Make target; CI invokes the same build stages use
 ## Quick start
 
 ```bash
-make dry-run   # reproduces CI locally, touches NO real state
+make dry-run   # validates the core CI build path locally; touches no real state
 ```
 
 `make dry-run` validates the pipeline with a temporary aptly root and does not touch R2, staging, production, or the real aptly database. See `make help` for all targets.
@@ -165,18 +171,30 @@ Bootstrap script quick-reference: [`docs/BUILD_HOST_BOOTSTRAP.md`](docs/BUILD_HO
 1. File `README.md` exists at project root.
 2. Markdown renders cleanly (no broken links, no malformed table, code fences
    balanced).
-3. All three doc links resolve to existing files:
+3. Both Markdown documentation links resolve to existing files:
    - `docs/trixie-builder-dryrun-runbook.md`
    - `docs/BUILD_HOST_BOOTSTRAP.md`
-   - (workflow file references in §3.4 are prose, not links — they name paths)
-4. Total length ~60 lines of prose + 1 code block + 1 table (skimmable in ~1 min).
-5. No content duplicated from the runbook (no GPG mode details, no sbuild group
+4. The three workflow paths named in the Publishing & rollback section exist in
+   the repository (they are prose/code-formatted path references, not links):
+   - `.github/workflows/ci-testing.yml`
+   - `.github/workflows/promote-production.yml`
+   - `.github/workflows/rollback-production.yml`
+5. Total length ~60 lines of prose, two fenced blocks, and one table (skimmable
+   in ~1 min).
+6. No content duplicated from the runbook (no GPG mode details, no sbuild group
    steps, no builder-user creation).
 
 ### 4.2 Self-check commands
 
 - `wc -l README.md` → roughly 60-80 lines total.
-- Verify links: the two `docs/` links point to files that `ls` confirms exist.
+- File existence:
+  ```bash
+  test -f docs/trixie-builder-dryrun-runbook.md
+  test -f docs/BUILD_HOST_BOOTSTRAP.md
+  test -f .github/workflows/ci-testing.yml
+  test -f .github/workflows/promote-production.yml
+  test -f .github/workflows/rollback-production.yml
+  ```
 - Eyeball the rendered table alignment (5 rows, 2 columns, header separator).
 
 ---
