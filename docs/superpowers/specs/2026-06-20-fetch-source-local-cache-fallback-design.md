@@ -352,15 +352,26 @@ implemented first (TDD: write them before the orchestrator tests).
   is a Deb822 control file. `Files` and `Checksums-Sha256` are multiline fields
   with continuation lines; `Source`/`Version` are single-line fields. Parsing
   MUST be Deb822-aware:
-    - Use `dpkg-parsecontrol` (or an equivalently strict parser) to read
-      `Source` and `Version`.
-    - Parse `Files` and `Checksums-Sha256` only within their bounded
-      continuation stanzas (lines beginning with a space, following the field
-      header up to the next non-continuation line / end of file).
+    - **Use a self-contained awk-scoped parser** (no `dpkg-parsecontrol`
+      dependency). Rationale: `dpkg-parsecontrol` was found MISSING on the
+      trixie builder even with `dpkg-dev` installed (it is not provided by
+      `dpkg-dev` in this distro version), which blocked execution. A pure-awk
+      parser with explicit stanza-boundary recognition is portable (tests run
+      on macOS + builder) and still satisfies the Deb822-awareness requirement.
+    - Single-line fields (`Source`, `Version`): match a line anchored at column 0
+      (`^Field:`), NOT a continuation line and NOT a substring of another field.
+    - Multiline fields (`Files`, `Checksums-Sha256`): bounded by the field header
+      line, collecting continuation lines (beginning with a space) up to the next
+      non-continuation line / end of file / blank stanza separator.
     - **Do NOT use broad whole-file `grep` patterns** — they can match adjacent
       fields, OpenPGP armor lines, or other control fields and produce wrong
       artifact lists. This is a correctness and security requirement (bad
       filenames feed into `cp "${CACHE_DIR}/${name}"`).
+    - **PGP armor:** a `.dsc` may carry an OpenPGP cleartext signature
+      (`-----BEGIN PGP SIGNED MESSAGE-----` ... `-----BEGIN SIGNATURE-----`).
+      The parser must read fields only from the signed body, not the armor.
+      Awk-scoped parsing naturally handles this: skip lines until the first
+      `Field:` line at column 0, and stop collecting at `-----BEGIN SIGNATURE-----`.
 - **trap cleanup:** single `trap 'rm -rf -- "${TMP_ROOT}"' EXIT` in main (§3.2).
   Never reassign TMP_ROOT. SNAPSHOT_STAGE / CACHE_STAGE are subdirs of TMP_ROOT,
   so both are cleaned by the one trap. `build/source/` and `build/source-cache/`

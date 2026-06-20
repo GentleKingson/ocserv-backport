@@ -32,6 +32,25 @@ is_509_failure() {
 }
 
 
+# Spec §5. Read a single-line Deb822 field (Source/Version) from a .dsc via an
+# awk-scoped parser. PGP-aware: a signed .dsc wraps the body in
+#   -----BEGIN PGP SIGNED MESSAGE----- / ... / -----BEGIN SIGNATURE-----
+# We only parse the signed body (between the header line and -----BEGIN
+# SIGNATURE-----). The field is matched at column 0 (^Field:) so it cannot be a
+# continuation line or a substring of another field's value.
+# Arg 1: .dsc file path.  Arg 2: field name (e.g. Source).  Prints the value.
+_dsc_field() {
+  local dsc_path="$1" field="$2"
+  awk -v f="$field" '
+    /^-----BEGIN PGP SIGNED MESSAGE-----/ { insigned=1; next }
+    insigned && /^Hash:/ { next }                 # armor Hash header line
+    /^-----BEGIN SIGNATURE-----/ { exit }         # stop at signature block
+    insigned || /^Source:|^Version:|^Format:|^Files:|^Checksums-Sha256:|^Build-Depends:|^Architecture:/ {
+      if ($0 ~ "^" f ":") { sub("^" f ": *", ""); print; exit }
+    }
+  ' "$dsc_path" 2>/dev/null
+}
+
 # Spec §3.4b + §5. Validate cached .dsc metadata via Deb822-aware parsing.
 # Arg 1: .dsc file path.  Arg 2: expected Source.  Arg 3: expected Version.
 # Dies on mismatch.
@@ -39,8 +58,8 @@ validate_dsc_metadata() {
   local dsc_path="$1" want_src="$2" want_ver="$3"
   [[ -f "$dsc_path" ]] || die "cached .dsc not found: ${dsc_path}"
   local got_src got_ver
-  got_src="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null | sed -n 's/^Source: //p' | head -n1)"
-  got_ver="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null | sed -n 's/^Version: //p' | head -n1)"
+  got_src="$(_dsc_field "$dsc_path" Source)"
+  got_ver="$(_dsc_field "$dsc_path" Version)"
   [[ -n "$got_src" ]] || die "could not parse Source from ${dsc_path}"
   [[ -n "$got_ver" ]] || die "could not parse Version from ${dsc_path}"
   [[ "$got_src" == "$want_src" ]] || die "cached .dsc Source mismatch: got '${got_src}', expected '${want_src}'"
@@ -48,7 +67,7 @@ validate_dsc_metadata() {
 }
 
 # Spec §3.4c + §5. Parse Files (F) and Checksums-Sha256 (S) from a .dsc using
-# Deb822-aware bounded stanza parsing (NO broad whole-file grep).
+# Deb822-aware bounded stanza parsing (NO broad whole-file grep, NO dpkg tools).
 # Arg 1: .dsc file path.
 # Prints two lines: line 1 = F, line 2 = S. Each is space-separated basenames,
 # ORDER PRESERVED, DUPLICATES KEPT (review fix #3: do not sort -u here; the
@@ -57,15 +76,27 @@ validate_dsc_metadata() {
 parse_dsc_artifacts() {
   local dsc_path="$1"
   local f_set s_set
-  # dpkg-parsecontrol emits continuation lines indented; awk extracts the
-  # filename (last whitespace-separated field) under each target stanza.
-  # NOTE: deliberately no sort -u — preserve dupes for caller-side validation.
-  f_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
-    | awk '/^Files:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
-    | tr '\n' ' ')"
-  s_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
-    | awk '/^Checksums-Sha256:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
-    | tr '\n' ' ')"
+  # awk-scoped: skip PGP armor, then for each target stanza set a flag at the
+  # header line (^Field:) and collect continuation lines (leading space) until
+  # the next column-0 field or stanza separator. Filename = last whitespace-
+  # separated field on each continuation line. NOTE: no sort -u — preserve dupes.
+  f_set="$(awk '
+    /^-----BEGIN PGP SIGNED MESSAGE-----/ { insigned=1; next }
+    insigned && /^Hash:/ { next }
+    /^-----BEGIN SIGNATURE-----/ { exit }
+    /^Files:/ { flag=1; next }
+    /^Checksums-Sha256:/ { flag=0; next }
+    /^[^ ]/ { flag=0; next }
+    flag && NF>0 { print $NF }
+  ' "$dsc_path" 2>/dev/null | tr '\n' ' ')"
+  s_set="$(awk '
+    /^-----BEGIN PGP SIGNED MESSAGE-----/ { insigned=1; next }
+    insigned && /^Hash:/ { next }
+    /^-----BEGIN SIGNATURE-----/ { exit }
+    /^Checksums-Sha256:/ { flag=1; next }
+    /^[^ ]/ { flag=0; next }
+    flag && NF>0 { print $NF }
+  ' "$dsc_path" 2>/dev/null | tr '\n' ' ')"
   [[ -n "$s_set" ]] || die "cached .dsc lacks Checksums-Sha256 stanza (too weak): ${dsc_path}"
   printf '%s\n%s\n' "$f_set" "$s_set"
 }
