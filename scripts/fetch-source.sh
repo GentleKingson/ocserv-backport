@@ -31,6 +31,44 @@ is_509_failure() {
   return 1
 }
 
+
+# Spec §3.4b + §5. Validate cached .dsc metadata via Deb822-aware parsing.
+# Arg 1: .dsc file path.  Arg 2: expected Source.  Arg 3: expected Version.
+# Dies on mismatch.
+validate_dsc_metadata() {
+  local dsc_path="$1" want_src="$2" want_ver="$3"
+  [[ -f "$dsc_path" ]] || die "cached .dsc not found: ${dsc_path}"
+  local got_src got_ver
+  got_src="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null | sed -n 's/^Source: //p' | head -n1)"
+  got_ver="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null | sed -n 's/^Version: //p' | head -n1)"
+  [[ -n "$got_src" ]] || die "could not parse Source from ${dsc_path}"
+  [[ -n "$got_ver" ]] || die "could not parse Version from ${dsc_path}"
+  [[ "$got_src" == "$want_src" ]] || die "cached .dsc Source mismatch: got '${got_src}', expected '${want_src}'"
+  [[ "$got_ver" == "$want_ver" ]] || die "cached .dsc Version mismatch: got '${got_ver}', expected '${want_ver}'"
+}
+
+# Spec §3.4c + §5. Parse Files (F) and Checksums-Sha256 (S) from a .dsc using
+# Deb822-aware bounded stanza parsing (NO broad whole-file grep).
+# Arg 1: .dsc file path.
+# Prints two lines: line 1 = F, line 2 = S. Each is space-separated basenames,
+# ORDER PRESERVED, DUPLICATES KEPT (review fix #3: do not sort -u here; the
+# caller validates basenames incl. dupes before normalizing to sorted-unique).
+# Dies if Checksums-Sha256 stanza is absent.
+parse_dsc_artifacts() {
+  local dsc_path="$1"
+  local f_set s_set
+  # dpkg-parsecontrol emits continuation lines indented; awk extracts the
+  # filename (last whitespace-separated field) under each target stanza.
+  # NOTE: deliberately no sort -u — preserve dupes for caller-side validation.
+  f_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
+    | awk '/^Files:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
+    | tr '\n' ' ')"
+  s_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
+    | awk '/^Checksums-Sha256:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
+    | tr '\n' ' ')"
+  [[ -n "$s_set" ]] || die "cached .dsc lacks Checksums-Sha256 stanza (too weak): ${dsc_path}"
+  printf '%s\n%s\n' "$f_set" "$s_set"
+}
 main() {
   mkdir -p build/source
   cd build/source
