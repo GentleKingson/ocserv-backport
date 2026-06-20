@@ -164,3 +164,123 @@ DSC
   call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
   rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }
+
+# ---- main() orchestrator tests (cases 1, 2, 3, 8) with stubs ----
+# We stub dget/dpkg-source by prepending a fake bin dir to PATH.
+# Helper: write a minimal valid cached .dsc + its two artifacts into a cache dir.
+# NOTE: uses printf (not a heredoc) because bats' test-body line rewriting
+# breaks multi-line heredocs inside helper functions (verified: cachedir existed
+# but the cat<<DSC heredoc failed under bats). Heredocs in test BODIES work fine.
+write_fixture_cache() {
+  local cachedir="$1"
+  mkdir -p "$cachedir"
+  printf '%s\n' \
+    'Format: 3.0 (quilt)' \
+    'Source: ocserv' \
+    'Version: 1.5.0-1' \
+    'Files:' \
+    ' 0000 ocserv_1.5.0.orig.tar.xz' \
+    ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
+    'Checksums-Sha256:' \
+    ' 0000 ocserv_1.5.0.orig.tar.xz' \
+    ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
+    > "$cachedir/ocserv_1.5.0-1.dsc"
+  touch "$cachedir/ocserv_1.5.0.orig.tar.xz" "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
+}
+
+@test "main: dget success → publishes source tree (case 1)" {
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+mkdir -p "$(pwd)/ocserv-1.5.0"
+echo "fake-source" > "$(pwd)/ocserv-1.5.0/configure.ac"
+echo "stub dget ok"
+SH
+  chmod +x "$fakebin/dget"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
+  [ -f "$tmprepo/build/source/ocserv-1.5.0/configure.ac" ]
+  rm -rf "$tmprepo" "$fakebin"
+}
+
+@test "main: non-509 dget failure → dies, no cache use (case 3)" {
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+echo "curl: (22) The requested URL returned error: 404" >&2
+false
+SH
+  chmod +x "$fakebin/dget"
+  # No cache seeded. Non-509 must die WITHOUT attempting cache fallback.
+  # Assert: script exits non-zero AND build/source/ was never published
+  # (proves the cache path was never reached).
+  rc=0
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" ) >"$tmprepo/out.log" 2>&1 || rc=$?
+  published=$([ -d "$tmprepo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  rm -rf "$tmprepo" "$fakebin"
+  [ "$rc" -ne 0 ]
+  [ "$published" == "no" ]
+}
+
+@test "main: 509 + complete cache → fallback succeeds (case 2)" {
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  # fake dget: drops a PARTIAL artifact in staging, emits 509, fails.
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+: > ocserv_1.5.0.orig.tar.xz.partial
+echo "curl: (22) The requested URL returned error: 509" >&2
+false
+SH
+  # fake dpkg-source: must run from CACHE_STAGE (no .partial there), creates tree.
+  cat > "$fakebin/dpkg-source" <<'SH'
+#!/usr/bin/env bash
+outdir="$4"
+if ls *.partial >/dev/null 2>&1; then
+  echo "CONTAMINATION: .partial visible to dpkg-source" >&2
+  exit 99
+fi
+mkdir -p "$outdir"; echo "from-cache" > "$outdir/MARKER"
+SH
+  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
+  write_fixture_cache "$tmprepo/build/source-cache"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
+  # Source tree published AND carries the cache marker (not snapshot partial).
+  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
+  [ "$(cat "$tmprepo/build/source/ocserv-1.5.0/MARKER")" == "from-cache" ]
+  # No staging leak (case 8): trap removed TMP_ROOT.
+  [ -z "$(ls -d "$tmprepo"/build/.fetch-tmp.* 2>/dev/null)" ]
+  rm -rf "$tmprepo" "$fakebin"
+}
+
+@test "main: 509 + partial snapshot output does not contaminate cache path (case 8)" {
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+: > ocserv_1.5.0.orig.tar.xz.partial
+mkdir -p ocserv-1.5.0-partial-junk
+echo "HTTP/2 509" >&2
+false
+SH
+  cat > "$fakebin/dpkg-source" <<'SH'
+#!/usr/bin/env bash
+outdir="$4"
+if ls *.partial >/dev/null 2>&1 || ls -d *partial-junk >/dev/null 2>&1; then
+  echo "CONTAMINATION detected" >&2
+  exit 99
+fi
+mkdir -p "$outdir"; echo "ok" > "$outdir/MARKER"
+SH
+  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
+  write_fixture_cache "$tmprepo/build/source-cache"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" ) >"$tmprepo/out.log" 2>&1 || true
+  # Published tree exists (dpkg-source did not hit contamination exit 99).
+  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
+  rm -rf "$tmprepo" "$fakebin"
+}
