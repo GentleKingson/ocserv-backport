@@ -134,6 +134,51 @@ verify_cache_artifacts() {
 Fetch them from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${cache_dir}/"
   fi
 }
+# Spec §3.4. Cache fallback: runs only on confirmed 509.
+# Arg 1: cache_stage (isolated staging subdir). Uses global SRC_VER/UPSTREAM.
+# Dies on any validation failure; never prints the "ready" log (caller does).
+fetch_via_cache() {
+  local cache_stage="$1"
+  local cache_dir="build/source-cache"
+  local dsc_name="ocserv_${SRC_VER}.dsc"
+  local dsc_path="${cache_dir}/${dsc_name}"
+  [[ -f "$dsc_path" ]] || die "HTTP 509 fallback needs cached .dsc at ${dsc_path}
+Obtain it from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${cache_dir}/"
+
+  validate_dsc_metadata "$dsc_path" "ocserv" "$SRC_VER"
+
+  local sets f_set s_set
+  sets="$(parse_dsc_artifacts "$dsc_path")"
+  f_set="$(printf '%s\n' "$sets" | sed -n '1p')"
+  s_set="$(printf '%s\n' "$sets" | sed -n '2p')"
+
+  # Validate basenames (incl. duplicates, path traversal) on the RAW f_set/s_set
+  # BEFORE any normalization (review fix #3): a .dsc listing the same file twice,
+  # or a filename with '/' or '..', is rejected here regardless of F==S outcome.
+  validate_artifact_basenames "$f_set"
+  validate_artifact_basenames "$s_set"
+
+  # F == S set equality (spec §3.4c, case 9) — normalize to sorted-unique AFTER
+  # the raw dup/basename checks above so dedup can't mask a duplicated filename.
+  local f_norm s_norm
+  f_norm="$(printf '%s' "$f_set" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  s_norm="$(printf '%s' "$s_set" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  [[ "$f_norm" == "$s_norm" ]] || die "cached .dsc Files set != Checksums-Sha256 set (partial SHA-256 coverage)"
+
+  verify_cache_artifacts "$cache_dir" "$f_set"
+
+  # Copy cached .dsc + artifacts into cache_stage (cache stays read-only input).
+  cp "${dsc_path}" "${cache_stage}/${dsc_name}"
+  local name
+  for name in $f_set; do
+    cp "${cache_dir}/${name}" "${cache_stage}/${name}"
+  done
+
+  log "snapshot.debian.org rate-limited (HTTP 509); extracting from local cache"
+  ( cd "$cache_stage" && dpkg-source --require-strong-checksums -x "$dsc_name" "ocserv-${UPSTREAM}" )
+  [[ -d "${cache_stage}/ocserv-${UPSTREAM}" ]] || die "cache extraction produced no source tree"
+}
+
 # Spec §3.7. Publish validated source tree with swap-with-rollback (policy B).
 # Arg 1: staging tree path (must exist, non-empty).  Arg 2: target path.
 publish_source_tree() {
@@ -189,7 +234,10 @@ main() {
   if ! is_509_failure "$(cat "$dget_log")"; then
     die "dget failed (non-509); see log above"
   fi
-  die "dget failed with HTTP 509 (rate-limited); cache fallback not yet implemented"
+  log "snapshot.debian.org returned HTTP 509; attempting local source cache fallback"
+  fetch_via_cache "$cache_stage"
+  publish_source_tree "${cache_stage}/ocserv-${UPSTREAM}" "build/source/ocserv-${UPSTREAM}"
+  log "source tree ready (from local cache; snapshot.debian.org was rate-limited): build/source/ocserv-${UPSTREAM}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
