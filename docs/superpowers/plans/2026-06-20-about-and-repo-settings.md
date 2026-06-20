@@ -58,7 +58,7 @@ Run: `gh project list --owner GentleKingson --format json 2>/dev/null || echo "(
 This is informational only. Caveats (do not block on this output):
 - It lists owner-level Projects; it does NOT prove whether any are linked to this repo.
 - Disabling repo Projects does NOT delete linked Projects — they just stop appearing in this repo's Projects tab and remain at the owner level.
-- So: whatever this prints, proceed to Task 3 (unless Step 1 above told you to stop).
+- So: whatever this prints, proceed to Task 2 (unless Step 1 above told you to stop).
 
 - [ ] **Step 3: No commit step**
 
