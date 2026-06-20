@@ -203,47 +203,54 @@ HTTP/2 509). Does NOT match bare exit 22 or generic errors. TDD:
 
 This task adds the two purest, highest-value helpers: `validate_dsc_metadata()` and `parse_dsc_artifacts()` (Deb822-aware, returns Files set F and Checksums-Sha256 set S).
 
-- [ ] **Step 1: Append bats tests for validate_dsc_metadata + parse_dsc_artifacts (cases 6, 9, 10)**
+**Contract note (review fix #1):** both helpers take a `.dsc` **file path** as arg 1 (matching `dpkg-parsecontrol -l`). Bats tests MUST write fixture `.dsc` files via `mktemp` and pass the path — never the raw control text. **Contract note (review fix #3):** `parse_dsc_artifacts` preserves duplicates (no `sort -u`); duplicate detection happens in `validate_artifact_basenames` (Task 4) BEFORE set comparison. This means a `.dsc` listing the same file twice is caught, not silently deduped.
 
-Append to `test/test_fetch_source.bats` (before the last blank line):
+- [ ] **Step 1: Append bats tests for validate_dsc_metadata + parse_dsc_artifacts (cases 6, 9)**
+
+Append to `test/test_fetch_source.bats`. Each test writes a fixture `.dsc` to a temp file and passes the path. NOTE: inside the `call_func` bash `-c` string, `$tmpd` is expanded by the outer bats shell before the string is passed, so it must NOT be escaped. All other `$(...)` inside the heredoc/fixture content stays literal (it's fixture text, not command substitution).
 
 ```bash
 # ---- validate_dsc_metadata (spec §3.4b) ----
 
 @test "validate_dsc_metadata: accepts Source=ocserv Version=1.5.0-1" {
-  call_func "validate_dsc_metadata \"\$(cat <<'DSC'
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Format: 3.0 (quilt)
 Source: ocserv
 Version: 1.5.0-1
 DSC
-)\" ocserv 1.5.0-1"
-  [ "$status" -eq 0 ]
+  call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -eq 0 ]
 }
 
 @test "validate_dsc_metadata: rejects wrong Source" {
-  call_func "validate_dsc_metadata \"\$(cat <<'DSC'
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Source: otherpkg
 Version: 1.5.0-1
 DSC
-)\" ocserv 1.5.0-1"
-  [ "$status" -ne 0 ]
+  call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
 }
 
 @test "validate_dsc_metadata: rejects wrong Version" {
-  call_func "validate_dsc_metadata \"\$(cat <<'DSC'
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Source: ocserv
 Version: 1.4.0-1
 DSC
-)\" ocserv 1.5.0-1"
-  [ "$status" -ne 0 ]
+  call_func "validate_dsc_metadata '$tmpd/x.dsc' ocserv 1.5.0-1"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
 }
 
 # ---- parse_dsc_artifacts (spec §3.4c) ----
-# Prints two space-separated lines: first = Files set F, second = SHA256 set S.
-# Caller compares F == S (set equality) and validates basenames.
+# Prints two lines: line 1 = F (space-separated basenames, ORDER PRESERVED, dupes kept),
+# line 2 = S (same treatment). Caller normalizes (sort -u) only AFTER dup/basename
+# validation in Task 4, so a duplicated filename is detectable.
 
-@test "parse_dsc_artifacts: returns equal F and S sets for well-formed .dsc" {
-  call_func "parse_dsc_artifacts \"\$(cat <<'DSC'
+@test "parse_dsc_artifacts: equal F/S for well-formed .dsc" {
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Format: 3.0 (quilt)
 Source: ocserv
 Version: 1.5.0-1
@@ -254,41 +261,44 @@ Checksums-Sha256:
  abcd ocserv_1.5.0.orig.tar.xz
  ef01 ocserv_1.5.0-1.debian.tar.xz
 DSC
-)\""
-  [ "$status" -eq 0 ]
-  # Line 1 (F) and line 3 (S) must be the same set of basenames.
-  local f_set s_set
-  f_set="\$(printf '%s\n' "\${lines[@]}" | sed -n '1p' | tr ' ' '\n' | sort | tr '\n' ' ')"
-  s_set="\$(printf '%s\n' "\${lines[@]}" | sed -n '2p' | tr ' ' '\n' | sort | tr '\n' ' ')"
-  [ "\$f_set" == "\$s_set" ]
+  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then rm -rf "$tmpd"; fail "parse failed"; fi
+  # Normalize both lines to sorted-unique sets and compare.
+  f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  rm -rf "$tmpd"
+  [ "$f_norm" == "$s_norm" ]
 }
 
 @test "parse_dsc_artifacts: dies when Checksums-Sha256 stanza absent" {
-  call_func "parse_dsc_artifacts \"\$(cat <<'DSC'
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Source: ocserv
 Version: 1.5.0-1
 Files:
  1234 ocserv_1.5.0.orig.tar.xz
 DSC
-)\""
-  [ "$status" -ne 0 ]
+  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
 }
 
-@test "parse_dsc_artifacts: returns unequal F/S when SHA256 partial (case 9)" {
-  call_func "parse_dsc_artifacts \"\$(cat <<'DSC'
+@test "parse_dsc_artifacts: unequal F/S when SHA256 partial (case 9)" {
+  tmpd="$(mktemp -d)"
+  cat > "$tmpd/x.dsc" <<'DSC'
 Files:
  1234 ocserv_1.5.0.orig.tar.xz
  5678 ocserv_1.5.0-1.debian.tar.xz
 Checksums-Sha256:
  abcd ocserv_1.5.0.orig.tar.xz
 DSC
-)\""
-  [ "$status" -eq 0 ]
-  # F has 2 files, S has 1 — sets must differ (caller enforces equality).
-  local f_count s_count
-  f_count="\$(printf '%s\n' "\${lines[@]}" | sed -n '1p' | wc -w)"
-  s_count="\$(printf '%s\n' "\${lines[@]}" | sed -n '2p' | wc -w)"
-  [ "\$f_count" -ne "\$s_count" ]
+  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then rm -rf "$tmpd"; fail "parse should succeed (unequal sets detected by caller)"; fi
+  f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  rm -rf "$tmpd"
+  [ "$f_norm" != "$s_norm" ]
 }
 ```
 
@@ -299,7 +309,7 @@ Expected: the new tests FAIL (functions not defined). The is_509_failure tests s
 
 - [ ] **Step 3: Implement `validate_dsc_metadata()` and `parse_dsc_artifacts()`**
 
-Add these AFTER `is_509_failure()` in `scripts/fetch-source.sh`:
+Add these AFTER `is_509_failure()` in `scripts/fetch-source.sh`. NOTE (review fix #3): `parse_dsc_artifacts` does NOT `sort -u` — it preserves order and duplicates so the Task-4 basename validator can detect dupes. Normalization to sorted-unique happens in the caller (`fetch_via_cache`, Task 6) only after validation.
 
 ```bash
 # Spec §3.4b + §5. Validate cached .dsc metadata via Deb822-aware parsing.
@@ -317,22 +327,25 @@ validate_dsc_metadata() {
   [[ "$got_ver" == "$want_ver" ]] || die "cached .dsc Version mismatch: got '${got_ver}', expected '${want_ver}'"
 }
 
-# Spec §3.4c + §5. Parse Files (set F) and Checksums-Sha256 (set S) from a .dsc
-# using Deb822-aware bounded stanza parsing (NO broad whole-file grep).
+# Spec §3.4c + §5. Parse Files (F) and Checksums-Sha256 (S) from a .dsc using
+# Deb822-aware bounded stanza parsing (NO broad whole-file grep).
 # Arg 1: .dsc file path.
-# Prints two lines: line 1 = F (space-separated basenames), line 2 = S.
+# Prints two lines: line 1 = F, line 2 = S. Each is space-separated basenames,
+# ORDER PRESERVED, DUPLICATES KEPT (review fix #3: do not sort -u here; the
+# caller validates basenames incl. dupes before normalizing to sorted-unique).
 # Dies if Checksums-Sha256 stanza is absent.
 parse_dsc_artifacts() {
   local dsc_path="$1"
   local f_set s_set
   # dpkg-parsecontrol emits continuation lines indented; awk extracts the
   # filename (last whitespace-separated field) under each target stanza.
+  # NOTE: deliberately no sort -u — preserve dupes for caller-side validation.
   f_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
     | awk '/^Files:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
-    | sort -u | tr '\n' ' ')"
+    | tr '\n' ' ')"
   s_set="$(dpkg-parsecontrol -l"$dsc_path" 2>/dev/null \
     | awk '/^Checksums-Sha256:/{flag=1;next} /^[^ ]/{flag=0} flag && NF>0{print $NF}' \
-    | sort -u | tr '\n' ' ')"
+    | tr '\n' ' ')"
   [[ -n "$s_set" ]] || die "cached .dsc lacks Checksums-Sha256 stanza (too weak): ${dsc_path}"
   printf '%s\n%s\n' "$f_set" "$s_set"
 }
@@ -351,9 +364,11 @@ git commit -m "feat(fetch-source): Deb822-aware .dsc metadata + artifact parsers
 
 validate_dsc_metadata: uses dpkg-parsecontrol for Source/Version, dies
 on mismatch. parse_dsc_artifacts: bounded awk stanza parsing for Files
-(F) and Checksums-Sha256 (S); dies if S absent. No broad whole-file
-grep (spec §5 hard constraint). TDD: 6 bats cases incl. case 9
-(partial SHA256 → F != S) and missing-stanza rejection."
+(F) and Checksums-Sha256 (S); dies if S absent; preserves order and
+duplicates (no sort -u) so caller-side basename validation can detect
+dupes. No broad whole-file grep (spec §5 hard constraint). TDD: 6 bats
+cases via mktemp .dsc fixtures (review fix #1: pass file paths, not
+text) incl. case 9 (partial SHA256 → F != S) and missing-stanza rejection."
 ```
 
 ---
@@ -394,24 +409,22 @@ Append to `test/test_fetch_source.bats`:
 }
 
 # ---- verify_cache_artifacts (spec §3.4d, cases 4/5) ----
-# Uses a temp dir as fake cache.
+# Uses a temp dir as fake cache. NOTE (review fix #1): $tmpd is set in the bats
+# shell and passed into call_func's bash -c string via single-quote expansion
+# (no backslash escape — bats expands it before the string reaches bash).
 
 @test "verify_cache_artifacts: passes when all files present" {
-  local tmpd; tmpd="\$(mktemp -d)"
-  touch "\$tmpd/ocserv_1.5.0.orig.tar.xz" "\$tmpd/ocserv_1.5.0-1.debian.tar.xz"
-  call_func "verify_cache_artifacts '\$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
-  local rc=\$?
-  rm -rf "\$tmpd"
-  [ "\$rc" -eq 0 ]
+  tmpd="$(mktemp -d)"
+  touch "$tmpd/ocserv_1.5.0.orig.tar.xz" "$tmpd/ocserv_1.5.0-1.debian.tar.xz"
+  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -eq 0 ]
 }
 
 @test "verify_cache_artifacts: dies naming missing files" {
-  local tmpd; tmpd="\$(mktemp -d)"
-  touch "\$tmpd/ocserv_1.5.0.orig.tar.xz"
-  call_func "verify_cache_artifacts '\$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
-  local rc=\$?
-  rm -rf "\$tmpd"
-  [ "\$rc" -ne 0 ]
+  tmpd="$(mktemp -d)"
+  touch "$tmpd/ocserv_1.5.0.orig.tar.xz"
+  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
+  rc=$?; rm -rf "$tmpd"; [ "$rc" -ne 0 ]
 }
 ```
 
@@ -510,32 +523,42 @@ publish_source_tree() {
 }
 
 # Spec §3.2 + §3.1. Snapshot path: dget in SNAPSHOT_STAGE, publish on success.
+# Writes its own log/diagnostic to the logfile arg 2 (review optimization:
+# keep success-path observability by capturing dget output to a file the
+# caller always re-echoes).
 fetch_via_snapshot_staged() {
-  local snapshot_stage="$1"
+  local snapshot_stage="$1" logfile="$2"
   if [[ -f .env ]]; then set -a; source .env; set +a; fi
   local ts="${DEBIAN_SNAPSHOT_TIMESTAMP:?DEBIAN_SNAPSHOT_TIMESTAMP must be set (.env or env)}"
   local base="https://snapshot.debian.org/archive/debian/${ts}"
   local dsc_url="${base}/pool/main/o/ocserv/ocserv_${SRC_VER}.dsc"
-  log "dget ${dsc_url}"
-  ( cd "$snapshot_stage" && dget -x -u "$dsc_url" )
+  {
+    log "dget ${dsc_url}"
+    ( cd "$snapshot_stage" && dget -x -u "$dsc_url" )
+  } >"$logfile" 2>&1
+}
+
+# Spec §3.2. Global TMP_ROOT (single assignment, never reassigned) + cleanup
+# function bound to EXIT. Global (not local) so the trap can reference it
+# after main() returns (review fix #2: a local would be out of scope at EXIT
+# and under set -u the trap expansion could fail, leaking .fetch-tmp.*).
+TMP_ROOT=""
+cleanup_fetch_tmp() {
+  [[ -n "${TMP_ROOT:-}" ]] && rm -rf -- "${TMP_ROOT}"
 }
 
 main() {
   mkdir -p build
-  local tmp_root snapshot_stage cache_stage
-  tmp_root="$(mktemp -d build/.fetch-tmp.XXXXXX)"
-  trap 'rm -rf -- "${tmp_root}"' EXIT
-  snapshot_stage="${tmp_root}/snapshot"
-  cache_stage="${tmp_root}/cache"
+  TMP_ROOT="$(mktemp -d build/.fetch-tmp.XXXXXX)"
+  trap cleanup_fetch_tmp EXIT
+
+  local snapshot_stage="${TMP_ROOT}/snapshot"
+  local cache_stage="${TMP_ROOT}/cache"
+  local dget_log="${TMP_ROOT}/dget.log"
   mkdir -p "$snapshot_stage" "$cache_stage"
 
-  local dget_log=""
-  set +e
-  dget_log="$(fetch_via_snapshot_staged "$snapshot_stage" 2>&1)"
-  local rc=$?
-  set -e
-
-  if [[ $rc -eq 0 ]]; then
+  if fetch_via_snapshot_staged "$snapshot_stage" "$dget_log"; then
+    cat "$dget_log"                          # re-echo success diagnostics (observability)
     [[ -d "${snapshot_stage}/ocserv-${UPSTREAM}" ]] \
       || die "dget succeeded but source tree missing in staging"
     publish_source_tree "${snapshot_stage}/ocserv-${UPSTREAM}" "build/source/ocserv-${UPSTREAM}"
@@ -543,10 +566,10 @@ main() {
     return 0
   fi
 
-  # Non-zero dget exit: only fall back on explicit 509 (Task 6 adds the cache
-  # path). For now, re-emit and die (preserves current behavior for non-509).
-  printf '%s\n' "$dget_log" >&2
-  if ! is_509_failure "$dget_log"; then
+  # Non-zero dget exit: re-emit full log (failure classification needs it),
+  # then only fall back on explicit 509 (Task 6 wires the cache branch).
+  cat "$dget_log" >&2
+  if ! is_509_failure "$(cat "$dget_log")"; then
     die "dget failed (non-509); see log above"
   fi
   die "dget failed with HTTP 509 (rate-limited); cache fallback not yet implemented"
@@ -611,13 +634,20 @@ Obtain it from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${
   sets="$(parse_dsc_artifacts "$dsc_path")"
   f_set="$(printf '%s\n' "$sets" | sed -n '1p')"
   s_set="$(printf '%s\n' "$sets" | sed -n '2p')"
-  # F == S set equality (spec §3.4c, case 9).
+
+  # Validate basenames (incl. duplicates, path traversal) on the RAW f_set BEFORE
+  # any normalization (review fix #3): a .dsc listing the same file twice, or a
+  # filename with '/' or '..', is rejected here regardless of F==S outcome.
+  validate_artifact_basenames "$f_set"
+  validate_artifact_basenames "$s_set"
+
+  # F == S set equality (spec §3.4c, case 9) — normalize to sorted-unique AFTER
+  # the raw dup/basename checks above so dedup can't mask a duplicated filename.
   local f_norm s_norm
-  f_norm="$(printf '%s' "$f_set" | tr ' ' '\n' | grep -v '^$' | sort | tr '\n' ' ')"
-  s_norm="$(printf '%s' "$s_set" | tr ' ' '\n' | grep -v '^$' | sort | tr '\n' ' ')"
+  f_norm="$(printf '%s' "$f_set" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
+  s_norm="$(printf '%s' "$s_set" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
   [[ "$f_norm" == "$s_norm" ]] || die "cached .dsc Files set != Checksums-Sha256 set (partial SHA-256 coverage)"
 
-  validate_artifact_basenames "$f_set"
   verify_cache_artifacts "$cache_dir" "$f_set"
 
   # Copy cached .dsc + artifacts into cache_stage (cache stays read-only input).
@@ -637,7 +667,7 @@ Obtain it from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${
 Then in `main()`, REPLACE the final two lines (the 509 die stub):
 
 ```bash
-  if ! is_509_failure "$dget_log"; then
+  if ! is_509_failure "$(cat "$dget_log")"; then
     die "dget failed (non-509); see log above"
   fi
   die "dget failed with HTTP 509 (rate-limited); cache fallback not yet implemented"
@@ -646,7 +676,7 @@ Then in `main()`, REPLACE the final two lines (the 509 die stub):
 WITH:
 
 ```bash
-  if ! is_509_failure "$dget_log"; then
+  if ! is_509_failure "$(cat "$dget_log")"; then
     die "dget failed (non-509); see log above"
   fi
   log "snapshot.debian.org returned HTTP 509; attempting local source cache fallback"
@@ -655,58 +685,139 @@ WITH:
   log "source tree ready (from local cache; snapshot.debian.org was rate-limited): build/source/ocserv-${UPSTREAM}"
 ```
 
+NOTE: `$dget_log` is the **logfile path** (from Task 5's refactor), not the log text — read it with `$(cat "$dget_log")` for the 509 check. This matches Task 5's file-based capture.
+
 - [ ] **Step 2: Add orchestrator-level bats tests with dget/dpkg-source stubs (cases 1, 2, 3, 8)**
 
-These exercise `main()` end-to-end with faked binaries on PATH. Append to `test/test_fetch_source.bats`:
+These exercise `main()` end-to-end with faked binaries on PATH. All 4 cases (1, 2, 3, 8) are stubbable (review fix #4): fake `dget` creates a partial artifact + emits 509 + exits non-zero; a fixture cache holds a minimal valid `.dsc` + artifacts; fake `dpkg-source` verifies it runs inside CACHE_STAGE and creates the source tree with a marker. Append to `test/test_fetch_source.bats`:
 
 ```bash
 # ---- main() orchestrator tests (cases 1, 2, 3, 8) with stubs ----
 # We stub dget/dpkg-source by prepending a fake bin dir to PATH.
+# Helper: write a minimal valid cached .dsc + its two artifacts into a cache dir.
+write_fixture_cache() {
+  local cachedir="$1"
+  mkdir -p "$cachedir"
+  cat > "$cachedir/ocserv_1.5.0-1.dsc" <<'DSC'
+Format: 3.0 (quilt)
+Source: ocserv
+Version: 1.5.0-1
+Files:
+ 0000 ocserv_1.5.0.orig.tar.xz
+ 0000 ocserv_1.5.0-1.debian.tar.xz
+Checksums-Sha256:
+ 0000 ocserv_1.5.0.orig.tar.xz
+ 0000 ocserv_1.5.0-1.debian.tar.xz
+DSC
+  : > "$cachedir/ocserv_1.5.0.orig.tar.xz"
+  : > "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
+}
 
 @test "main: dget success → publishes source tree (case 1)" {
-  local tmprepo; tmprepo="\$(mktemp -d)"
-  # fake dget: creates the source tree dir in staging
-  local fakebin; fakebin="\$(mktemp -d)"
-  cat > "\$fakebin/dget" <<'SH'
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
 #!/usr/bin/env bash
-mkdir -p "\$(pwd)/ocserv-1.5.0"
+mkdir -p "$(pwd)/ocserv-1.5.0"
 echo "stub dget ok"
 SH
-  chmod +x "\$fakebin/dget"
-  cd "\$tmprepo"
-  mkdir -p build
-  PATH="\$fakebin:\$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-    bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null || true
-  [ -d "build/source/ocserv-1.5.0" ]
-  rm -rf "\$tmprepo" "\$fakebin"
+  chmod +x "$fakebin/dget"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
+  [ -d "$tmprepo/build/source/ocserv-1.5.0" ]
+  rm -rf "$tmprepo" "$fakebin"
 }
 
 @test "main: non-509 dget failure → dies, no cache use (case 3)" {
-  local tmprepo; tmprepo="\$(mktemp -d)"
-  local fakebin; fakebin="\$(mktemp -d)"
-  cat > "\$fakebin/dget" <<'SH'
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
 #!/usr/bin/env bash
 echo "curl: (22) The requested URL returned error: 404" >&2
 exit 1
 SH
-  chmod +x "\$fakebin/dget"
-  cd "\$tmprepo"
-  mkdir -p build
-  PATH="\$fakebin:\$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-    bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null
-  local rc=\$?
-  rm -rf "\$tmprepo" "\$fakebin"
-  [ "\$rc" -ne 0 ]
-  [ ! -d "build/source/ocserv-1.5.0" ] 2>/dev/null || true
+  chmod +x "$fakebin/dget"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null )
+  rc=$?
+  rm -rf "$tmprepo" "$fakebin"
+  [ "$rc" -ne 0 ]
+}
+
+@test "main: 509 + complete cache → fallback succeeds (case 2)" {
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  # fake dget: drops a PARTIAL artifact in staging, emits 509, fails.
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+# Simulate partial download before the 509 hits.
+: > ocserv_1.5.0.orig.tar.xz.partial
+echo "curl: (22) The requested URL returned error: 509" >&2
+exit 1
+SH
+  # fake dpkg-source: must run from CACHE_STAGE (no .partial files there),
+  # creates the source tree with a cache-marker file.
+  cat > "$fakebin/dpkg-source" <<'SH'
+#!/usr/bin/env bash
+# args: --require-strong-checksums -x <dsc> <outdir>
+outdir="$3"
+# If a .partial file is present in CWD, this is the snapshot stage leaking — fail.
+if ls *.partial >/dev/null 2>&1; then
+  echo "CONTAMINATION: .partial file visible to dpkg-source" >&2
+  exit 99
+fi
+mkdir -p "$outdir"
+echo "from-cache" > "$outdir/MARKER"
+SH
+  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
+  write_fixture_cache "$tmprepo/build/source-cache"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
+  # Source tree published AND carries the cache marker (not snapshot partial).
+  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
+  [ "$(cat "$tmprepo/build/source/ocserv-1.5.0/MARKER")" == "from-cache" ]
+  # No staging leak (case 8): trap removed TMP_ROOT.
+  [ -z "$(ls -d "$tmprepo"/build/.fetch-tmp.* 2>/dev/null)" ]
+  rm -rf "$tmprepo" "$fakebin"
+}
+
+@test "main: 509 + partial snapshot output does not contaminate cache path (case 8)" {
+  # Same setup as case 2 but the assertion focus is contamination isolation:
+  # the .partial file dget left in SNAPSHOT_STAGE must NOT be visible when
+  # dpkg-source runs in CACHE_STAGE. The fake dpkg-source exits 99 if it sees
+  # any *.partial — so a clean exit + published tree proves isolation.
+  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  cat > "$fakebin/dget" <<'SH'
+#!/usr/bin/env bash
+: > ocserv_1.5.0.orig.tar.xz.partial
+mkdir -p ocserv-1.5.0-partial-junk
+echo "HTTP/2 509" >&2
+exit 1
+SH
+  cat > "$fakebin/dpkg-source" <<'SH'
+#!/usr/bin/env bash
+outdir="$3"
+if ls *.partial >/dev/null 2>&1 || ls -d *partial-junk >/dev/null 2>&1; then
+  echo "CONTAMINATION detected" >&2
+  exit 99
+fi
+mkdir -p "$outdir"; echo "ok" > "$outdir/MARKER"
+SH
+  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
+  write_fixture_cache "$tmprepo/build/source-cache"
+  ( cd "$tmprepo" && mkdir -p build && \
+    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
+      bash "${REPO_ROOT}/scripts/fetch-source.sh" ) >"$tmprepo/out.log" 2>&1 || true
+  # Published tree exists (dpkg-source did not hit contamination exit 99).
+  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
+  rm -rf "$tmprepo" "$fakebin"
 }
 ```
-
-(Cases 2 and 8 require a populated cache dir + a stubbed `dpkg-source`; they are more involved. For plan brevity these two are left as the implementer's final integration check — see Task 8's manual verification. The 14 automated cases above cover all pure-helper logic and the two most important main() paths.)
 
 - [ ] **Step 3: Run all bats tests**
 
 Run: `bats test/test_fetch_source.bats`
-Expected: all PASS (16 prior + 2 new orchestrator = 18).
+Expected: all PASS (16 prior + 4 new orchestrator = 20).
 
 Run: `make test` → entire suite green.
 
@@ -840,7 +951,7 @@ internal consistency, cannot re-prove snapshot provenance)."
 
 **Files:** none (verification only)
 
-This task confirms the full feature works on the actual rate-limited builder. Cases 2 and 8 from the spec's test matrix are validated here manually (they need a populated cache + real `dpkg-source`, hard to stub cleanly).
+Cases 2 and 8 are already covered by automated bats tests (Task 6). This task is the **real-world interop** check: confirm the feature works end-to-end against a genuine HTTP 509 from snapshot.debian.org and the real `dpkg-source` (not a stub), with a real operator-seeded cache. It cannot be replaced by unit tests because it validates the integration of real `dget` output format, real `.dsc` parsing by `dpkg-parsecontrol`, and real `dpkg-source --require-strong-checksums` extraction of the genuine ocserv 1.5.0-1 source package.
 
 - [ ] **Step 1: On the builder, seed the cache**
 
@@ -856,7 +967,7 @@ wget https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.debian.tar.
 ls -la   # confirm 3 files present
 ```
 
-- [ ] **Step 2: Run make dry-run and confirm fetch completes via cache (case 2)**
+- [ ] **Step 2: Run make dry-run and confirm fetch completes via cache**
 
 ```bash
 cd ~/ocserv-backport
@@ -876,7 +987,7 @@ curl: (22) The requested URL returned error: 509   (or similar 509)
 
 Confirm: `ls build/source/ocserv-1.5.0/` shows the source tree.
 
-- [ ] **Step 3: Confirm partial-file isolation (case 8)**
+- [ ] **Step 3: Confirm trap cleaned up staging**
 
 Inspect that `build/.fetch-tmp.*` dirs do NOT linger (trap cleaned them):
 
@@ -884,7 +995,7 @@ Inspect that `build/.fetch-tmp.*` dirs do NOT linger (trap cleaned them):
 ls -d build/.fetch-tmp.* 2>/dev/null && echo "LEAK" || echo "clean (trap worked)"
 ```
 
-Expected: `clean (trap worked)`.
+Expected: `clean (trap worked)`. (Case 8's contamination-isolation is already asserted by the bats test; this is the real-`dpkg-source` confirmation that the global `TMP_ROOT` + `cleanup_fetch_tmp` trap fires correctly on the genuine path.)
 
 - [ ] **Step 4: Confirm the rest of dry-run proceeds (or fails at a later, unrelated stage)**
 
@@ -908,16 +1019,17 @@ If all steps pass, the feature is complete. If a real bug surfaces, return to th
 - spec §3.5 trust boundary wording → Task 7 Step 2 (runbook seeding note) ✅
 - spec §3.6 cache dir/seeding → Task 7 Step 2 + Task 8 Step 1 ✅
 - spec §3.7 publish policy B → Task 5 Step 1 (publish_source_tree) ✅
-- spec §4 test cases 1-10 → T2 (509 helper), T3 (metadata+parse: 6,9), T4 (basenames+verify: 4,5,10), T6 (orchestrator: 1,3), T8 manual (2,8) ✅
+- spec §4 test cases 1-10 → T2 (509 helper), T3 (metadata+parse: 6,9), T4 (basenames+verify: 4,5,10), T6 (orchestrator: 1,2,3,8 — all stubbable, review fix #4) ✅. Task 8 is real-dpkg-source/real-509 interop, not a substitute for cases 2/8.
 - spec §5 script skeleton → Task 1 ✅
 - spec §5 Deb822 parsing → Task 3 (dpkg-parsecontrol) ✅
 - spec §7 runbook changes → Task 7 (§7.1, §7.2, §7.3a, §7.3b) ✅
 
-**2. Placeholder scan:** No TBD/TODO. Every step has exact code or commands. The two orchestrator cases (2, 8) are explicitly deferred to manual Task 8 verification with a stated reason (cache+real-dpkg-source stubs are brittle); this is documented, not a placeholder. ✅
+**2. Placeholder scan:** No TBD/TODO. Every step has exact code or commands. All 10 spec test cases are now automated bats cases (review fix #4: cases 2 & 8 stubbable via fake dget/dpkg-source + `write_fixture_cache` helper); Task 8 is supplementary real-world interop verification, not a deferred test. ✅
 
-**3. Type/name consistency:** `is_509_failure`, `validate_dsc_metadata`, `parse_dsc_artifacts`, `validate_artifact_basenames`, `verify_cache_artifacts`, `fetch_via_snapshot_staged`, `fetch_via_cache`, `publish_source_tree`, `main` — names match across all tasks. `SRC_VER`/`UPSTREAM` globals consistent. `SNAPSHOT_STAGE`/`CACHE_STAGE`/`TMP_ROOT` consistent (no stray `$STAGING`). ✅
+**3. Type/name consistency:** `is_509_failure`, `validate_dsc_metadata`, `parse_dsc_artifacts`, `validate_artifact_basenames`, `verify_cache_artifacts`, `fetch_via_snapshot_staged`, `fetch_via_cache`, `publish_source_tree`, `cleanup_fetch_tmp`, `main` — names match across all tasks. `SRC_VER`/`UPSTREAM` globals consistent. Globals `TMP_ROOT` + locals `snapshot_stage`/`cache_stage`/`dget_log` consistent (review fix #2: TMP_ROOT is global for trap safety). `parse_dsc_artifacts` preserves dupes (review fix #3); normalization to sorted-unique deferred to `fetch_via_cache` after `validate_artifact_basenames`. ✅
 
 **4. Risk callouts:**
 - Task 5 deletes the Task-1 `fetch_via_snapshot()` — implementer must not leave both. Noted in Task 5 Step 1. ✅
 - `dpkg-parsecontrol` availability: standard on Debian (dpkg-dev), present in the sbuild chroot. If `make test` runs on a dev machine without it, the parse tests will fail — flag this. ✅
-- Cases 2/8 manual: explicitly stated as Task 8, not silently skipped. ✅
+- Bats stub tests use `bash "${REPO_ROOT}/scripts/fetch-source.sh"` in a subshell with a fake-bin PATH — implementer must ensure the stub `dget`/`dpkg-source` scripts are executable (`chmod +x`) and that `REPO_ROOT` is exported by the helper. ✅
+- Test-count tally: T2=4, T3=6, T4=6, T6=4 → 20 bats cases total (was 18 before fix #4 added cases 2 & 8). ✅
