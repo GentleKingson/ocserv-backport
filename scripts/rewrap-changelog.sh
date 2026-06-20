@@ -15,6 +15,7 @@ export DEBEMAIL="${MAINTAINER_EMAIL}"
 export DEBFULLNAME="${MAINTAINER_NAME}"
 
 dch --distribution trixie --force-distribution \
+    --force-bad-version \
     -v "${BACKPORT_VERSION}" \
     "Private rebuild for Debian 13 trixie."
 log "changelog top version: $(dpkg-parsechangelog -SVersion)"
