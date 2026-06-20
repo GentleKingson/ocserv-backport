@@ -8,14 +8,19 @@ UPSTREAM="${OCSERV_UPSTREAM_VERSION:-1.5.0}"
 REVISION="${OCSERV_DEBIAN_REVISION:-1}"
 SRC_VER="${UPSTREAM}-${REVISION}"
 
-fetch_via_snapshot() {
-  # Load timestamp: .env first, then environment.
+fetch_via_snapshot_staged() {
+  # Spec §3.2 + §3.1. Snapshot path: dget in SNAPSHOT_STAGE, log to logfile arg.
+  # Arg 1: snapshot_stage dir.  Arg 2: logfile path (caller always re-echoes it
+  # for success-path observability + failure-classification diagnostics).
+  local snapshot_stage="$1" logfile="$2"
   if [[ -f .env ]]; then set -a; source .env; set +a; fi
   local ts="${DEBIAN_SNAPSHOT_TIMESTAMP:?DEBIAN_SNAPSHOT_TIMESTAMP must be set (.env or env)}"
   local base="https://snapshot.debian.org/archive/debian/${ts}"
   local dsc_url="${base}/pool/main/o/ocserv/ocserv_${SRC_VER}.dsc"
-  log "dget ${dsc_url}"
-  dget -x -u "${dsc_url}"   # -u: do not verify with GnuPG at fetch (we trust archive)
+  {
+    log "dget ${dsc_url}"
+    ( cd "$snapshot_stage" && dget -x -u "$dsc_url" )
+  } >"$logfile" 2>&1
 }
 
 # Spec §3.3. Detect explicit HTTP 509 in dget's captured log text.
@@ -129,11 +134,62 @@ verify_cache_artifacts() {
 Fetch them from https://deb.debian.org/debian/pool/main/o/ocserv/ and place in ${cache_dir}/"
   fi
 }
+# Spec §3.7. Publish validated source tree with swap-with-rollback (policy B).
+# Arg 1: staging tree path (must exist, non-empty).  Arg 2: target path.
+publish_source_tree() {
+  local staging_tree="$1" target="$2"
+  [[ -d "$staging_tree" ]] || die "publish: staging tree missing: ${staging_tree}"
+  local count; count="$(find "$staging_tree" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | wc -l)"
+  [[ "$count" -ge 1 ]] || die "publish: staging tree empty: ${staging_tree}"
+  mkdir -p "$(dirname "$target")"
+  if [[ ! -e "$target" ]]; then
+    mv "$staging_tree" "$target"
+  else
+    local backup="${target}.old.$$"
+    mv "$target" "$backup"
+    if ! mv "$staging_tree" "$target"; then
+      mv "$backup" "$target"
+      die "publish failed; old source tree restored at ${target}"
+    fi
+    rm -rf "$backup"
+  fi
+}
+
+# Spec §3.2. Global TMP_ROOT (single assignment, never reassigned) + cleanup
+# function bound to EXIT. Global (not local) so the trap can reference it after
+# main() returns (review fix #2: a local would be out of scope at EXIT and under
+# set -u the trap expansion could fail, leaking .fetch-tmp.*).
+TMP_ROOT=""
+cleanup_fetch_tmp() {
+  [[ -n "${TMP_ROOT:-}" ]] && rm -rf -- "${TMP_ROOT}"
+}
+
 main() {
-  mkdir -p build/source
-  cd build/source
-  fetch_via_snapshot
-  log "source tree ready: $(pwd)/ocserv-${UPSTREAM}"
+  mkdir -p build
+  TMP_ROOT="$(mktemp -d build/.fetch-tmp.XXXXXX)"
+  trap cleanup_fetch_tmp EXIT
+
+  local snapshot_stage="${TMP_ROOT}/snapshot"
+  local cache_stage="${TMP_ROOT}/cache"
+  local dget_log="${TMP_ROOT}/dget.log"
+  mkdir -p "$snapshot_stage" "$cache_stage"
+
+  if fetch_via_snapshot_staged "$snapshot_stage" "$dget_log"; then
+    cat "$dget_log"   # re-echo success diagnostics (observability)
+    [[ -d "${snapshot_stage}/ocserv-${UPSTREAM}" ]] \
+      || die "dget succeeded but source tree missing in staging"
+    publish_source_tree "${snapshot_stage}/ocserv-${UPSTREAM}" "build/source/ocserv-${UPSTREAM}"
+    log "source tree ready: build/source/ocserv-${UPSTREAM}"
+    return 0
+  fi
+
+  # Non-zero dget exit: re-emit full log (failure classification needs it),
+  # then only fall back on explicit 509 (Task 6 wires the cache branch).
+  cat "$dget_log" >&2
+  if ! is_509_failure "$(cat "$dget_log")"; then
+    die "dget failed (non-509); see log above"
+  fi
+  die "dget failed with HTTP 509 (rate-limited); cache fallback not yet implemented"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
