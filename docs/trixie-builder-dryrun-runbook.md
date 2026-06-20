@@ -790,12 +790,12 @@ scripts/bootstrap-build-host.sh --from-stage prepare_directories --reuse-gpg-key
 
 | 占位符 | 出现位置 | 含义 |
 |--------|---------|------|
-| `YYYYMMDDTHHMMSSZ` | 第 4 步 5.1 `.env` 的 `DEBIAN_SNAPSHOT_TIMESTAMP` | snapshot.debian.org 锁定 ocserv 1.5.0-1 源码的时间戳，以 snapshot.debian.org 实际记录为准 |
-| `ssh-ed25519 AAAA... replace-with-your-real-public-key` | 第 1 步 2.3 `ADMIN_PUBKEY` | 管理员真实 SSH 公钥 |
-| `<host>` | 第 1 步 2.3 / 第 3 步 4.3 等 | 构建机的主机名或 IP |
-| `<仓库 URL>` | 第 1 步 2.4 git clone | ocserv-backport 仓库地址 |
-| `<FULL_FINGERPRINT>` | 第 2 步 3.3 / 第 3 步 4.4 reuse-gpg-key | GPG key 的完整 fingerprint（非短 keyid） |
-| `/path/to/private.asc` | 第 2 步 3.3 / 第 3 步 4.4 import-gpg-key | 待导入的 GPG 私钥文件路径 |
+| `YYYYMMDDTHHMMSSZ` | 第 4 步 4.1 `.env` 的 `DEBIAN_SNAPSHOT_TIMESTAMP` | snapshot.debian.org 锁定 ocserv 1.5.0-1 源码的时间戳，以 snapshot.debian.org 实际记录为准 |
+| `ssh-ed25519 AAAA... replace-with-your-real-public-key` | 第 1 步 1.2 `ADMIN_PUBKEY` | 管理员真实 SSH 公钥 |
+| `<host>` | 第 1 步 1.2 / 第 3 步 3.3 等 | 构建机的主机名或 IP |
+| `<仓库 URL>` | 第 1 步 1.2 的 `--repo-url`（git clone） | ocserv-backport 仓库地址 |
+| `<FULL_FINGERPRINT>` | 第 2 步 2.3 / 第 3 步 3.4 reuse-gpg-key | GPG key 的完整 fingerprint（非短 keyid） |
+| `/path/to/private.asc` | 第 2 步 2.3 / 第 3 步 3.4 import-gpg-key | 待导入的 GPG 私钥文件路径 |
 | `/path/to/id_ed25519.pub` | 第 1 步 1.2 `--ssh-pubkey-file` | 管理员真实 SSH 公钥文件路径 |
 
 ---
