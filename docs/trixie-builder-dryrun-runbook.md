@@ -28,7 +28,7 @@ staging / production 或正式 aptly DB。
 root 不一定有匹配的私钥，会得到 `Permission denied (publickey)`。本机切换一律用 `su -`。
 
 文档后面遇到切换点会标注"（场景 A：ssh / 场景 B：su）"。**sbuild group 刷新**那个特定节点
-（第 3 步 4.3）两种场景都用同一个原理：退出当前 builder 会话再重开一个，让新会话重新读取
+（第 3 步 3.3）两种场景都用同一个原理：退出当前 builder 会话再重开一个，让新会话重新读取
 `/etc/group` 拿到最新组成员身份。
 
 **成功定义：** 能在本机完成源码获取、changelog rewrap、source package、sbuild binary
@@ -141,7 +141,7 @@ su - builder -c 'sudo -n true' && echo "sudo OK"   # passwordless sudo 生效
             但尚未真实运行 bootstrap
 ```
 
-### 3.0 重要区分：两个不同的 dry-run（本步开头必读）
+### 2.0 重要区分：两个不同的 dry-run（本步开头必读）
 
 ```text
 本项目的 "dry-run" 有两个不同含义，不要混淆：
@@ -162,7 +162,7 @@ su - builder -c 'sudo -n true' && echo "sudo OK"   # passwordless sudo 生效
 本步只涉及第 1 个（bootstrap dry-run）。
 ```
 
-### 3.1 创建 .bootstrap.env（builder）
+### 2.1 创建 .bootstrap.env（builder）
 
 ```bash
 cd ~/ocserv-backport
@@ -180,7 +180,7 @@ chmod 600 .bootstrap.env
 BOOTSTRAP_BUILDER_USER=builder          # 与第 1 步建的用户一致
 BOOTSTRAP_APTLY_ROOT=/var/aptly         # 默认值，一般不改
 BOOTSTRAP_REPO_NAME=ocserv-backports    # 默认值，一般不改
-BOOTSTRAP_GPG_KEYID=                    # 见 3.2，按模式决定是否填
+BOOTSTRAP_GPG_KEYID=                    # 见 2.2，按模式决定是否填
 ```
 
 > .bootstrap.env 是 gitignored 的，不会进仓库。它是操作者填真实值的本地文件。
@@ -192,7 +192,7 @@ BOOTSTRAP_GPG_KEYID=                    # 见 3.2，按模式决定是否填
 stat -c '%a %U' .bootstrap.env          # 期望：600 builder
 ```
 
-### 3.2 选择 GPG 模式（builder，决策，不执行）
+### 2.2 选择 GPG 模式（builder，决策，不执行）
 
 bootstrap 的 setup_gpg_key 阶段要求三选一（互斥）：
 
@@ -241,7 +241,7 @@ reuse:     填本机已有 key 的 full fingerprint
 
 ✅ 验收（决策，无命令）：已确定 GPG 模式；若选 import/reuse，BOOTSTRAP_GPG_KEYID 已填 fingerprint
 
-### 3.3 bootstrap dry-run 预演（builder）
+### 2.3 bootstrap dry-run 预演（builder）
 
 本步不真实运行 bootstrap，只预演。真实运行放第 3 步。
 
@@ -281,8 +281,8 @@ scripts/bootstrap-build-host.sh --dry-run --reuse-gpg-key <FULL_FINGERPRINT>
 - preflight die "current user is 'root'": 你在第 1 步没切到 builder，重新切过去
   （场景 A: ssh builder@<host> / 场景 B: su - builder）
 - preflight die "OS must be debian" / "codename must be trixie": 机器不对
-- preflight die "less than 15GB free": 磁盘不足（回到第 1 步 2.1 扩容或换盘）
-- load_config die "must be chmod 600": 3.1 的 chmod 漏了
+- preflight die "less than 15GB free": 磁盘不足（回到第 1 步 1.1 扩容或换盘）
+- load_config die "must be chmod 600": 2.1 的 chmod 漏了
 ```
 
 ✅ 验收：
@@ -293,7 +293,7 @@ echo $?                                       # 期望 0
 
 且：输出含 "would generate GPG signing key"（generate 模式）/ 或对应 import/reuse 逻辑；全程无 die。
 
-### 3.4 本步退出条件总览
+### 2.4 本步退出条件总览
 
 ```text
 进入第 3 步前，必须全部满足：
