@@ -103,6 +103,7 @@ gh api repos/GentleKingson/ocserv-backport --jq '{
   topics: .topics,
   homepage: .homepage,
   has_issues: .has_issues,
+  has_discussions: .has_discussions,
   has_wiki: .has_wiki,
   has_projects: .has_projects
 }'
@@ -115,6 +116,7 @@ gh api repos/GentleKingson/ocserv-backport --jq '{
   "topics": ["debian", "trixie", "ocserv", "openconnect", "backport", "sbuild", "aptly"],
   "homepage": null,
   "has_issues": true,
+  "has_discussions": false,
   "has_wiki": false,
   "has_projects": false
 }
@@ -122,17 +124,41 @@ gh api repos/GentleKingson/ocserv-backport --jq '{
 
 ---
 
-## 4. Pre-flight check (before disabling Projects)
+## 4. Pre-flight checks (informational, non-blocking)
 
-`gh repo edit --enable-projects=false` fails if an active Project board is linked
-to the repo. Run this first to confirm there's nothing to break:
+These confirm current state before applying changes. They do NOT block the
+`gh repo edit` commands — disabling repository Wiki/Projects does not fail when
+content or linked boards exist (see §5 for what actually happens to that content).
+
+### 4.1 Confirm baseline topics are still empty
+
+`--add-topic` is incremental — it adds to existing topics rather than replacing
+them. The design target is exactly 7 topics; if the repo already has topics at
+implementation time, the result would be "old + new 7" instead of the locked 7.
+
+```bash
+gh api repos/GentleKingson/ocserv-backport --jq '.topics'
+```
+
+- `[]` → proceed with the `--add-topic` commands from §3.1
+- non-empty array → surface the existing topics to the operator; decide whether
+  to keep, remove (via `--remove-topic`), or use a precise-replace approach
+  before continuing
+
+### 4.2 Inspect owner-level Projects (optional, informational only)
 
 ```bash
 gh project list --owner GentleKingson --format json 2>/dev/null || echo "(no classic projects API access / none exist)"
 ```
 
-If it returns project boards that reference this repo, STOP and surface them to
-the user before disabling. If empty/error (none), proceed.
+Caveats (do not treat as blocking):
+- This lists the owner's Projects; it does **not** prove whether any of them are
+  linked to `GentleKingson/ocserv-backport`. Owner-project listing and
+  repository linking/unlinking are distinct operations in `gh`.
+- Disabling repository Projects does **not** delete linked Projects — they simply
+  stop appearing in this repository's Projects tab and remain accessible at the
+  owner level.
+- Therefore: do not block `--enable-projects=false` merely because Projects exist.
 
 ---
 
@@ -143,5 +169,12 @@ All changes are reversible via the same `gh repo edit` flags:
 - Clear description: `--description ""`
 - Remove topics: `--remove-topic <name>` per topic
 
-No data is destroyed by disabling Wiki/Projects when they're unused (Wiki pages,
-if any existed, would need separate cleanup — but the pre-flight confirms none).
+**Data-retention behavior on disable (important):**
+- Disabling Wiki **hides** existing wiki content rather than erasing it;
+  re-enabling Wiki restores the previous pages.
+- Disabling repository Projects **hides** linked Projects from this repository's
+  Projects tab; it does **not** delete the owner-level Projects themselves. They
+  remain accessible and re-linkable at the owner level.
+
+So none of the disable operations in this spec destroy data; they only change
+visibility.
