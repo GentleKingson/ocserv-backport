@@ -569,7 +569,7 @@ fail-if-exists (GPG generate)：已有 key 会 die，drift 时用 --reuse-gpg-ke
 完成本步后：make dry-run 退出码 0，整份文档的 "成功定义" 达成
 ```
 
-### 5.1 确认 dry-run 环境参数
+### 4.1 确认 dry-run 环境参数
 
 make dry-run 之前，确认所有本地环境参数就位。
 
@@ -619,7 +619,7 @@ grep DEBIAN_SNAPSHOT_TIMESTAMP .env | grep -qv YYYYMMDDTHHMMSSZ && echo "timesta
 
 必须输出 "timestamp set"，即占位符已被真实值替换。
 
-### 5.2 运行 make dry-run：8 步流水线与产物验收
+### 4.2 运行 make dry-run：8 步流水线与产物验收
 
 ```bash
 make dry-run
@@ -657,26 +657,26 @@ echo $?
 
 期望 0，且输出含 `DRY-RUN PASSED — no real aptly/R2/staging/prod touched.`
 
-### 5.3 失败定位：按步骤编号回查
+### 4.3 失败定位：按步骤编号回查
 
 make dry-run 失败时会打印 `DRY-RUN FAILED at: <step>`。按下表定位：
 
 ```text
 步骤 1 fetch 失败：
   可能原因：DEBIAN_SNAPSHOT_TIMESTAMP 写错或仍为占位符 / 网络到 snapshot.debian.org 不通
-  回到：5.1（确认 .env 时间戳）；或排查网络/代理
+  回到：4.1（确认 .env 时间戳）；或排查网络/代理
 
 步骤 4 binary / sbuild 失败：
   可能原因 A：builder 当前会话没有 sbuild group（最常见）
-    → 回到：第 3 步 4.3（重新登录 / newgrp sbuild）
+    → 回到：第 3 步 3.3（重新登录 / newgrp sbuild）
   可能原因 B：trixie sbuild chroot 不存在
-    → 回到：第 3 步 4.4 第二段（setup_sbuild_chroot）
+    → 回到：第 3 步 3.4 第二段（setup_sbuild_chroot）
   可能原因 C：chroot sources 污染（含 sid/unstable/testing）
-    → 回到：第 3 步 4.5（--only-stage setup_sbuild_chroot 看 verify_chroot_sources 报错）
+    → 回到：第 3 步 3.5（--only-stage setup_sbuild_chroot 看 verify_chroot_sources 报错）
 
 步骤 6 smoke-basic 失败：
   可能原因 A：docker 未安装或 daemon 未启动
-    → 回到：第 3 步 4.2（install_packages 装了 docker.io）；sudo systemctl start docker
+    → 回到：第 3 步 3.2（install_packages 装了 docker.io）；sudo systemctl start docker
   可能原因 B：builder 当前会话没有 docker socket 权限
     → 检查：docker ps
     → 临时验证：sudo docker ps
@@ -687,7 +687,7 @@ make dry-run 失败时会打印 `DRY-RUN FAILED at: <step>`。按下表定位：
 
 步骤 7 aptly temp 失败：
   可能原因：aptly 未安装 / 临时目录权限问题
-  回到：第 3 步 4.4 第二段（setup_aptly 阶段）；或看 dry-run 日志的具体 aptly 报错
+  回到：第 3 步 3.4 第二段（setup_aptly 阶段）；或看 dry-run 日志的具体 aptly 报错
 ```
 
 > 其他步骤（2/3/5/8）失败概率低：直接看对应脚本输出和 `build/` 目录下的半成品产物。
@@ -695,7 +695,7 @@ make dry-run 失败时会打印 `DRY-RUN FAILED at: <step>`。按下表定位：
 > 可直接检查半成品。重跑前手动 `rm -rf build/` 再来一次。（fetch 是幂等的：
 > `dget -x -u` 对已存在文件会跳过。）
 
-### 5.4 最终终态验收清单：机器状态 + dry-run 产物状态
+### 4.4 最终终态验收清单：机器状态 + dry-run 产物状态
 
 整份文档 "成功定义" 达成 = 以下两组全部满足。
 
@@ -732,7 +732,7 @@ make dry-run 失败时会打印 `DRY-RUN FAILED at: <step>`。按下表定位：
 
 判定：**A 组全勾 + B 组全勾 = 成功定义达成（本文档终点）。**
 
-### 5.5 dry-run 之后是什么
+### 4.5 dry-run 之后是什么
 
 dry-run 通过只证明 "这台 builder 能完整跑通 backport 构建链"。
 下一步才是 testing publish、staging verify、production promote，这些不属于本文档范围。
