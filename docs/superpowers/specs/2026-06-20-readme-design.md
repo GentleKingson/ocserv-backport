@@ -38,9 +38,10 @@ point and navigation layer**, not a substitute for the existing 862-line runbook
 
 ## 3. README Structure & Content
 
-The README has exactly six sections in this order. Approximate line budget: ~60
-lines of prose, two fenced blocks (Pipeline text diagram, Quick start bash),
-and one table (Repo layout).
+The README has one H1 introduction block (title + what/why) followed by five H2
+sections, in this order. Approximate line budget: ~60 lines of prose, two
+fenced blocks (Pipeline text diagram, Quick start bash), and one table
+(Repo layout).
 
 ### 3.1 Title + what/why (~4 lines)
 
@@ -151,16 +152,23 @@ Bootstrap script quick-reference: [`docs/BUILD_HOST_BOOTSTRAP.md`](docs/BUILD_HO
 ### 3.6 Repo layout (~9 lines)
 
 **Content requirements:**
+- H2 heading `## Repo layout` (must be present — this is a section, not a bare table).
 - 5-row markdown table, columns: Path | Purpose.
-- Exact wording from review (locked):
+- Exact wording from review (locked).
+
+**Draft text:**
+
+```markdown
+## Repo layout
 
 | Path | Purpose |
-|------|---------|
+|---|---|
 | `scripts/` | Build, bootstrap, packaging, and validation scripts |
 | `Makefile` | Local build targets; run `make help` |
 | `ansible/` | Repository installation, upgrade, verification, and rollback automation |
 | `.github/workflows/` | Testing publish, production promotion, and rollback workflows |
 | `docs/` | Build-host runbook and operational references |
+```
 
 ---
 
