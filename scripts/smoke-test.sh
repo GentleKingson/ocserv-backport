@@ -19,7 +19,10 @@ smoke_basic() {
     apt-get update -qq
     apt-get install -y -qq /deb/'"$(basename "${deb}")"' || \
       { apt-get install -y -qq -f; }              # resolve deps
-    dpkg-query -W -f="${Version}\n" ocserv
+    # \${Version} stays literal for dpkg-query (its ${field} syntax); the
+    # container bash runs with -u, so an unescaped ${Version} would be treated
+    # as an unset shell variable and abort.
+    dpkg-query -W -f="\${Version}\n" ocserv
     ocserv --version
     test -f /lib/systemd/system/ocserv.service || test -f /usr/lib/systemd/system/ocserv.service
     test -f /etc/ocserv/ocserv.conf || test -f /usr/share/doc/ocserv/ocserv.conf
