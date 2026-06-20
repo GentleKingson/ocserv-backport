@@ -193,12 +193,17 @@ write_fixture_cache() {
   touch "$cachedir/ocserv_1.5.0.orig.tar.xz" "$cachedir/ocserv_1.5.0.orig.tar.xz.asc" "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
 }
 
-@test "main: dget success → publishes source tree (case 1)" {
+@test "main: dget success → publishes source tree + orig tarball (case 1)" {
   tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
+  # Real dget -x leaves the .orig.tar.xz + .asc as SIBLINGS of the tree dir.
+  # build-source-package.sh (dpkg-source -b, quilt 3.0) needs the orig tarball
+  # in build/source/ (parent of the tree). Regression guard.
   cat > "$fakebin/dget" <<'SH'
 #!/usr/bin/env bash
 mkdir -p "$(pwd)/ocserv-1.5.0"
 echo "fake-source" > "$(pwd)/ocserv-1.5.0/configure.ac"
+: > "$(pwd)/ocserv_1.5.0.orig.tar.xz"
+: > "$(pwd)/ocserv_1.5.0.orig.tar.xz.asc"
 echo "stub dget ok"
 SH
   chmod +x "$fakebin/dget"
@@ -206,6 +211,9 @@ SH
     PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
       bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
   [ -f "$tmprepo/build/source/ocserv-1.5.0/configure.ac" ]
+  # Orig tarball must be preserved alongside the tree (quilt rebuild needs it).
+  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz" ]
+  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz.asc" ]
   rm -rf "$tmprepo" "$fakebin"
 }
 
@@ -257,6 +265,9 @@ SH
   # Source tree published AND carries the cache marker (not snapshot partial).
   [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
   [ "$(cat "$tmprepo/build/source/ocserv-1.5.0/MARKER")" == "from-cache" ]
+  # Orig tarball preserved alongside the tree (quilt rebuild needs it).
+  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz" ]
+  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz.asc" ]
   # No staging leak (case 8): trap removed TMP_ROOT.
   [ -z "$(ls -d "$tmprepo"/build/.fetch-tmp.* 2>/dev/null)" ]
   rm -rf "$tmprepo" "$fakebin"

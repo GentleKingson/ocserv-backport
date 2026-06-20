@@ -200,6 +200,37 @@ publish_source_tree() {
   fi
 }
 
+# Move the upstream orig tarball(s) — needed by the quilt 3.0 source rebuild
+# (dpkg-source -b looks for ../ocserv_<upstream>.orig.tar.* in the parent dir of
+# the tree). dget -x and dpkg-source -x both leave the orig tarball as a SIBLING
+# of the extracted tree in staging; if we only publish the tree dir, the tarball
+# is lost when the EXIT trap wipes TMP_ROOT, and build-source-package.sh fails
+# with "no upstream tarball found". The single glob also picks up the matching
+# .asc (ocserv_<upstream>.orig.tar.xz.asc). We do NOT move the sid .dsc /
+# .debian.tar.* — the backport regenerates those.
+# Arg 1: staging dir (parent of the tree, holding the orig tarball siblings).
+# Arg 2: target dir (build/source). Dies if no orig tarball is found.
+publish_orig_tarball() {
+  local staging_dir="$1" target_dir="$2"
+  local moved=0
+  local f name
+  # Feed the while loop via a heredoc (not a pipe) so `moved` is incremented in
+  # this shell, not a subshell. `ls` may print nothing when no match (glob nulled
+  # by the 2>/dev/null) — the empty-line guard handles that.
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] || continue
+    name="${f##*/}"
+    if [[ -f "${f}" ]]; then
+      mv "${f}" "${target_dir}/${name}"
+      moved=$((moved + 1))
+    fi
+  done <<EOF
+$(ls -1 "${staging_dir}"/ocserv_"${UPSTREAM}".orig.tar.* 2>/dev/null)
+EOF
+  [[ "${moved}" -ge 1 ]] \
+    || die "publish: no orig tarball (ocserv_${UPSTREAM}.orig.tar.*) found in ${staging_dir}; source rebuild will fail"
+}
+
 # Spec §3.2. Global TMP_ROOT (single assignment, never reassigned) + cleanup
 # function bound to EXIT. Global (not local) so the trap can reference it after
 # main() returns (review fix #2: a local would be out of scope at EXIT and under
@@ -224,6 +255,7 @@ main() {
     [[ -d "${snapshot_stage}/ocserv-${UPSTREAM}" ]] \
       || die "dget succeeded but source tree missing in staging"
     publish_source_tree "${snapshot_stage}/ocserv-${UPSTREAM}" "build/source/ocserv-${UPSTREAM}"
+    publish_orig_tarball "${snapshot_stage}" "build/source"
     log "source tree ready: build/source/ocserv-${UPSTREAM}"
     return 0
   fi
@@ -237,6 +269,7 @@ main() {
   log "snapshot.debian.org returned HTTP 509; attempting local source cache fallback"
   fetch_via_cache "$cache_stage"
   publish_source_tree "${cache_stage}/ocserv-${UPSTREAM}" "build/source/ocserv-${UPSTREAM}"
+  publish_orig_tarball "${cache_stage}" "build/source"
   log "source tree ready (from local cache; snapshot.debian.org was rate-limited): build/source/ocserv-${UPSTREAM}"
 }
 
