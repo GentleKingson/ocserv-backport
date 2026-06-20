@@ -174,18 +174,23 @@ DSC
 write_fixture_cache() {
   local cachedir="$1"
   mkdir -p "$cachedir"
+  # Real ocserv 1.5.0-1 .dsc references 4 files incl. the .asc signature
+  # (verified on the trixie builder during Task 8). Keep the fixture realistic
+  # so the dsc-driven artifact list exercises the .asc path.
   printf '%s\n' \
     'Format: 3.0 (quilt)' \
     'Source: ocserv' \
     'Version: 1.5.0-1' \
     'Files:' \
     ' 0000 ocserv_1.5.0.orig.tar.xz' \
+    ' 0000 ocserv_1.5.0.orig.tar.xz.asc' \
     ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
     'Checksums-Sha256:' \
     ' 0000 ocserv_1.5.0.orig.tar.xz' \
+    ' 0000 ocserv_1.5.0.orig.tar.xz.asc' \
     ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
     > "$cachedir/ocserv_1.5.0-1.dsc"
-  touch "$cachedir/ocserv_1.5.0.orig.tar.xz" "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
+  touch "$cachedir/ocserv_1.5.0.orig.tar.xz" "$cachedir/ocserv_1.5.0.orig.tar.xz.asc" "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
 }
 
 @test "main: dget success → publishes source tree (case 1)" {
