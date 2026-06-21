@@ -20,6 +20,20 @@ BUILD_ROOT="$REPO_ROOT/build"
 CACHE_ROOT="$BUILD_ROOT/source-cache"
 SOURCE_ROOT="$BUILD_ROOT/source"
 
+# Load repo-root .env (if present) so FETCH_SOURCE / OCSERV_UPSTREAM_VERSION /
+# OCSERV_DEBIAN_REVISION set there take effect when run via `make fetch` / dry-run.
+# `set -a` exports every assignment while sourcing; values already in the
+# environment (e.g. CI) are NOT overridden because env vars pre-exist and `source`
+# re-assigns them — to preserve caller precedence, only source if the var is unset.
+# Spec §4.3 + §5.1: .env is operator input for the builder.
+ENV_FILE="$REPO_ROOT/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090,SC1091  # .env is trusted repo-root operator input
+  . "$ENV_FILE"
+  set +a
+fi
+
 UPSTREAM="${OCSERV_UPSTREAM_VERSION:-1.5.0}"
 REVISION="${OCSERV_DEBIAN_REVISION:-1}"
 REQUEST_VER="${UPSTREAM}-${REVISION}"

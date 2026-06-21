@@ -269,3 +269,32 @@ SH
   [ "$status" -eq 0 ]
   [ "$published" == "yes" ]
 }
+
+@test "FETCH_SOURCE: repo-root .env is loaded (FETCH_SOURCE=cache in .env, not exported → cache branch)" {
+  # Regression: fetch-source.sh must load <repo>/.env before computing FETCH_SOURCE,
+  # so a user setting FETCH_SOURCE=cache in .env (without exporting) reaches cache.
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
+  seed_cache "$repo" match
+  # Write a repo-root .env that sets FETCH_SOURCE=cache. Do NOT export it.
+  printf 'FETCH_SOURCE=cache\n' > "$repo/.env"
+  fakebin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\necho HIT >> "%s/net"\nexit 7\n' "$repo" > "$fakebin/curl"
+  cat > "$fakebin/dpkg-source" <<SH
+#!/usr/bin/env bash
+out="\${@: -1: 1}"
+mkdir -p "\$out"; echo "from-cache-env" > "\$out/configure.ac"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
+SH
+  chmod +x "$fakebin/curl" "$fakebin/dpkg-source"
+  # Note: FETCH_SOURCE deliberately unset in the env passed to bash -c, so the
+  # ONLY source is the repo-root .env. If .env isn't loaded, default=pool runs
+  # and curl is invoked (net marker set) → test fails.
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 unset FETCH_SOURCE; PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  net="no"; [[ -f "$repo/net" ]] && net="yes"
+  published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  rm -rf "$repo" "$fakebin"
+  [ "$status" -eq 0 ]
+  [ "$net" == "no" ]          # .env said cache → curl (pool) must NOT run
+  [ "$published" == "yes" ]
+}

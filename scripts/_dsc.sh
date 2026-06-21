@@ -30,6 +30,7 @@ validate_dsc_metadata() {
 validate_artifact_basenames() {
   local names="$1"
   [[ -n "${names}" ]] || { echo "empty artifact list" >&2; return 1; }
+  # shellcheck disable=SC2206 # intentional word-split of a space-separated, space-validated name list
   local -a arr=( ${names} )
   local seen="" n
   for n in "${arr[@]}"; do
@@ -43,11 +44,26 @@ validate_artifact_basenames() {
 }
 
 # parse_dsc_full <dsc_path> — emit name<TAB>size<TAB>sha256 per artifact, order preserved.
-# Requires Files stanza and Checksums-Sha256 stanza; dies if either missing or mismatched.
+# Requires Files stanza and Checksums-Sha256 stanza; dies if either missing.
+# Strict cross-check (review fix #2): Files set must EXACTLY equal Checksums-Sha256
+# set — rejects (a) a file in Checksums but not Files, (b) a file in Files but not
+# Checksums, (c) duplicate filenames within either stanza, (d) rows that are not
+# exactly 3 whitespace-separated fields. Records not matching the pipeline-wide
+# safe-basename rule are also rejected.
 parse_dsc_full() {
   local dsc_path="$1"
   local tmp; tmp="$(mktemp)"
   awk '
+    function bad(msg) { print msg > "/dev/stderr"; exit 1 }
+    function safe_name(nm) {
+      if (nm == "" || nm == "." || nm == "..") return 0
+      if (index(nm, "/") > 0) return 0
+      if (index(nm, "\\") > 0) return 0
+      if (nm ~ /[^ -~]/) return 0            # reject control chars + non-ASCII
+      if (substr(nm,1,1) == " " || substr(nm,length(nm),1) == " ") return 0
+      if (substr(nm,1,1) == "-") return 0
+      return 1
+    }
     /^-----BEGIN PGP SIGNATURE-----/ { exit }
     /^-----BEGIN PGP SIGNED MESSAGE-----/ { in_hdr=1; next }
     in_hdr && /^Hash:/ { next }
@@ -57,19 +73,37 @@ parse_dsc_full() {
     /^Checksums-Sha256:/ { sec="csum"; next }
     /^[^[:space:]]/ { sec=""; next }
     sec=="files" && /^[[:space:]]/ {
-      # md5 size name
       line=$0; sub(/^[[:space:]]+/,"",line); n=split(line,p," ");
-      files_name[p[3]]=p[2]; files_order[++fc]=p[3]; next
+      if (n != 3) bad("Files row not 3 fields: " line)
+      nm=p[3]
+      if (!safe_name(nm)) bad("unsafe filename in Files: " nm)
+      if (nm in files_name) bad("duplicate filename in Files: " nm)
+      files_name[nm]=p[2]; files_order[++fc]=nm; next
     }
     sec=="csum" && /^[[:space:]]/ {
       line=$0; sub(/^[[:space:]]+/,"",line); n=split(line,p," ");
-      csum_sha[p[3]]=p[1]; csum_size[p[3]]=p[2]; next
+      if (n != 3) bad("Checksums-Sha256 row not 3 fields: " line)
+      nm=p[3]
+      if (!safe_name(nm)) bad("unsafe filename in Checksums-Sha256: " nm)
+      if (nm in csum_sha) bad("duplicate filename in Checksums-Sha256: " nm)
+      csum_sha[nm]=p[1]; csum_size[nm]=p[2]; csum_seen[++cc]=nm; next
     }
     END {
+      if (fc == 0) bad("no Files stanza entries")
+      # 1. every Files entry must be in Checksums-Sha256 with matching size
       for (i=1;i<=fc;i++) {
         nm=files_order[i]
-        if (!(nm in csum_sha)) { print "missing Checksums-Sha256 for "nm > "/dev/stderr"; exit 1 }
-        if (files_name[nm] != csum_size[nm]) { print "size mismatch "nm > "/dev/stderr"; exit 1 }
+        if (!(nm in csum_sha)) bad("file in Files but not Checksums-Sha256: " nm)
+        if (files_name[nm] != csum_size[nm]) bad("size mismatch " nm)
+      }
+      # 2. every Checksums-Sha256 entry must be in Files (reject extras)
+      for (i=1;i<=cc;i++) {
+        nm=csum_seen[i]
+        if (!(nm in files_name)) bad("file in Checksums-Sha256 but not Files: " nm)
+      }
+      # emit
+      for (i=1;i<=fc;i++) {
+        nm=files_order[i]
         printf "%s\t%s\t%s\n", nm, files_name[nm], csum_sha[nm]
       }
     }

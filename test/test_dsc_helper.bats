@@ -60,3 +60,50 @@ call_dsc() {
   call_dsc "validate_artifact_basenames 'a.tar ../../etc/passwd'"
   [ "$status" -ne 0 ]
 }
+
+# ---- parse_dsc_full strict cross-check (review fix #2) ----
+
+@test "parse_dsc_full: dies when Checksums-Sha256 has a file NOT in Files" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' 1 100 a.tar' \
+    'Checksums-Sha256:' ' sha1 100 a.tar' ' sha2 200 b.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
+
+@test "parse_dsc_full: dies when Files has a file NOT in Checksums-Sha256" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' 1 100 a.tar' ' 2 200 b.tar' \
+    'Checksums-Sha256:' ' sha1 100 a.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
+
+@test "parse_dsc_full: dies on duplicate filename in Files" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' 1 100 a.tar' ' 2 100 a.tar' \
+    'Checksums-Sha256:' ' sha1 100 a.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
+
+@test "parse_dsc_full: dies on duplicate filename in Checksums-Sha256" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' 1 100 a.tar' \
+    'Checksums-Sha256:' ' sha1 100 a.tar' ' sha2 100 a.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
+
+@test "parse_dsc_full: dies on malformed Files row (not 3 fields)" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' onlyonefield' \
+    'Checksums-Sha256:' ' sha1 100 a.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
