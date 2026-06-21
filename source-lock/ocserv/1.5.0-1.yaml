@@ -1,0 +1,22 @@
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+allowed_sources:
+  - pool
+  - snapshot
+snapshot_timestamp: "20260616T083027Z"
+pool_path: "main/o/ocserv"
+dsc:
+  name: ocserv_1.5.0-1.dsc
+  size: 2761
+  sha256: "20b758de26a7a372707556ec2e3bb1f847257efaa0d04b40783c20d91a82d9dc"
+artifacts:
+  - name: ocserv_1.5.0.orig.tar.xz
+    size: 547428
+    sha256: "42ced08958b9576ab134fcb7bdc7f8df5e13214fd147855f99021fedcf0eedbe"
+  - name: ocserv_1.5.0.orig.tar.xz.asc
+    size: 667
+    sha256: "2e8d560879f84643260cc61d1723bd49219042ea9967eb52d99af32a498673c7"
+  - name: ocserv_1.5.0-1.debian.tar.xz
+    size: 26864
+    sha256: "36f1701707453c83ea97e0de2f776f3d9ed3ad6c7943c443bbb3a91fe36f0c4c"
