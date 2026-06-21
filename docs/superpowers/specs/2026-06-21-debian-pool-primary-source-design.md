@@ -234,6 +234,14 @@ python3 scripts/read-source-lock.py --source ocserv --debian-version 1.5.0-1
 **重复 key 拒绝:** 自定义 SafeLoader 子类,在**所有 mapping 层级**拒绝重复 YAML
 key(YAML 默认后者覆盖前者,会静默丢失数据)。
 
+> **YAML loader 实现注记(非阻塞, 写入切片 1 实施任务与 parser 测试):** spec 同时
+> 要求"仅 `yaml.safe_load()`"和"自定义 SafeLoader 子类拒绝重复 key"。实现时应定义
+> `StrictSafeLoader(yaml.SafeLoader)`(覆盖构造 mapping 的方法,遇重复 key 抛异常),
+> 再提供 `strict_safe_load()` 包装器——以 SafeLoader 语义读取(只构造简单 Python
+> 对象,不构造任意对象)并拒绝重复 key。**不要**使用未受限的通用 loader
+> (`yaml.load`/`FullLoader`/`UnsafeLoader`)。PyYAML 明确说明普通 `yaml.load` 对
+> 不受信输入可能构造任意 Python 对象。
+
 **类型精确判断:** 先 `isinstance(x, bool)` 拒绝,再 `isinstance(x, int)` 判断,
 避免 YAML bool(`true`/`false`)被当作 int(`size` 字段尤其关键)。
 
