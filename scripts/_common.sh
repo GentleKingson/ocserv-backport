@@ -28,6 +28,23 @@ require_var() {
   [[ -n "${!name:-}" ]] || die "required variable missing: ${name}"
 }
 
+# require_cmds <cmd:pkg> <cmd:pkg> ...  — die (reporting ALL missing) if any absent.
+# Each arg is "command:debian-package". Reports every missing command in one
+# message so the operator installs all gaps in a single pass (no fix-rerun loop).
+# Usage: require_cmds dscverify:devscripts dpkg-source:dpkg-dev
+require_cmds() {
+  local missing=() pkgs=() c p
+  for spec in "$@"; do
+    c="${spec%%:*}"; p="${spec#*:}"
+    command -v "$c" >/dev/null 2>&1 || { missing+=("$c"); pkgs+=("$p"); }
+  done
+  if (( ${#missing[@]} )); then
+    die "missing commands: ${missing[*]}
+  packages: ${pkgs[*]}
+  fix: run 'make bootstrap-build-host' on the builder, or: sudo apt-get install -y ${pkgs[*]}"
+  fi
+}
+
 # read -s a missing secret; never logs, never set -x
 read_secret_if_missing() {
   local name="$1" prompt="$2"
