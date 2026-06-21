@@ -1370,7 +1370,7 @@ rm -f "$tmpcfg"
 
 ---
 
-## Acceptance checklist (Phase 0 + user Phase 1 closure + v1.5)
+## Acceptance checklist (Phase 0 + user Phase 1 closure + v1.7)
 
 ```text
 Provisioner: self-contained; config env-clear + allowlist + reject unknown/dup + fixed URL/LABEL/NETWORK;
