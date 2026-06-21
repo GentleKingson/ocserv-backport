@@ -188,6 +188,19 @@ fetch_via_cache() {
 }
 
 main() {
+  # Fail fast if the builder is missing required commands (e.g. dscverify from
+  # devscripts when bootstrap-build-host.sh was not fully run). Spec
+  # docs/superpowers/specs/2026-06-21-build-pipeline-dependency-check-design.md
+  # Checked in main() (not at source top-level) so unit tests that source this
+  # script for its functions (validate_dsc_metadata etc.) are unaffected.
+  require_cmds \
+    dscverify:devscripts \
+    dpkg-source:dpkg-dev \
+    curl:curl \
+    sha256sum:coreutils \
+    gpg:gnupg \
+    quilt:quilt
+
   local mode="${FETCH_SOURCE:-pool}"
   case "$mode" in
     pool|cache) ;;

@@ -11,6 +11,23 @@ call_func() {
   run bash -c "set +e; source '${REPO_ROOT}/scripts/fetch-source.sh'; $*"
 }
 
+# require_cmds at the top of main() checks 6 commands; the macOS test host has
+# only curl + sha256sum. End-to-end tests that run main() to completion must
+# stub the checked Debian commands their code path does NOT already stub.
+# Tests that assert a pre-check die (e.g. FETCH_SOURCE=bogus) skip this.
+# Only stubs commands NOT already present in fakebin, so a test's bespoke
+# dpkg-source/dscverify stub (which must do real work) is never clobbered.
+# Usage: add_required_stubs <fakebin>
+add_required_stubs() {
+  local fakebin="$1"
+  local c
+  for c in dscverify dpkg-source gpg quilt; do
+    [[ -e "$fakebin/$c" ]] && continue
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/$c"
+    chmod +x "$fakebin/$c"
+  done
+}
+
 # ---- validate_dsc_metadata (retained; now via _dsc.sh) ----
 
 @test "validate_dsc_metadata: accepts Source=ocserv Version=1.5.0-1" {
@@ -178,8 +195,9 @@ write_lock_realhash() {
 
 @test "FETCH_SOURCE: unknown value → die" {
   repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock "$repo" "pool"
-  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=bogus bash '$repo/scripts/fetch-source.sh'"
-  rm -rf "$repo"
+  fakebin="$(mktemp -d)"; add_required_stubs "$fakebin"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=bogus PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  rm -rf "$repo" "$fakebin"
   [ "$status" -ne 0 ]
 }
 
@@ -188,6 +206,7 @@ write_lock_realhash() {
   fakebin="$(mktemp -d)"
   printf '#!/usr/bin/env bash\necho HIT >> "%s/net"\nexit 7\n' "$repo" > "$fakebin/curl"
   chmod +x "$fakebin/curl"
+  add_required_stubs "$fakebin"
   run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=pool PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
   net="no"; [[ -f "$repo/net" ]] && net="yes"
   rm -rf "$repo" "$fakebin"
@@ -198,9 +217,10 @@ write_lock_realhash() {
 @test "FETCH_SOURCE=cache: identity closure (SHA256SUMS drift) → die, no publish" {
   repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
   seed_cache "$repo" drift
-  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=cache bash '$repo/scripts/fetch-source.sh'"
+  fakebin="$(mktemp -d)"; add_required_stubs "$fakebin"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=cache PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
   published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
-  rm -rf "$repo"
+  rm -rf "$repo" "$fakebin"
   [ "$status" -ne 0 ]
   [ "$published" == "no" ]
 }
@@ -219,6 +239,7 @@ mkdir -p "\$out"; echo "from-cache" > "\$out/configure.ac"
 : > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
 SH
   chmod +x "$fakebin/curl" "$fakebin/dpkg-source"
+  add_required_stubs "$fakebin"
   run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=cache PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
   net="no"; [[ -f "$repo/net" ]] && net="yes"
   published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
@@ -263,6 +284,7 @@ mkdir -p "\$out"; echo "from-pool" > "\$out/configure.ac"
 : > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
 SH
   chmod +x "$fakebin/curl" "$fakebin/dscverify" "$fakebin/dpkg-source"
+  add_required_stubs "$fakebin"
   run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=pool PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
   published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
   rm -rf "$repo" "$fakebin"
@@ -287,6 +309,7 @@ mkdir -p "\$out"; echo "from-cache-env" > "\$out/configure.ac"
 : > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
 SH
   chmod +x "$fakebin/curl" "$fakebin/dpkg-source"
+  add_required_stubs "$fakebin"
   # Note: FETCH_SOURCE deliberately unset in the env passed to bash -c, so the
   # ONLY source is the repo-root .env. If .env isn't loaded, default=pool runs
   # and curl is invoked (net marker set) → test fails.
