@@ -15,6 +15,17 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_cache_meta.sh
 . "$SCRIPT_DIR/_cache_meta.sh"
 
+# Fail fast if the builder is missing required commands (e.g. dscverify from
+# devscripts when bootstrap-build-host.sh was not fully run). Spec
+# docs/superpowers/specs/2026-06-21-build-pipeline-dependency-check-design.md
+require_cmds \
+  dscverify:devscripts \
+  dpkg-source:dpkg-dev \
+  curl:curl \
+  sha256sum:coreutils \
+  gpg:gnupg \
+  quilt:quilt
+
 REPO_ROOT="$(git -C "$SCRIPT_DIR/.." rev-parse --show-toplevel)"
 BUILD_ROOT="$REPO_ROOT/build"
 CACHE_ROOT="$BUILD_ROOT/source-cache"
