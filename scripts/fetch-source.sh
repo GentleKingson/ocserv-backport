@@ -22,9 +22,11 @@ SOURCE_ROOT="$BUILD_ROOT/source"
 
 # Load repo-root .env (if present) so FETCH_SOURCE / OCSERV_UPSTREAM_VERSION /
 # OCSERV_DEBIAN_REVISION set there take effect when run via `make fetch` / dry-run.
-# `set -a` exports every assignment while sourcing; values already in the
-# environment (e.g. CI) are NOT overridden because env vars pre-exist and `source`
-# re-assigns them — to preserve caller precedence, only source if the var is unset.
+# `set -a` exports every assignment while sourcing. NOTE: sourcing .env OVERWRITES
+# any same-named variable already in the environment — .env wins over a pre-exported
+# value. To override per-invocation, set the var on the command line AFTER the script
+# resolves .env is not possible; instead, edit .env or unset the var in .env. This
+# matches the pre-refactor fetch-source.sh semantics.
 # Spec §4.3 + §5.1: .env is operator input for the builder.
 ENV_FILE="$REPO_ROOT/.env"
 if [[ -f "$ENV_FILE" ]]; then
