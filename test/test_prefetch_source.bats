@@ -44,7 +44,11 @@ SH
   # Stub dscverify/dpkg-source too so a missing drift gate can't proceed past them.
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/dscverify"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/dpkg-source"
-  chmod +x "$fakebin/dscverify" "$fakebin/dpkg-source"
+  # gpg is absent on the macOS test host but checked by require_cmds at the top
+  # of main(); stub it so the test reaches its intended drift-gate assertion
+  # (otherwise it dies on the command check, masking the real gate under test).
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/gpg"
+  chmod +x "$fakebin/dscverify" "$fakebin/dpkg-source" "$fakebin/gpg"
 
   rc=0
   ( cd "$tmpd" && PATH="$fakebin:$PATH" bash "$tmpd/scripts/prefetch-source.sh" \

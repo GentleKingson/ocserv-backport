@@ -270,6 +270,17 @@ make_bundle() {
 }
 
 main() {
+  # Fail fast if the prefetch node is missing required commands. Spec
+  # docs/superpowers/specs/2026-06-21-build-pipeline-dependency-check-design.md
+  # Checked in main() (not at source top-level) so unit tests that source this
+  # script for its functions are unaffected.
+  require_cmds \
+    dscverify:devscripts \
+    dpkg-source:dpkg-dev \
+    curl:curl \
+    sha256sum:coreutils \
+    gpg:gnupg
+
   local LOCK_YAML_LOCAL=""
   # 1. arg parse (--lock XOR --source/--debian-version)
   if [[ "$1" == "--lock" ]]; then
