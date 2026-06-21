@@ -1063,7 +1063,7 @@ EOF
       --opt com.docker.network.bridge.name="${BRIDGE}" ci-build-egress
   fi
   verify_ci_build_network
-  log "ci-build-egress verified (IPv4-only: driver/subnet/gateway/bridge/EnableIPv6=false/no-v6-IPAM)"
+  log "ci-build-egress verified (IPv4-only: driver/bridge/EnableIPv6=false/exactly-one-expected-IPv4-IPAM)"
 
   # 5. IPv4 managed chains; rollback on save/verify failure.
   if ! build_and_persist_firewall; then
