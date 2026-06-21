@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Pure IPv4 egress decision logic (mirrors the iptables policy). Sourced by tests
+# + host-install. egress_dest_allowed <ip> <port> — 0 if allowed (non-private +
+# 443/80), non-zero if denied (private/link-local/metadata/CGNAT + non-443/80).
+egress_dest_allowed() {
+  local ip="$1" port="$2"
+  case "${ip}" in
+    10.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.168.*|100.64.*|100.6[5-9].*|100.7[0-9].*|100.8[0-9].*|100.9[0-9].*|100.1[01][0-9].*|100.12[0-7].*|127.*|169.254.*|0.*) return 1 ;;
+  esac
+  [[ "${port}" == 443 || "${port}" == 80 ]] || return 1
+  return 0
+}

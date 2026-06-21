@@ -1,0 +1,35 @@
+# ci-build egress — TWO IPv4 managed iptables chains (applied+persisted by host-install).
+# IPv4-ONLY (Phase 1 has no IPv6; EnableIPv6=false on the network, runtime verifies
+# no global IPv6 addr / no IPv6 default route). No ip6tables rules maintained.
+# OCSERV_CI_EGRESS: from DOCKER-USER, forwarded IPv4 egress from br-ci-build-egress.
+# OCSERV_CI_HOST_GUARD: in INPUT, IPv4 container→host.
+# Model: deny non-global IPv4 ranges (RFC1918/loopback/link-local/CGNAT/0.0.0.0/8 +
+# host gateway); allow remaining IPv4 TCP 443/80; default DROP.
+
+[meta]
+bridge = br-ci-build-egress
+subnet = 172.30.0.0/24
+gateway = 172.30.0.1
+egress_chain = OCSERV_CI_EGRESS
+host_guard_chain = OCSERV_CI_HOST_GUARD
+ipv6 = disabled
+
+[egress_deny]
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
+100.64.0.0/10
+127.0.0.0/8
+169.254.0.0/16
+0.0.0.0/8
+172.30.0.1
+
+[egress_allow]
+proto=tcp dport=443
+proto=tcp dport=80
+
+[egress_default]
+policy = DROP
+
+[host_guard]
+rule = -i br-ci-build-egress -j DROP
