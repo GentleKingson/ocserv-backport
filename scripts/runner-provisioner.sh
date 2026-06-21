@@ -70,4 +70,37 @@ parse_timeout_to_seconds() {
   printf '%s' "${s}"
 }
 
+parse_args() {
+  TOKEN_STDIN="${TOKEN_STDIN:-0}"; BOOTSTRAP_DRY_RUN="${BOOTSTRAP_DRY_RUN:-0}"
+  RUNNER_NAME="${RUNNER_NAME:-}"; RUNNER_NAME_OVERRIDE="${RUNNER_NAME_OVERRIDE:-0}"
+  RUNNER_WAIT_TIMEOUT_OVERRIDE="${RUNNER_WAIT_TIMEOUT_OVERRIDE:-}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --registration-token-stdin) TOKEN_STDIN=1; shift ;;
+      --dry-run) BOOTSTRAP_DRY_RUN=1; shift ;;
+      --runner-name)
+        # Live mode: ALWAYS CSPRNG-generated; --runner-name forbidden (prevents
+        # cleanup trap removing a pre-existing same-name container). Dry-run only.
+        [[ "${BOOTSTRAP_DRY_RUN}" == "1" ]] || die "live mode forbids --runner-name (CSPRNG-only); dry-run only"
+        [[ $# -ge 2 ]] || die "--runner-name requires a value"
+        RUNNER_NAME="$2"; RUNNER_NAME_OVERRIDE=1; shift 2 ;;
+      --wait-timeout) [[ $# -ge 2 ]] || die "--wait-timeout requires a value"; RUNNER_WAIT_TIMEOUT_OVERRIDE="$2"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      --docker-arg|--mount|--cap-add|--privileged|--pid|--ipc|--uts|--userns|--network|--image|--label|--env|--device|-v|--volume)
+        die "forbidden argument: $1" ;;
+      *) die "unknown argument: $1 (see -h)" ;;
+    esac
+  done
+}
+usage() {
+  cat >&2 <<EOF
+Usage: runner-provisioner.sh --registration-token-stdin [options]
+  --registration-token-stdin   token from stdin
+  --dry-run                    print docker run without executing
+  --runner-name <name>         DRY-RUN ONLY (live uses CSPRNG name)
+  --wait-timeout <dur>         5m..60m
+  -h, --help
+EOF
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then echo "ERROR: main() not impl (Task 3)" >&2; exit 2; fi

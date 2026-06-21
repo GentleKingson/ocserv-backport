@@ -88,3 +88,30 @@ EOF
   run bash -c "set +e; source '${PROVISIONER}'; parse_timeout_to_seconds 1m; echo rc=\$?"; [ "$status" -ne 0 ]
   run bash -c "set +e; source '${PROVISIONER}'; parse_timeout_to_seconds 90m; echo rc=\$?"; [ "$status" -ne 0 ]
 }
+
+# ---- Task 2: parse_args ----
+
+@test "parse_args: --registration-token-stdin / --dry-run" {
+  run bash -c "set +e; source '${PROVISIONER}'; TOKEN_STDIN=0; parse_args --registration-token-stdin --dry-run; printf 'T=%s D=%s\n' \"\$TOKEN_STDIN\" \"\$BOOTSTRAP_DRY_RUN\""
+  echo "$output" | grep -q 'T=1 D=1'
+}
+
+@test "parse_args: --runner-name DRY-RUN only; live FORBIDDEN" {
+  run bash -c "set +e; source '${PROVISIONER}'; BOOTSTRAP_DRY_RUN=1; parse_args --runner-name ci-build-DRYTEST; printf 'N=%s\n' \"\$RUNNER_NAME\""
+  echo "$output" | grep -q 'N=ci-build-DRYTEST'
+  # live mode rejects ANY --runner-name, even valid-shape (CSPRNG-only in live)
+  run bash -c "set +e; source '${PROVISIONER}'; BOOTSTRAP_DRY_RUN=0; parse_args --runner-name ci-build-${NAME26}; echo rc=\$?"
+  [ "$status" -ne 0 ]
+}
+
+@test "parse_args: REJECTS all container-weakening flags" {
+  for bad in --docker-arg --privileged --mount /x --cap-add SYS_ADMIN --pid host --ipc host --uts host --userns host --network host --image evil --label x --env SECRET --device /dev/sda -v /etc:/etc --volume /root:/root; do
+    run bash -c "set +e; source '${PROVISIONER}'; parse_args '$bad'; echo rc=\$?"
+    [ "$status" -ne 0 ] || { echo "FAIL: accepted $bad"; exit 1; }
+  done
+}
+
+@test "parse_args: rejects unknown flag" {
+  run bash -c "set +e; source '${PROVISIONER}'; parse_args --bogus; echo rc=\$?"
+  [ "$status" -ne 0 ]
+}
