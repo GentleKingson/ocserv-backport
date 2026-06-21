@@ -2,6 +2,10 @@
 set -euo pipefail
 source "$(dirname "$0")/_common.sh"
 
+# Fail fast if the builder is missing required commands. Spec
+# docs/superpowers/specs/2026-06-21-build-pipeline-dependency-check-design.md
+require_cmds lintian:lintian
+
 # Spec §6.3 step 5. lintian on .changes; treat Errors as fatal.
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+1}"
 CHANGES="$(ls build/binary/ocserv_${BACKPORT_VERSION}_amd64.changes 2>/dev/null || true)"
