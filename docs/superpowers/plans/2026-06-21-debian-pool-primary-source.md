@@ -21,7 +21,7 @@
 - Executable scripts: resolve `SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"`, source `_common.sh` for `log`/`die`.
 - Repo-root resolution: `REPO_ROOT="$(git -C "${SCRIPT_DIR}/.." rev-parse --show-toplevel)"`.
 - bats: `load helpers/bats-helper.bash` (provides `REPO_ROOT`), `setup() { cd "${REPO_ROOT}"; }`, test functions via `call_func` pattern that sources the script then invokes a function.
-- `SOURCE_GUARD` pattern for scripts that have a `main()`: a guard variable so tests can `source` the script without running `main`.
+- Direct-execute guard for scripts with a `main()` (matches the existing `fetch-source.sh` convention): end the file with `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main "$@"; fi` so `main` runs only when executed, not when sourced by tests. (Do NOT use a `SOURCE_GUARD=1; [[ -n ... ]] || main` pattern — that is inverted and never runs `main`.)
 
 ---
 
@@ -1657,8 +1657,9 @@ main() {
   log "prefetch complete: $META_SOURCE/$META_DEBIAN_VERSION from snapshot $META_SNAPSHOT_TS"
 }
 
-SOURCE_GUARD=1
-[[ -n "${SOURCE_GUARD:-}" ]] || main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
 ```
 
 - [ ] **Step 3: Run tests**
@@ -2006,8 +2007,9 @@ main() {
   log "imported cache: $target"
 }
 
-SOURCE_GUARD=1
-[[ -n "${SOURCE_GUARD:-}" ]] || main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
 ```
 
 - [ ] **Step 4: Run tests; shellcheck**
@@ -2408,8 +2410,9 @@ main() {
   log "source tree ready: $SOURCE_ROOT/ocserv-${UPSTREAM} (from ${mode})"
 }
 
-SOURCE_GUARD=1
-[[ -n "${SOURCE_GUARD:-}" ]] || main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
 ```
 
 > **Implementer note for the three `:;` placeholders:** `publish_source_tree`, `publish_orig_tarball`, and `cleanup_fetch_tmp` MUST be copied verbatim from the *current* `fetch-source.sh` (lines ~184-242) — they are retained unchanged (spec §4.2). Do not reimplement them. Their exact bodies handle the atomic `mv` from staging to `build/source/`, the orig-tarball-as-sibling requirement for quilt, and the TMP_ROOT `trap ... EXIT` cleanup. Replace each `:;` body with the verbatim retained code.
