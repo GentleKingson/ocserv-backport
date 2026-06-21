@@ -3,39 +3,15 @@ load helpers/bats-helper.bash
 
 setup() { cd "${REPO_ROOT}"; }
 
-# Source the script (SOURCE_GUARD prevents main from running) then call helpers.
+# Source the script (the BASH_SOURCE==$0 guard prevents main from running on
+# source) then call helpers. Retained from pre-refactor: the helper unit tests
+# (validate_dsc_metadata / validate_artifact_basenames) still work because
+# fetch-source.sh sources _dsc.sh which defines them.
 call_func() {
   run bash -c "set +e; source '${REPO_ROOT}/scripts/fetch-source.sh'; $*"
 }
 
-# ---- is_509_failure (spec §3.3) ----
-
-@test "is_509_failure: matches curl '(22) ... error: 509'" {
-  call_func "is_509_failure \"dget: curl ocserv_1.5.0-1.dsc ... failed
-curl: (22) The requested URL returned error: 509\""
-  [ "$status" -eq 0 ]
-}
-
-@test "is_509_failure: matches 'HTTP Error 509'" {
-  call_func "is_509_failure 'HTTP Error 509'"
-  [ "$status" -eq 0 ]
-}
-
-@test "is_509_failure: matches 'HTTP/2 509'" {
-  call_func "is_509_failure 'HTTP/2 509'"
-  [ "$status" -eq 0 ]
-}
-
-@test "is_509_failure: does NOT match bare exit code 22 / 404 / 403" {
-  call_func "is_509_failure 'curl: (22) The requested URL returned error: 404'"
-  [ "$status" -ne 0 ]
-  call_func "is_509_failure '403 Forbidden'"
-  [ "$status" -ne 0 ]
-  call_func "is_509_failure 'connection timed out'"
-  [ "$status" -ne 0 ]
-}
-
-# ---- validate_dsc_metadata (spec §3.4b) ----
+# ---- validate_dsc_metadata (retained; now via _dsc.sh) ----
 
 @test "validate_dsc_metadata: accepts Source=ocserv Version=1.5.0-1" {
   tmpd="$(mktemp -d)"
@@ -68,62 +44,7 @@ DSC
   rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }
 
-# ---- parse_dsc_artifacts (spec §3.4c) ----
-# Prints two lines: line 1 = F, line 2 = S. Each is space-separated basenames,
-# ORDER PRESERVED, DUPLICATES KEPT. Caller normalizes (sort -u) only AFTER
-# dup/basename validation in Task 4, so a duplicated filename is detectable.
-
-@test "parse_dsc_artifacts: equal F/S for well-formed .dsc" {
-  tmpd="$(mktemp -d)"
-  cat > "$tmpd/x.dsc" <<'DSC'
-Format: 3.0 (quilt)
-Source: ocserv
-Version: 1.5.0-1
-Files:
- 1234 ocserv_1.5.0.orig.tar.xz
- 5678 ocserv_1.5.0-1.debian.tar.xz
-Checksums-Sha256:
- abcd ocserv_1.5.0.orig.tar.xz
- ef01 ocserv_1.5.0-1.debian.tar.xz
-DSC
-  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  if [ "$status" -ne 0 ]; then rm -rf "$tmpd"; fail "parse failed"; fi
-  f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
-  s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
-  rm -rf "$tmpd"
-  [ "$f_norm" == "$s_norm" ]
-}
-
-@test "parse_dsc_artifacts: dies when Checksums-Sha256 stanza absent" {
-  tmpd="$(mktemp -d)"
-  cat > "$tmpd/x.dsc" <<'DSC'
-Source: ocserv
-Version: 1.5.0-1
-Files:
- 1234 ocserv_1.5.0.orig.tar.xz
-DSC
-  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  rm -rf "$tmpd"; [ "$status" -ne 0 ]
-}
-
-@test "parse_dsc_artifacts: unequal F/S when SHA256 partial (case 9)" {
-  tmpd="$(mktemp -d)"
-  cat > "$tmpd/x.dsc" <<'DSC'
-Files:
- 1234 ocserv_1.5.0.orig.tar.xz
- 5678 ocserv_1.5.0-1.debian.tar.xz
-Checksums-Sha256:
- abcd ocserv_1.5.0.orig.tar.xz
-DSC
-  call_func "parse_dsc_artifacts '$tmpd/x.dsc'"
-  if [ "$status" -ne 0 ]; then rm -rf "$tmpd"; fail "parse should succeed (unequal sets detected by caller)"; fi
-  f_norm="$(printf '%s\n' "${lines[0]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
-  s_norm="$(printf '%s\n' "${lines[1]}" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')"
-  rm -rf "$tmpd"
-  [ "$f_norm" != "$s_norm" ]
-}
-
-# ---- validate_artifact_basenames (spec §3.4c, case 10) ----
+# ---- validate_artifact_basenames (retained; now via _dsc.sh) ----
 
 @test "validate_artifact_basenames: accepts normal basenames" {
   call_func "validate_artifact_basenames 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
@@ -147,156 +68,233 @@ DSC
   [ "$status" -ne 0 ]
 }
 
-# ---- verify_cache_artifacts (spec §3.4d, cases 4/5) ----
-# Uses a temp dir as fake cache. $tmpd set in bats, passed into call_func's
-# bash -c via single-quote expansion (bats expands it before bash sees it).
+# ---- FETCH_SOURCE dispatch (new; spec §4) ----
+# These execute the rewritten fetch-source.sh via a throwaway git repo so its
+# REPO_ROOT/lock resolution lands inside the temp repo. scripts are COPIED
+# (not symlinked) so SCRIPT_DIR resolves there.
 
-@test "verify_cache_artifacts: passes when all files present" {
-  tmpd="$(mktemp -d)"
-  touch "$tmpd/ocserv_1.5.0.orig.tar.xz" "$tmpd/ocserv_1.5.0-1.debian.tar.xz"
-  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
-  rm -rf "$tmpd"; [ "$status" -eq 0 ]
+setup_fetch_repo() {
+  local root="$1"
+  mkdir -p "$root/scripts" "$root/source-lock/ocserv"
+  for f in _common.sh _dsc.sh _lock_tsv.sh _cache_meta.sh fetch-source.sh; do
+    cp "${REPO_ROOT}/scripts/$f" "$root/scripts/$f"   # copy not symlink (REPO_ROOT must resolve here)
+  done
+  git -C "$root" init -q
+  git -C "$root" add -A && git -C "$root" -c user.email=t@t -c user.name=t commit -qm init
 }
 
-@test "verify_cache_artifacts: dies naming missing files" {
-  tmpd="$(mktemp -d)"
-  touch "$tmpd/ocserv_1.5.0.orig.tar.xz"
-  call_func "verify_cache_artifacts '$tmpd' 'ocserv_1.5.0.orig.tar.xz ocserv_1.5.0-1.debian.tar.xz'"
-  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+# write_lock <repo> <allowed_comma>  — yaml + committed .lock.tsv pair (matching projection).
+write_lock() {
+  local repo="$1" allowed="$2"
+  local dsc_sha="0000000000000000000000000000000000000000000000000000000000000000"
+  local art_sha="1111111111111111111111111111111111111111111111111111111111111111"
+  {
+    echo 'schema_version: 1'
+    echo 'source: ocserv'
+    echo 'debian_version: "1.5.0-1"'
+    printf 'allowed_sources: [%s]\n' "$allowed"
+    [[ ",$allowed," == *",snapshot,"* ]] && echo 'snapshot_timestamp: "20260101T000000Z"'
+    [[ ",$allowed," == *",pool,"* ]] && echo 'pool_path: "main/o/ocserv"'
+    printf 'dsc: {name: ocserv_1.5.0-1.dsc, size: 5, sha256: "%s"}\n' "$dsc_sha"
+    printf 'artifacts: [{name: ocserv_1.5.0.orig.tar.xz, size: 3, sha256: "%s"}]\n' "$art_sha"
+  } > "$repo/source-lock/ocserv/1.5.0-1.yaml"
+  printf 'META\tocserv\t1.5.0-1\t%s\t' "$allowed" > "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  if [[ ",$allowed," == *",snapshot,"* ]]; then
+    printf '20260101T000000Z\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  else
+    printf -- '-\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  fi
+  if [[ ",$allowed," == *",pool,"* ]]; then
+    printf 'main/o/ocserv\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  else
+    printf -- '-\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  fi
+  printf 'ocserv_1.5.0-1.dsc\t5\t%s\nARTIFACT\tocserv_1.5.0.orig.tar.xz\t3\t%s\n' "$dsc_sha" "$art_sha" >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
 }
 
-# ---- main() orchestrator tests (cases 1, 2, 3, 8) with stubs ----
-# We stub dget/dpkg-source by prepending a fake bin dir to PATH.
-# Helper: write a minimal valid cached .dsc + its two artifacts into a cache dir.
-# NOTE: uses printf (not a heredoc) because bats' test-body line rewriting
-# breaks multi-line heredocs inside helper functions (verified: cachedir existed
-# but the cat<<DSC heredoc failed under bats). Heredocs in test BODIES work fine.
-write_fixture_cache() {
-  local cachedir="$1"
-  mkdir -p "$cachedir"
-  # Real ocserv 1.5.0-1 .dsc references 4 files incl. the .asc signature
-  # (verified on the trixie builder during Task 8). Keep the fixture realistic
-  # so the dsc-driven artifact list exercises the .asc path.
-  printf '%s\n' \
-    'Format: 3.0 (quilt)' \
-    'Source: ocserv' \
-    'Version: 1.5.0-1' \
-    'Files:' \
-    ' 0000 ocserv_1.5.0.orig.tar.xz' \
-    ' 0000 ocserv_1.5.0.orig.tar.xz.asc' \
-    ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
-    'Checksums-Sha256:' \
-    ' 0000 ocserv_1.5.0.orig.tar.xz' \
-    ' 0000 ocserv_1.5.0.orig.tar.xz.asc' \
-    ' 0000 ocserv_1.5.0-1.debian.tar.xz' \
-    > "$cachedir/ocserv_1.5.0-1.dsc"
-  touch "$cachedir/ocserv_1.5.0.orig.tar.xz" "$cachedir/ocserv_1.5.0.orig.tar.xz.asc" "$cachedir/ocserv_1.5.0-1.debian.tar.xz"
+# seed_cache <repo> <shasums_kind>  — build/source-cache/ocserv/1.5.0-1/ with
+# cache.meta + SHA256SUMS (kind: "match" or "drift") + a valid .dsc + artifact.
+# The .dsc is a real Deb822 file (Files/Checksums-Sha256 reference the artifact
+# with its real sha256+size) so dsc_artifacts_match_lock passes. The artifact is
+# "abc" (3 bytes, sha256 ba7816bf...). The dsc's OWN sha256 is computed from its
+# real content; the lock in write_lock_realhash must declare the same value, so
+# the two are kept in sync by re-deriving dsc_sha here and using it in BOTH the
+# cache SHA256SUMS and (via write_lock_realhash's identical .dsc) the lock.
+seed_cache() {
+  local repo="$1" kind="$2"
+  local cdir="$repo/build/source-cache/ocserv/1.5.0-1"; mkdir -p "$cdir"
+  local art_sha="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"   # sha256("abc")
+  printf 'abc' > "$cdir/ocserv_1.5.0.orig.tar.xz"
+  cat > "$cdir/ocserv_1.5.0-1.dsc" <<DSC
+Format: 3.0 (quilt)
+Source: ocserv
+Version: 1.5.0-1
+Files:
+ 1111 3 ocserv_1.5.0.orig.tar.xz
+Checksums-Sha256:
+ $art_sha 3 ocserv_1.5.0.orig.tar.xz
+DSC
+  local dsc_sha; dsc_sha="$(sha256sum "$cdir/ocserv_1.5.0-1.dsc" | awk '{print $1}')"
+  if [[ "$kind" == "drift" ]]; then
+    printf 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  ocserv_1.5.0-1.dsc\n' > "$cdir/SHA256SUMS"
+  else
+    printf '%s  ocserv_1.5.0-1.dsc\n%s  ocserv_1.5.0.orig.tar.xz\n' "$dsc_sha" "$art_sha" > "$cdir/SHA256SUMS"
+  fi
+  printf '{}' > "$cdir/source-manifest.json"
+  local manifest_sha content_sha
+  manifest_sha="$(sha256sum "$cdir/source-manifest.json" | awk '{print $1}')"
+  content_sha="$(sha256sum "$cdir/SHA256SUMS" | awk '{print $1}')"
+  printf 'meta_format_version=1\nbundle_format_version=1\nsource=ocserv\ndebian_version=1.5.0-1\ncontent_sha256=%s\nmanifest_sha256=%s\nmanifest_schema_version=1\n' \
+    "$content_sha" "$manifest_sha" > "$cdir/cache.meta"
 }
 
-@test "main: dget success → publishes source tree + orig tarball (case 1)" {
-  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
-  # Real dget -x leaves the .orig.tar.xz + .asc as SIBLINGS of the tree dir.
-  # build-source-package.sh (dpkg-source -b, quilt 3.0) needs the orig tarball
-  # in build/source/ (parent of the tree). Regression guard.
-  cat > "$fakebin/dget" <<'SH'
-#!/usr/bin/env bash
-mkdir -p "$(pwd)/ocserv-1.5.0"
-echo "fake-source" > "$(pwd)/ocserv-1.5.0/configure.ac"
-: > "$(pwd)/ocserv_1.5.0.orig.tar.xz"
-: > "$(pwd)/ocserv_1.5.0.orig.tar.xz.asc"
-echo "stub dget ok"
-SH
-  chmod +x "$fakebin/dget"
-  ( cd "$tmprepo" && mkdir -p build && \
-    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
-  [ -f "$tmprepo/build/source/ocserv-1.5.0/configure.ac" ]
-  # Orig tarball must be preserved alongside the tree (quilt rebuild needs it).
-  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz" ]
-  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz.asc" ]
-  rm -rf "$tmprepo" "$fakebin"
+# write_lock_realhash <repo> <allowed_comma> — like write_lock but with REAL
+# hashes that match seed_cache's deterministic .dsc (816688ee...) + "abc"
+# artifact (ba7816bf...). Used by cache-mode tests so the lock identity-matches
+# a "match" cache (both derive the same expected-SHA256SUMS).
+write_lock_realhash() {
+  local repo="$1" allowed="$2"
+  local dsc_sha="816688ee5e9a2a5b716ff1185b3153a33792dd3956a56192e6d118f95ace6be3"
+  local art_sha="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  local dsc_size=203   # size of the deterministic .dsc seed_cache/test-12 emit
+  local art_size=3     # size of "abc"
+  {
+    echo 'schema_version: 1'
+    echo 'source: ocserv'
+    echo 'debian_version: "1.5.0-1"'
+    printf 'allowed_sources: [%s]\n' "$allowed"
+    [[ ",$allowed," == *",snapshot,"* ]] && echo 'snapshot_timestamp: "20260101T000000Z"'
+    [[ ",$allowed," == *",pool,"* ]] && echo 'pool_path: "main/o/ocserv"'
+    printf 'dsc: {name: ocserv_1.5.0-1.dsc, size: %s, sha256: "%s"}\n' "$dsc_size" "$dsc_sha"
+    printf 'artifacts: [{name: ocserv_1.5.0.orig.tar.xz, size: %s, sha256: "%s"}]\n' "$art_size" "$art_sha"
+  } > "$repo/source-lock/ocserv/1.5.0-1.yaml"
+  printf 'META\tocserv\t1.5.0-1\t%s\t' "$allowed" > "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  if [[ ",$allowed," == *",snapshot,"* ]]; then printf '20260101T000000Z\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  else printf -- '-\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"; fi
+  if [[ ",$allowed," == *",pool,"* ]]; then printf 'main/o/ocserv\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
+  else printf -- '-\t' >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"; fi
+  printf 'ocserv_1.5.0-1.dsc\t%s\t%s\nARTIFACT\tocserv_1.5.0.orig.tar.xz\t%s\t%s\n' "$dsc_size" "$dsc_sha" "$art_size" "$art_sha" >> "$repo/source-lock/ocserv/1.5.0-1.lock.tsv"
 }
 
-@test "main: non-509 dget failure → dies, no cache use (case 3)" {
-  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
-  cat > "$fakebin/dget" <<'SH'
-#!/usr/bin/env bash
-echo "curl: (22) The requested URL returned error: 404" >&2
-false
-SH
-  chmod +x "$fakebin/dget"
-  # No cache seeded. Non-509 must die WITHOUT attempting cache fallback.
-  # Assert: script exits non-zero AND build/source/ was never published
-  # (proves the cache path was never reached).
-  rc=0
-  ( cd "$tmprepo" && mkdir -p build && \
-    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-      bash "${REPO_ROOT}/scripts/fetch-source.sh" ) >"$tmprepo/out.log" 2>&1 || rc=$?
-  published=$([ -d "$tmprepo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
-  rm -rf "$tmprepo" "$fakebin"
-  [ "$rc" -ne 0 ]
+@test "FETCH_SOURCE: unknown value → die" {
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock "$repo" "pool"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=bogus bash '$repo/scripts/fetch-source.sh'"
+  rm -rf "$repo"
+  [ "$status" -ne 0 ]
+}
+
+@test "FETCH_SOURCE=pool: pool not in allowed_sources → zero-network fail" {
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock "$repo" "snapshot"
+  fakebin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\necho HIT >> "%s/net"\nexit 7\n' "$repo" > "$fakebin/curl"
+  chmod +x "$fakebin/curl"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=pool PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  net="no"; [[ -f "$repo/net" ]] && net="yes"
+  rm -rf "$repo" "$fakebin"
+  [ "$status" -ne 0 ]
+  [ "$net" == "no" ]
+}
+
+@test "FETCH_SOURCE=cache: identity closure (SHA256SUMS drift) → die, no publish" {
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
+  seed_cache "$repo" drift
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=cache bash '$repo/scripts/fetch-source.sh'"
+  published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  rm -rf "$repo"
+  [ "$status" -ne 0 ]
   [ "$published" == "no" ]
 }
 
-@test "main: 509 + complete cache → fallback succeeds (case 2)" {
-  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
-  # fake dget: drops a PARTIAL artifact in staging, emits 509, fails.
-  cat > "$fakebin/dget" <<'SH'
+@test "FETCH_SOURCE=cache: zero network → publish from cache" {
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
+  seed_cache "$repo" match
+  fakebin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\necho HIT >> "%s/net"\nexit 7\n' "$repo" > "$fakebin/curl"
+  # dpkg-source -x <dsc> <outdir>: create outdir + orig tarball siblings.
+  cat > "$fakebin/dpkg-source" <<SH
 #!/usr/bin/env bash
-: > ocserv_1.5.0.orig.tar.xz.partial
-echo "curl: (22) The requested URL returned error: 509" >&2
-false
+out="\${@: -1: 1}"
+mkdir -p "\$out"; echo "from-cache" > "\$out/configure.ac"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
 SH
-  # fake dpkg-source: must run from CACHE_STAGE (no .partial there), creates tree.
-  cat > "$fakebin/dpkg-source" <<'SH'
-#!/usr/bin/env bash
-outdir="$4"
-if ls *.partial >/dev/null 2>&1; then
-  echo "CONTAMINATION: .partial visible to dpkg-source" >&2
-  exit 99
-fi
-mkdir -p "$outdir"; echo "from-cache" > "$outdir/MARKER"
-SH
-  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
-  write_fixture_cache "$tmprepo/build/source-cache"
-  ( cd "$tmprepo" && mkdir -p build && \
-    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-      bash "${REPO_ROOT}/scripts/fetch-source.sh" 2>/dev/null ) || true
-  # Source tree published AND carries the cache marker (not snapshot partial).
-  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
-  [ "$(cat "$tmprepo/build/source/ocserv-1.5.0/MARKER")" == "from-cache" ]
-  # Orig tarball preserved alongside the tree (quilt rebuild needs it).
-  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz" ]
-  [ -f "$tmprepo/build/source/ocserv_1.5.0.orig.tar.xz.asc" ]
-  # No staging leak (case 8): trap removed TMP_ROOT.
-  [ -z "$(ls -d "$tmprepo"/build/.fetch-tmp.* 2>/dev/null)" ]
-  rm -rf "$tmprepo" "$fakebin"
+  chmod +x "$fakebin/curl" "$fakebin/dpkg-source"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=cache PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  net="no"; [[ -f "$repo/net" ]] && net="yes"
+  published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  if [[ "$status" -ne 0 ]]; then rm -rf "$repo" "$fakebin"; fail "cache fetch failed (status=$status output=$output)"; fi
+  [ "$net" == "no" ]
+  [ "$published" == "yes" ]
 }
 
-@test "main: 509 + partial snapshot output does not contaminate cache path (case 8)" {
-  tmprepo="$(mktemp -d)"; fakebin="$(mktemp -d)"
-  cat > "$fakebin/dget" <<'SH'
+@test "FETCH_SOURCE=pool: success → publish (stub curl + dscverify + dpkg-source)" {
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
+  fakebin="$(mktemp -d)"
+  # curl serves: the deterministic .dsc (whose sha256 matches the lock) + "abc"
+  # artifact (whose sha256 ba7816bf... matches the lock). The .dsc content here
+  # must be byte-identical to seed_cache's .dsc so its hash is 816688ee...
+  art_sha="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  dsc_content='Format: 3.0 (quilt)
+Source: ocserv
+Version: 1.5.0-1
+Files:
+ 1111 3 ocserv_1.5.0.orig.tar.xz
+Checksums-Sha256:
+ '"$art_sha"' 3 ocserv_1.5.0.orig.tar.xz
+'
+  cat > "$fakebin/curl" <<SH
 #!/usr/bin/env bash
-: > ocserv_1.5.0.orig.tar.xz.partial
-mkdir -p ocserv-1.5.0-partial-junk
-echo "HTTP/2 509" >&2
-false
+dest=""; prev=""
+for a in "\$@"; do
+  if [[ "\$prev" == "--output" ]]; then dest="\$a"; fi
+  prev="\$a"
+done
+case "\$dest" in
+  *.dsc) printf '%s' '$dsc_content' > "\$dest" ;;
+  *.tar.xz) printf 'abc' > "\$dest" ;;
+esac
 SH
-  cat > "$fakebin/dpkg-source" <<'SH'
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fakebin/dscverify"
+  cat > "$fakebin/dpkg-source" <<SH
 #!/usr/bin/env bash
-outdir="$4"
-if ls *.partial >/dev/null 2>&1 || ls -d *partial-junk >/dev/null 2>&1; then
-  echo "CONTAMINATION detected" >&2
-  exit 99
-fi
-mkdir -p "$outdir"; echo "ok" > "$outdir/MARKER"
+out="\${@: -1: 1}"
+mkdir -p "\$out"; echo "from-pool" > "\$out/configure.ac"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
 SH
-  chmod +x "$fakebin/dget" "$fakebin/dpkg-source"
-  write_fixture_cache "$tmprepo/build/source-cache"
-  ( cd "$tmprepo" && mkdir -p build && \
-    PATH="$fakebin:$PATH" DEBIAN_SNAPSHOT_TIMESTAMP=20260101T000000Z \
-      bash "${REPO_ROOT}/scripts/fetch-source.sh" ) >"$tmprepo/out.log" 2>&1 || true
-  # Published tree exists (dpkg-source did not hit contamination exit 99).
-  [ -f "$tmprepo/build/source/ocserv-1.5.0/MARKER" ]
-  rm -rf "$tmprepo" "$fakebin"
+  chmod +x "$fakebin/curl" "$fakebin/dscverify" "$fakebin/dpkg-source"
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 FETCH_SOURCE=pool PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  rm -rf "$repo" "$fakebin"
+  [ "$status" -eq 0 ]
+  [ "$published" == "yes" ]
+}
+
+@test "FETCH_SOURCE: repo-root .env is loaded (FETCH_SOURCE=cache in .env, not exported → cache branch)" {
+  # Regression: fetch-source.sh must load <repo>/.env before computing FETCH_SOURCE,
+  # so a user setting FETCH_SOURCE=cache in .env (without exporting) reaches cache.
+  repo="$(mktemp -d)"; setup_fetch_repo "$repo"; write_lock_realhash "$repo" "pool,snapshot"
+  seed_cache "$repo" match
+  # Write a repo-root .env that sets FETCH_SOURCE=cache. Do NOT export it.
+  printf 'FETCH_SOURCE=cache\n' > "$repo/.env"
+  fakebin="$(mktemp -d)"
+  printf '#!/usr/bin/env bash\necho HIT >> "%s/net"\nexit 7\n' "$repo" > "$fakebin/curl"
+  cat > "$fakebin/dpkg-source" <<SH
+#!/usr/bin/env bash
+out="\${@: -1: 1}"
+mkdir -p "\$out"; echo "from-cache-env" > "\$out/configure.ac"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz"
+: > "\$(dirname "\$out")/ocserv_1.5.0.orig.tar.xz.asc"
+SH
+  chmod +x "$fakebin/curl" "$fakebin/dpkg-source"
+  # Note: FETCH_SOURCE deliberately unset in the env passed to bash -c, so the
+  # ONLY source is the repo-root .env. If .env isn't loaded, default=pool runs
+  # and curl is invoked (net marker set) → test fails.
+  run bash -c "cd '$repo' && OCSERV_UPSTREAM_VERSION=1.5.0 OCSERV_DEBIAN_REVISION=1 unset FETCH_SOURCE; PATH='$fakebin:$PATH' bash '$repo/scripts/fetch-source.sh'"
+  net="no"; [[ -f "$repo/net" ]] && net="yes"
+  published=$([ -d "$repo/build/source/ocserv-1.5.0" ] && echo yes || echo no)
+  rm -rf "$repo" "$fakebin"
+  [ "$status" -eq 0 ]
+  [ "$net" == "no" ]          # .env said cache → curl (pool) must NOT run
+  [ "$published" == "yes" ]
 }
