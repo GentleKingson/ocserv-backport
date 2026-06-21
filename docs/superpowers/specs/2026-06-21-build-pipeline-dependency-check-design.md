@@ -68,16 +68,19 @@ Two fix paths surfaced because there are two legitimate remediation contexts:
 
 ### Call sites
 
-Each call goes immediately after all `. _*.sh` source lines and before business logic (fail-fast, before any side effects).
+Placement differs by whether the script has bats tests that execute it on a non-Debian host (macOS CI dev machine):
 
-| Script | require_cmds arguments |
-|---|---|
-| `fetch-source.sh` | `dscverify:devscripts` `dpkg-source:dpkg-dev` `curl:curl` `sha256sum:coreutils` `gpg:gnupg` `quilt:quilt` |
-| `prefetch-source.sh` | `dscverify:devscripts` `dpkg-source:dpkg-dev` `curl:curl` `sha256sum:coreutils` `gpg:gnupg` |
-| `build-source-package.sh` | `dpkg-buildpackage:dpkg-dev` `sbuild:sbuild` |
-| `build-binary.sh` | `sbuild:sbuild` `lintian:lintian` `schroot:schroot` |
-| `lint-package.sh` | `lintian:lintian` |
-| `rewrap-changelog.sh` | `dch:devscripts` |
+- **Scripts with macOS-executed end-to-end tests** (`fetch-source.sh`, `prefetch-source.sh`): the check goes at the **top of `main()`**, NOT at source top-level. Reason: unit tests source these scripts to call internal functions directly (e.g. `validate_dsc_metadata`); a top-level check would fire on source and break them. The end-to-end tests that run `main()` stub the Debian commands they exercise via a `fakebin` PATH dir; the tests must be extended to stub ALL checked commands (see Testing below).
+- **Scripts without macOS-executed tests** (`build-source-package.sh`, `build-binary.sh`, `lint-package.sh`, `rewrap-changelog.sh`): the check goes at the **source top-level** (after `source _common.sh`). These are never executed by bats (no end-to-end coverage on macOS), so the check breaks nothing and gives the earliest possible failure.
+
+| Script | Placement | require_cmds arguments |
+|---|---|---|
+| `fetch-source.sh` | top of `main()` | `dscverify:devscripts` `dpkg-source:dpkg-dev` `curl:curl` `sha256sum:coreutils` `gpg:gnupg` `quilt:quilt` |
+| `prefetch-source.sh` | top of `main()` | `dscverify:devscripts` `dpkg-source:dpkg-dev` `curl:curl` `sha256sum:coreutils` `gpg:gnupg` |
+| `build-source-package.sh` | after `source _common.sh` | `dpkg-buildpackage:dpkg-dev` `sbuild:sbuild` |
+| `build-binary.sh` | after `source _common.sh` | `sbuild:sbuild` `lintian:lintian` `schroot:schroot` |
+| `lint-package.sh` | after `source _common.sh` | `lintian:lintian` |
+| `rewrap-changelog.sh` | after `source _common.sh` | `dch:devscripts` |
 
 Command→package mappings verified against Debian/trixie: `dscverify`/`dch`→devscripts, `dpkg-source`/`dpkg-buildpackage`→dpkg-dev, `sbuild`→sbuild, `schroot`→schroot, `lintian`→lintian, `sha256sum`→coreutils, `gpg`→gnupg, `quilt`→quilt, `curl`→curl.
 
@@ -93,7 +96,11 @@ These run via the existing `bats test/` harness; they mock absence by using a no
 
 ### Existing tests
 
-`test_fetch_source.bats`, `test_prefetch_source.bats`, etc. run on hosts that already have the real commands, so `require_cmds` is a no-op pass for them — no behavioral change, no regression.
+The dev/CI test host is **macOS**, where only `curl` and `sha256sum` exist; all Debian commands (`dscverify`, `dpkg-source`, `gpg`, `quilt`, `sbuild`, `lintian`, `schroot`, `dch`) are absent. The existing end-to-end tests for `fetch-source.sh` / `prefetch-source.sh` run the scripts via a `fakebin` PATH dir that stubs the commands each test exercises. Because the check at the top of `main()` now inspects ALL six commands regardless of pool/cache branch, the tests' `fakebin` must be extended to stub the previously-unstubbed commands (`dscverify`, `gpg`, `quilt`) so the check passes and the test reaches the code path it intends to assert.
+
+Concretely, the end-to-end tests that run `fetch-source.sh` / `prefetch-source.sh` to completion (happy-path and drift-gate cases) gain a shared no-op stub helper that creates `dscverify`/`gpg`/`quilt` exit-0 stubs in their `fakebin`. Tests that assert a pre-check `die` (e.g. `FETCH_SOURCE=bogus`) are unaffected — they already expect non-zero and never reach a command.
+
+The four scripts without macOS-executed tests (`build-source-package.sh` etc.) need no test changes.
 
 ## Verification
 
