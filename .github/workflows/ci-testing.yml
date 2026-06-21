@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths: ['debian/**', 'scripts/**', 'ansible/**', 'source-lock/**', 'requirements/**', 'Makefile', '.github/workflows/ci-testing.yml']
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   lock-projection:
     runs-on: [self-hosted, builder]
@@ -16,6 +18,30 @@ jobs:
           .ci-venv/bin/python -m pip install -r requirements/prefetch.txt
           while IFS= read -r -d '' yaml; do
             .ci-venv/bin/python scripts/read-source-lock.py --lock "$yaml" > /tmp/proj.tsv
+            cmp -s /tmp/proj.tsv "${yaml%.yaml}.lock.tsv" \
+              || { echo "lock.tsv drift: $yaml"; exit 1; }
+          done < <(find source-lock -type f -name '*.yaml' -print0 | sort -z)
+          while IFS= read -r -d '' tsv; do
+            [[ -f "${tsv%.lock.tsv}.yaml" ]] \
+              || { echo "orphan lock.tsv: $tsv"; exit 1; }
+          done < <(find source-lock -type f -name '*.lock.tsv' -print0 | sort -z)
+
+  lock-projection-cibuild:
+    # Dual-track (Phase 1): same logic on the new ephemeral ci-build runner.
+    # Uses image-baked python3 + python3-yaml (NO runtime pip install — the
+    # ci-build image fully captures deps by digest; no PyPI egress needed).
+    # Does NOT gate `build` yet; validates the ephemeral runner executes identically.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: [self-hosted, ci-build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: verify lock.tsv projection (ephemeral ci-build runner)
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' yaml; do
+            python3 scripts/read-source-lock.py --lock "$yaml" > /tmp/proj.tsv
             cmp -s /tmp/proj.tsv "${yaml%.yaml}.lock.tsv" \
               || { echo "lock.tsv drift: $yaml"; exit 1; }
           done < <(find source-lock -type f -name '*.yaml' -print0 | sort -z)
