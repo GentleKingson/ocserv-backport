@@ -704,7 +704,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main "$@"; fi
 ```dockerfile
 # Phase 1 ci-build runner image. Non-root (10001:10001); read-only rootfs at runtime.
 # libicu76: Actions Runner (.NET) ICU dep on trixie. curl: integration test.
-# iproute2: IPv6-absence runtime check. util-linux: findmnt. No runtime pip.
+# iproute2: global IPv6 address/default-route checks. util-linux: findmnt. No runtime pip.
 ARG TRIXIE_DIGEST
 FROM "${TRIXIE_DIGEST}" AS base
 
