@@ -72,3 +72,25 @@ dry-run: ## end-to-end local dry-run (no real aptly/R2/staging/prod)
 .PHONY: bootstrap-build-host
 bootstrap-build-host: ## Bootstrap the trixie build host (run ON the builder)
 	scripts/bootstrap-build-host.sh $(ARGS)
+
+.PHONY: runner-image runner-provision
+RUNNER_TARBALL_URL ?=
+RUNNER_TARBALL_SHA256 ?=
+TRIXIE_DIGEST ?=
+REGISTRY ?= ghcr.io/gentlekingson
+
+runner-image: ## Build + push ephemeral ci-build runner image; print manifest digest
+	@test -n "$(RUNNER_TARBALL_URL)" -a -n "$(RUNNER_TARBALL_SHA256)" || { echo "set RUNNER_TARBALL_URL + RUNNER_TARBALL_SHA256"; exit 1; }
+	@echo "$(RUNNER_TARBALL_SHA256)" | grep -qE '^[0-9a-f]{64}$$' || { echo "RUNNER_TARBALL_SHA256 must be 64 lowercase hex"; exit 1; }
+	@test -n "$(TRIXIE_DIGEST)" || { echo "set TRIXIE_DIGEST=docker.io/library/debian@sha256:<64hex>"; exit 1; }
+	@echo "$(TRIXIE_DIGEST)" | grep -q '@sha256:[0-9a-f]\{64\}$$' || { echo "TRIXIE_DIGEST must be a digest"; exit 1; }
+	DOCKER_BUILDKIT=1 docker buildx build -f docker/runner/Dockerfile \
+	  --build-arg TRIXIE_DIGEST="$(TRIXIE_DIGEST)" \
+	  --build-arg RUNNER_TARBALL_URL="$(RUNNER_TARBALL_URL)" \
+	  --build-arg RUNNER_TARBALL_SHA256="$(RUNNER_TARBALL_SHA256)" \
+	  -t $(REGISTRY)/ocserv-ci-runner:phase1 --push docker/runner/
+	@echo "=== manifest digest -> RUNNER_IMAGE: ==="
+	@docker buildx imagetools inspect $(REGISTRY)/ocserv-ci-runner:phase1 --format '{{.Manifest.Digest}}' | sed 's|^|$(REGISTRY)/ocserv-ci-runner@|'
+
+runner-provision: ## Dry-run the provisioner (token from stdin; never executes docker run)
+	@echo "Dry-run: scripts/runner-provisioner.sh --dry-run < /dev/null"
