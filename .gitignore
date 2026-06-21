@@ -7,3 +7,6 @@
 
 # build artifacts (deb/dsc/changes produced by fetch/src-pkg/binary)
 build/
+
+# isolated implementation worktrees
+.worktrees/
