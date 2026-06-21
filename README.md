@@ -14,6 +14,8 @@ fetch → rewrap → src-pkg → binary (sbuild) → lint → smoke-basic → te
 
 Each stage has a corresponding Make target. CI reuses the same core build-validation stages before publishing the testing channel.
 
+Source identity is locked by `source-lock/<name>/<version>.yaml` (the Git-tracked authority) and its CI-verified `.lock.tsv` projection; `fetch` honors `FETCH_SOURCE=pool` (default; `deb.debian.org` pool) or `FETCH_SOURCE=cache` (verified local `build/source-cache/`). See the runbook's source-acquisition section for the prefetch/import workflow used to populate the cache from `snapshot.debian.org`.
+
 ## Quick start
 
 ```bash

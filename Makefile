@@ -16,7 +16,7 @@ snapshot-name: ## Print the snapshot name for current context
 	@scripts/snapshot-name.sh
 
 .PHONY: fetch rewrap src-pkg
-fetch: ## dget ocserv source from snapshot.debian.org
+fetch: ## fetch ocserv source per FETCH_SOURCE (pool|cache), locked by source-lock/
 	scripts/fetch-source.sh
 rewrap: ## rewrite changelog to backport version
 	scripts/rewrap-changelog.sh
