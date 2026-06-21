@@ -588,10 +588,12 @@ test -f source-lock/ocserv/1.5.0-1.lock.tsv && echo "lock projection present"
 
 | 模式 | 行为 | 网络 |
 |------|------|------|
-| `FETCH_SOURCE=pool`（默认） | 从 `https://deb.debian.org/debian/pool/<pool_path>/` 取 lock 锁定版本，做完整强校验闭环 + `dscverify`（4 份官方 keyring）+ `dpkg-source --require-valid-signature --require-strong-checksums -x` | 在线（deb.debian.org，不被 rate-limit） |
+| `FETCH_SOURCE=pool`（默认） | 从 `https://deb.debian.org/debian/pool/<pool_path>/` 取 lock 锁定版本，做完整强校验闭环 + `dscverify`（4 份官方 keyring）+ `dpkg-source --require-valid-signature --require-strong-checksums -x` | 在线（deb.debian.org；失败即显式失败，不访问 Snapshot、不回退 cache） |
 | `FETCH_SOURCE=cache` | 只读 `build/source-cache/ocserv/<version>/`，做 11 步身份闭环（cache.meta 版本、`cmp -s` expected-SHA256SUMS、`sha256sum -c`、manifest hash、`.dsc` 映射、解包） | 零网络 |
 
 > 构建机不再访问 `snapshot.debian.org`（部分构建机 IP 被其 rate-limit / HTTP 509）。Snapshot 访问已移到独立的预取节点。`pool` 与 `cache` 都消费同一份锁定的 `<name>/<version>` 身份；`pool` 不会"取最新"。两种模式都**无自动 fallback**：失败即失败，不隐式切换远端来源。
+>
+> **模式切换必须改 repo-root `.env`**：`fetch-source.sh` 在解析模式前会 `source .env`，`.env` 的同名变量**覆盖**预导出的环境变量（见 `.env.example` 注释）。因此 `FETCH_SOURCE=cache make dry-run` 这种 shell 前缀在 `.env` 仍为 `pool` 时**不会**生效——必须编辑 `.env` 把 `FETCH_SOURCE` 改为 `cache`。
 
 #### Snapshot 预取与 cache 导入工作流（仅在具备 Snapshot 访问能力的预取节点执行）
 
@@ -599,7 +601,10 @@ test -f source-lock/ocserv/1.5.0-1.lock.tsv && echo "lock projection present"
 
 ```bash
 # 1. 预取节点（能访问 snapshot.debian.org）：
-pip install -r requirements/prefetch.txt
+#    用 venv 安装 PyYAML，不污染系统 Python（PEP 668：Debian 系统 Python 拒绝全局 pip）。
+python3 -m venv .prefetch-venv          # 若失败：安装系统对应 python3-venv 包，不要用 sudo pip / --break-system-packages
+. .prefetch-venv/bin/activate
+python -m pip install -r requirements/prefetch.txt
 scripts/prefetch-source.sh --lock source-lock/ocserv/1.5.0-1.yaml
 # → 生成 build/source-cache/ocserv/1.5.0-1/ + ocserv_1.5.0-1.source-cache.tar.zst(+.sha256)
 
@@ -609,8 +614,11 @@ scripts/prefetch-source.sh --lock source-lock/ocserv/1.5.0-1.yaml
 scripts/import-source-cache.sh ocserv_1.5.0-1.source-cache.tar.zst
 # → 原子导入 build/source-cache/ocserv/1.5.0-1/
 
-# 4. 构建机：切到 cache 模式构建
-FETCH_SOURCE=cache make dry-run
+# 4. 构建机：编辑 repo-root .env 把 FETCH_SOURCE 改为 cache，再构建
+#    （shell 前缀 FETCH_SOURCE=cache 不会生效，因为 .env 会覆盖它）
+$EDITOR .env
+grep -qx 'FETCH_SOURCE=cache' .env      # 确认已改
+make dry-run
 ```
 
 > bundle sidecar hash 只证 bundle 与给定 hash 一致；若 bundle 与 sidecar 可被同一攻击者同时替换，它不提供来源认证。来源认证依赖可信传输通道、预取节点访问控制、lock/`.dsc` 校验与 cache 目录权限。CI 会 byte-for-byte 守卫 `.lock.tsv` 与 YAML 一致（见 `.github/workflows/ci-testing.yml` 的 `lock-projection` job）。
@@ -691,18 +699,22 @@ make dry-run 失败时会打印 `DRY-RUN FAILED at: <step>`。按下表定位：
     可能原因 A: source-lock/<name>/<version>.lock.tsv 缺失或与 YAML 不一致
       → 重新生成(CI 守卫); 确认 .yaml 与 .tsv 同 commit
     可能原因 B: lock 未授权 pool(pool ∉ allowed_sources)
-      → 改用 cache 模式或更新 lock
-    可能原因 C: 下载/校验失败(sha256 不符、dscverify 失败、解包失败)
+      → 编辑 repo-root .env 把 FETCH_SOURCE 改为 cache(已导入 cache 时)或更新 lock
+    可能原因 C: 下载/校验失败(sha256 不符、dscverify 失败、dpkg-source 解包失败)
       → 检查网络/pool 可达性; 不得手动改 cache
     可能原因 D: pool 不可达
-      → 显式失败; 不自动回退。预取节点导入 cache 后改用 FETCH_SOURCE=cache
+      → 显式失败; 不自动回退。在预取节点 prefetch + 导入 bundle 后，
+        编辑 repo-root .env 把 FETCH_SOURCE 改为 cache 重试(shell 前缀无效，.env 会覆盖)
   FETCH_SOURCE=cache:
     可能原因 A: build/source-cache/<name>/<version>/ 缺失
       → 在预取节点 prefetch + 导入 bundle(见 4.1 "Snapshot 预取与 cache 导入工作流")
-    可能原因 B: cache 与 .lock.tsv 不一致(cmp -s 失败)
+    可能原因 B: cache 与 .lock.tsv 不一致(cmp -s expected-SHA256SUMS 失败)
       → cache 被篡改/过期; 删除后重新 import; 不得手动修补
-    可能原因 C: sha256sum -c / dscverify / 解包失败
-      → cache 损坏; 删除重新 import
+    可能原因 C: cache.meta 版本/内容摘要、SHA256SUMS 的 sha256sum -c、manifest hash、
+                .dsc 映射或 dpkg-source --require-valid-signature 解包/签名验证失败
+      → cache 损坏、身份不一致或 lock 已更新; 删除对应版本 cache 后重新 import，
+        不得手动修补其中的 artifact 或元数据文件。
+        (注: cache 模式不跑 dscverify; dscverify 仅在 pool 与 prefetch 路径执行。)
 
 步骤 4 binary / sbuild 失败：
   可能原因 A：builder 当前会话没有 sbuild group（最常见）
