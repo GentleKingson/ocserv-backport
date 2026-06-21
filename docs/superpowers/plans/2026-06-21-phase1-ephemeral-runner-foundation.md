@@ -858,14 +858,15 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then main "$@"; fi
 **Files:**
 - Create: `docker/runner/ci-build-egress.policy`, `docker/runner/ci-build-egress.policy.lib`, `test/test_runner_network.bats`
 
-IPv4-only. No ip6tables. (IPv6 is handled by network `EnableIPv6=false` + runtime absence check, Task 7/8.)
+IPv4-only. No project-managed `ip6tables` chains. Routed IPv6 is excluded by `EnableIPv6=false`, exact single-entry IPv4 IPAM validation, and runtime checks for no global IPv6 address/default route in Tasks 7-8.
 
 - [ ] **Step 1: Policy file** (two IPv4 managed chains)
 
 ```text
 # ci-build egress — TWO IPv4 managed iptables chains (applied+persisted by host-install).
-# IPv4-ONLY (Phase 1 has no IPv6; EnableIPv6=false on the network, runtime verifies
-# no global IPv6 addr / no IPv6 default route). No ip6tables rules maintained.
+# IPv4-ONLY managed runner path (`EnableIPv6=false`; exactly one expected IPv4
+# IPAM entry; runtime has no global IPv6 addr / no IPv6 default route).
+# No project-managed ip6tables chains are created or maintained.
 # OCSERV_CI_EGRESS: from DOCKER-USER, forwarded IPv4 egress from br-ci-build-egress.
 # OCSERV_CI_HOST_GUARD: in INPUT, IPv4 container→host.
 # Model: deny private/link-local/metadata/host; allow public 443/80.
@@ -935,18 +936,18 @@ LIB="${REPO_ROOT}/docker/runner/ci-build-egress.policy.lib"
 }
 ```
 
-> **Acceptance boundary:** pure tests verify policy logic only. Network isolation accepted ONLY by the runner-host IPv4 integration test (runbook) + IPv6-absence check. Pure tests do NOT claim isolation.
+> **Acceptance boundary:** pure tests verify policy logic only. Network isolation is accepted ONLY by the runner-host IPv4 integration test plus the runtime checks for no global IPv6 address/default route. Pure tests do NOT claim isolation.
 
 - [ ] **Step 3: Run → PASS. Commit** `feat(phase1): IPv4 egress policy + pure lib (correct rc assertion)`.
 
 ---
 
-## Task 7: Host install (verify-first; libexec create-before-stat; IPv4-only bridge verify new+existing + reject global daemon IPv6; IPv4 managed chains; save+verify+rollback; jump dedup) + Makefile + runbook
+## Task 7: Host install (verify-first; libexec create-before-stat; IPv4-only bridge verify new+existing; IPv4 managed chains; save+verify+rollback; jump dedup) + Makefile + runbook
 
 **Files:**
 - Create: `scripts/runner-host-install.sh`, `docs/runner-ephemeral.md`; Modify `Makefile`
 
-- [ ] **Step 1: `scripts/runner-host-install.sh`** (IPv4-only; no ip6tables managed rules; reject daemon global IPv6)
+- [ ] **Step 1: `scripts/runner-host-install.sh`** (managed runner path is IPv4-only; no project-managed `ip6tables` chains; host-global Docker IPv6 is out of scope)
 
 ```bash
 #!/usr/bin/env bash
@@ -984,27 +985,25 @@ verify_ci_build_network() {
   [[ "${drv}" == bridge ]] || die "driver=${drv} (need bridge)"
   [[ "${br}" == "${BRIDGE}" ]] || die "bridge=${br} (need ${BRIDGE})"
   [[ "${ipv6}" == false ]] || die "EnableIPv6=${ipv6} (need false; Phase 1 is IPv4-only)"
-  # IPAM: exactly one entry, IPv4 subnet+gateway, no IPv6 data (no ':' in either field).
+  # IPAM: exactly one entry whose subnet+gateway equal the expected IPv4 values.
   local -a ipam_lines=()
   mapfile -t ipam_lines < <(docker network inspect ci-build-egress \
     -f '{{range .IPAM.Config}}{{printf "%s\t%s\n" .Subnet .Gateway}}{{end}}')
   [[ ${#ipam_lines[@]} -eq 1 ]] || die "ci-build-egress must have exactly one IPAM config (got ${#ipam_lines[@]})"
   [[ "${ipam_lines[0]}" == "${SUBNET}"$'\t'"${GW}" ]] \
     || die "ci-build-egress IPAM must be ${SUBNET} / ${GW} (got '${ipam_lines[0]}')"
-  [[ "${ipam_lines[0]}" != *:* ]] || die "ci-build-egress IPAM contains IPv6 data (':' present)"
 }
 
-# Phase 1 security boundary is the ci-build-egress network itself (EnableIPv6=false +
-# IPv4-only IPAM + runtime IPv6-absence), NOT a global daemon-IPv4-only promise.
-# We do NOT inspect daemon.json / dockerd flags (unreliable to prove); the per-network
-# + runtime checks above/below are the authoritative IPv4-only enforcement.
+# Phase 1's security boundary is the ci-build-egress network and runner container,
+# not host-global Docker IPv6 configuration. EnableIPv6=false + exactly one expected
+# IPv4 IPAM entry + runtime checks for no global IPv6 address/default route are
+# authoritative for the managed runner path. Unrelated host workloads are out of scope.
 
 main() {
   [[ "$(id -u)" -eq 0 ]] || die "run as root"
   [[ -f "${PROVISIONER_SRC}" ]] || die "provisioner source not found"
 
-  # 1. Verify persistence + backend FIRST. (IPv4-only is enforced per-network +
-  #    at runtime, not via a global daemon promise — see verify_ci_build_network.)
+  # 1. Verify persistence + Docker iptables backend FIRST.
   command -v netfilter-persistent >/dev/null 2>&1 || die "netfilter-persistent missing (install iptables-persistent)"
   systemctl is-enabled netfilter-persistent >/dev/null 2>&1 || die "netfilter-persistent not enabled (rules won't survive reboot)"
   iptables -n -L DOCKER-USER >/dev/null 2>&1 || die "DOCKER-USER missing — Docker must use iptables backend"
@@ -1152,7 +1151,7 @@ runner-provision: ## Dry-run the provisioner
 	@echo "scripts/runner-provisioner.sh --dry-run < /dev/null"
 ```
 
-- [ ] **Step 3: runbook (`docs/runner-ephemeral.md`) — IPv4 integration + IPv6-absence**
+- [ ] **Step 3: runbook (`docs/runner-ephemeral.md`) — IPv4 integration + routed-IPv6 exclusion checks**
 
 ```markdown
 # Ephemeral ci-build Runner — Operator Runbook (Phase 1, IPv4-only)
@@ -1167,7 +1166,7 @@ runner host: docker pull <registry>/ocserv-ci-runner@sha256:<manifest digest>
 sudo -i
 git clone <repo> /root/ocserv-backport-install && cd /root/ocserv-backport-install
 git checkout <verified-sha>
-bash scripts/runner-host-install.sh   # verify-first (persist+backend+daemon-IPv4-only); root-owned provisioner; IPv4 managed chains; hard-fail save+verify
+bash scripts/runner-host-install.sh   # verify-first (persist+backend+runner-network IPv4-only); root-owned provisioner; IPv4 managed chains; hard-fail save+verify
 # Edit /etc/ocserv-ci-runner/provisioner.conf (RUNNER_IMAGE digest). chmod 0600.
 iptables -S OCSERV_CI_EGRESS; iptables -S OCSERV_CI_HOST_GUARD
 
@@ -1184,10 +1183,10 @@ unset REGISTRATION_TOKEN
 ## Lockdown verify (while running)
 docker inspect <name> --format 'Privileged={{.HostConfig.Privileged}} ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} User={{.Config.User}} OpenStdin={{.Config.OpenStdin}} NetworkMode={{.HostConfig.NetworkMode}} CapAdd={{.HostConfig.CapAdd}} Binds={{.HostConfig.Binds}}'
 
-## Firewall + IPv6-absence integration acceptance (RUNNER HOST — ONLY network-isolation acceptance; IPv4-only)
+## Firewall + routed-IPv6 exclusion integration acceptance (RUNNER HOST — ONLY network-isolation acceptance; IPv4-only runner path)
 docker network inspect ci-build-egress --format '{{.EnableIPv6}}'   # MUST print false
 docker run --rm --network ci-build-egress --entrypoint /bin/sh <image@digest> -ec '
-  # IPv6 absence (iproute2 in image)
+  # Routed-IPv6 exclusion: loopback/link-local presence is allowed; global address/default route are not.
   ! ip -6 addr show dev eth0 scope global | grep -q .
   ! ip -6 route show default | grep -q .
   # IPv4 egress
@@ -1210,9 +1209,9 @@ docker ps -aq --filter 'label=com.ocserv-ci.managed-by=runner-provisioner' --fil
 # Then GitHub UI → Settings → Actions → Runners → offline → Remove (Phase 1 does NOT auto-clean GitHub records).
 ```
 
-- [ ] **Step 4: `shellcheck scripts/runner-host-install.sh` + commit** `feat(phase1): host install (IPv4-only bridge, daemon-IPv4-only check, IPv4 managed chains, verify-first, rollback)`.
+- [ ] **Step 4: `shellcheck scripts/runner-host-install.sh` + commit** `feat(phase1): host install (IPv4-only runner network, IPv4 managed chains, verify-first, rollback)`.
 
-**Checkpoint review (Task 6-7):** IPv4-only network (EnableIPv6=false, no v6 IPAM, daemon IPv4-only), IPv4 managed chains (egress+host-guard, jump dedup, save+verify exactly-1, rollback), root-owned install + source-file + parent-path verify, runbook.
+**Checkpoint review (Task 6-7):** IPv4-only managed runner path (`EnableIPv6=false`; exactly one expected IPv4 IPAM entry; runtime has no global IPv6 address/default route), no host-global Docker IPv6 requirement, no project-managed `ip6tables` chains, IPv4 managed chains (egress+host-guard, jump dedup, save+verify exactly-1, rollback), root-owned install + source-file + parent-path verify, runbook.
 
 ---
 
