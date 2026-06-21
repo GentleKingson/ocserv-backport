@@ -1,0 +1,4 @@
+# Keep build context minimal — only the entrypoint is COPYed; the runner tarball
+# is ADDed from a URL (with checksum). Everything else is excluded.
+*
+!entrypoint.sh
