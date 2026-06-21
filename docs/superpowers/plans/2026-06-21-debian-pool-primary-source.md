@@ -392,10 +392,14 @@ git commit -m "feat(lock): read-source-lock.py with StrictSafeLoader + schema va
 Append to `test/test_read_source_lock.bats` (after the valid-lock test):
 
 ```bash
-make_lock() {  # $1 = content, writes to $tmpd/lock.yaml, echoes path
-  tmpd="$(mktemp -d)"; printf '%s' "$1" > "$tmpd/lock.yaml"; echo "$tmpd/lock.yaml"
+make_lock() {  # $1 = content → writes to a fresh temp dir, sets MAKE_LOCK_DIR, echoes path.
+  # NOTE: the caller runs this as `p="$(make_lock "$body")"`, which executes in a
+  # SUBSHELL — a side-effect-set tmpd would be lost in the caller. So we set an
+  # explicit global MAKE_LOCK_DIR and pair it with cleanup_make_lock (which always
+  # returns 0, so it cannot fail the bats line after a `run`).
+  MAKE_LOCK_DIR="$(mktemp -d)"; printf '%s' "$1" > "$MAKE_LOCK_DIR/lock.yaml"; echo "$MAKE_LOCK_DIR/lock.yaml"
 }
-cleanup_tmp() { [[ -n "${tmpd:-}" ]] && rm -rf "$tmpd"; }
+cleanup_make_lock() { [[ -n "${MAKE_LOCK_DIR:-}" ]] && rm -rf "$MAKE_LOCK_DIR"; MAKE_LOCK_DIR=""; return 0; }
 
 @test "rejects: --source without --debian-version (arg error)" {
   run $READ_LOCK --source ocserv
@@ -411,7 +415,7 @@ cleanup_tmp() { [[ -n "${tmpd:-}" ]] && rm -rf "$tmpd"; }
   body='source: ocserv
 source: other'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -425,14 +429,14 @@ dsc: {name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
 bogus: 1'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
 @test "rejects: epoch in debian_version" {
   body='debian_version: "1:1.5.0-1"'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -444,7 +448,7 @@ allowed_sources: [snapshot]
 dsc: {name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -457,7 +461,7 @@ pool_path: "main/../etc"
 dsc: {name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -470,7 +474,7 @@ pool_path: "https://evil.invalid/x"
 dsc: {name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -483,7 +487,7 @@ pool_path: "main/o/ocserv"
 dsc: {name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: o.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -496,7 +500,7 @@ pool_path: "main/o/ocserv"
 dsc: {name: o.txt, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -509,7 +513,7 @@ pool_path: "main/o/ocserv"
 dsc: {name: o.dsc, size: true, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 
@@ -522,7 +526,7 @@ pool_path: "main/o/ocserv"
 dsc: {name: o.dsc, size: 1, sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]'
   p="$(make_lock "$body")"
-  run $READ_LOCK --lock "$p"; cleanup_tmp
+  run $READ_LOCK --lock "$p"; cleanup_make_lock
   [ "$status" -eq 1 ]
 }
 ```
