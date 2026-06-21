@@ -1366,7 +1366,7 @@ rm -f "$tmpcfg"
 
 - [ ] **Step 5: Commit** `feat(phase1): dual-track lock-projection (trusted-event, contents:read, no secrets) + structural boundary test`.
 
-> Real runner-host lifecycle drill (real short-lived token) ONLY after Steps 1-4 + runbook IPv4 integration + IPv6-absence + image smoke pass. Runner must be repository-scoped (not org-level).
+> Real runner-host lifecycle drill (real short-lived token) ONLY after Steps 1-4 + runbook IPv4 integration + routed-IPv6 exclusion checks + image smoke pass. Runner must be repository-scoped (not org-level).
 
 ---
 
@@ -1383,9 +1383,9 @@ Provisioner: self-contained; config env-clear + allowlist + reject unknown/dup +
 
 Entrypoint: current_uid stubbable; rootfs ro; /runner /work tmpfs+nosuid+nodev; /tmp tmpfs+nosuid+nodev+noexec (+missing-nodev negative); no-preserve copy.
 
-Network (IPv4-only; pure=logic; isolation accepted ONLY via runbook integration):
-  policy two IPv4 managed chains + ipv6=disabled; deny private/link-local/metadata; allow public 443/80; no GitHub IP allowlist; NO ip6tables managed rules.
-  installer: verify persist+backend+daemon-IPv4-only FIRST; create libexec before stat; verify new+existing network (EnableIPv6=false, no v6 IPAM);
+Network (managed runner path is IPv4-only; pure=logic; isolation accepted ONLY via runbook integration):
+  policy two IPv4 managed chains + ipv6=disabled; deny private/link-local/metadata; allow public 443/80; no GitHub IP allowlist; no project-managed ip6tables chains.
+  installer: verify persistence+iptables backend FIRST; create libexec before stat; verify new+existing network (EnableIPv6=false; exactly one IPAM.Config entry with expected IPv4 Subnet/Gateway); host-global Docker IPv6 is out of scope.
   build IPv4 chains; dedup jumps (comment); save+verify (exactly 1 jump each); rollback on failure.
 
 Image: base NO default (digest); ADD --checksum=; libicu76 + curl + iproute2 + util-linux + python3-yaml; NO runtime pip; image smoke; refresh SLA 30d.
@@ -1394,7 +1394,7 @@ Workflow (structural YAML test, not grep): permissions contents:read; ci-build e
 
 Runtime inspect: Privileged=false ReadonlyRootfs=true User=10001:10001 OpenStdin=true NetworkMode=ci-build-egress CapAdd=[] Binds=[] tmpfs limits digest.
 
-IPv6: EnableIPv6=false; no global IPv6 addr; no IPv6 default route; daemon IPv4-only.
+IPv6 on managed runner path: unsupported as routed traffic; EnableIPv6=false; exactly one expected IPv4 IPAM.Config entry; no global IPv6 addr; no IPv6 default route; loopback/link-local presence alone is allowed; no host-global Docker IPv6 requirement.
 
 GitHub lifecycle: ci-build label; one lock-projection job; auto-deregister; --rm; single-slot flock + orphan ps -aq preflight; no host persistence; no aptly/GPG/R2/CF/SSH/prod cred.
 
