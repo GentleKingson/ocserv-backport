@@ -1,8 +1,8 @@
-# Phase 1 — Ephemeral Runner Foundation Implementation Plan (v1.5)
+# Phase 1 — Ephemeral Runner Foundation Implementation Plan (v1.6)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **v1.5 revisions:** **IPv6 decision: Phase 1 is IPv4-only.** Deleted all ip6tables managed chains / IPv6 INPUT/FORWARD guard / IPv6 persistence / IPv6 rollback (do NOT maintain a second firewall for a protocol that is explicitly disabled). Replaced with IPv4-only Docker network + `EnableIPv6=false` + IPv6-IPAM-absence + runtime IPv6-absence verification (no global IPv6 addr, no IPv6 default route). Plus 6 closure items: (1) `ensure_audit_sink()` with strict owner/mode/kind (no `|| true` masking; init failure aborts live launch); (2) orphan preflight uses `docker ps -aq` (running/paused/exited/dead/removing all block new launch; no auto-delete); (3) cleanup tests verify `docker rm -f` called ONLY when all 3 labels match; (4) config source: clear inherited `RUNNER_*` env before parse, allowlist keys only, reject unknown/duplicate, fixed URL/LABEL/NETWORK; (5) workflow boundary via structural YAML parse (not grep); (6) runbook audited-clone install + source-file verification + `/tmp` missing-nodev negative test.
+> **v1.6 revisions (6 blocking items):** (1) IPv6 IPAM check fixed — uses real `.Subnet`/`.Gateway` IPAM fields (Docker has no reliable `.IPv6Subnet`); removed the false global daemon-IPv4-only promise (security boundary is the ci-build-egress network itself: `EnableIPv6=false` + IPv4-only IPAM + runtime IPv6-absence); (2) audit sink hardened — `-L` dangling-symlink check BEFORE `-e`, parent-chain trust verify, split into `ensure_audit_sink` (strict, pre-launch) + `write_audit_event` (best-effort, post-launch, never alters rc/breaks cleanup) + `audit_event` (strict); (3) cleanup flag lifecycle — `CONTAINER_LAUNCHED` stays 1 through audit+cleanup (only cleared after cleanup succeeds); orphan `docker ps -aq` failure now fail-closed (not masked as empty); (4) cleanup/orphan bats rewritten — real `container_label` stub, 6 scenarios (all-match→rm; each-label-mismatch→no-rm; absent→safe; ps-fail→die; exited-id→die); (5) firewall installer — installer flock, refuse rebuild while managed containers run, deny list adds `100.64.0.0/10` (CGNAT) + `0.0.0.0/8`, full managed-chain order match + persisted-ruleset (`iptables-save`) content verification (not just jump count); (6) workflow boundary test — recursive scan of ALL `*.yml`/`*.yaml`, job- AND step-level `env`/`secrets.`/`id-token`/`environment`/job-`permissions` forbidden, normalized trusted-event if-expression regex.
 
 **Goal:** Build a minimal, manually-triggered, **single-slot** (host flock + orphan-container preflight) ephemeral GitHub Actions runner that runs the `lock-projection` job in a non-root, non-privileged, docker-socket-less **IPv4-only** container, then auto-deregisters and auto-removes, with a **real, persistent, host-INPUT-aware IPv4 managed-chain** firewall egress boundary.
 
@@ -366,35 +366,49 @@ docker_argv_lines() {
   run bash -c "set +e; source '${PROVISIONER}'; docker(){ return 0; }; preflight_name_free ci-build-X; echo rc=\$?"; [ "$status" -ne 0 ]
 }
 
-@test "preflight_no_orphan_managed: uses docker ps -aq (any state); fail closed on leftover; ok when empty" {
-  # ps -aq returns a line (exited/dead/running) -> orphan -> die
-  run bash -c "set +e; source '${PROVISIONER}'; docker(){ [[ \"\$1\" == ps ]]; echo deadid; return 0; }; preflight_no_orphan_managed; echo rc=\$?"; [ "$status" -ne 0 ]
-  # ps -aq empty -> ok
-  run bash -c "set +e; source '${PROVISIONER}'; docker(){ [[ \"\$1\" == ps ]]; return 0; }; preflight_no_orphan_managed; echo rc=\$?"; [ "$status" -eq 0 ]
+@test "cleanup_this_container: rm called ONLY when all 3 labels match (real container_label stub)" {
+  # Helper: run cleanup with a stubbed container_label returning given (mb,ph,rn)
+  # and a docker() that records rm calls. Assert whether 'rm-ran' appears.
+  run_cleanup() {
+    local mb="$1" ph="$2" rn="$3" name="$4"
+    bash -c "set +e; source '${PROVISIONER}'
+      container_label(){  # stub: return label value based on \$2 (key)
+        case \"\$2\" in
+          com.ocserv-ci.managed-by) printf '%s' \"${mb}\" ;;
+          com.ocserv-ci.phase)      printf '%s' \"${ph}\" ;;
+          com.ocserv-ci.runner-name)printf '%s' \"${rn}\" ;;
+        esac; }
+      docker(){  # container exists (inspect ok); record rm
+        [[ \"\$1\" == inspect ]] && return 0
+        [[ \"\$1\" == rm ]] && { echo rm-ran; return 0; }
+        return 0; }
+      cleanup_this_container '${name}'
+      echo rc=\$?"
+  }
+  # 1. all 3 match -> rm called
+  out="$(run_cleanup runner-provisioner 1 ci-build-X ci-build-X)"; echo "$out" | grep -q 'rm-ran'
+  # 2. managed-by mismatch -> no rm
+  out="$(run_cleanup evil 1 ci-build-X ci-build-X)"; ! echo "$out" | grep -q 'rm-ran'
+  # 3. phase mismatch -> no rm
+  out="$(run_cleanup runner-provisioner 9 ci-build-X ci-build-X)"; ! echo "$out" | grep -q 'rm-ran'
+  # 4. runner-name mismatch -> no rm
+  out="$(run_cleanup runner-provisioner 1 ci-build-OTHER ci-build-X)"; ! echo "$out" | grep -q 'rm-ran'
 }
 
-@test "cleanup_this_container: rm called ONLY when all 3 labels match; any mismatch -> no rm" {
-  # All 3 match -> rm invoked (docker rm stub echoes 'rm-ran')
-  run bash -c "set +e; source '${PROVISIONER}'; \
-    docker(){ \
-      if [[ \"\$1\" == inspect ]]; then return 0; fi; \
-      if [[ \"\$1\" == rm ]]; then echo rm-ran; return 0; fi; \
-      return 0; }; \
-    docker_inspect_label(){ echo \"\$2\"; }; \
-    # stub the three label reads to all-match:
-    _label(){ echo \"\$2\"; }; \
-    cleanup_this_container ci-build-X; echo rc=\$?"
+@test "cleanup_this_container: container absent -> safe return, no rm" {
+  run bash -c "set +e; source '${PROVISIONER}'; docker(){ [[ \"\$1\" == inspect ]] && return 1; echo rm-ran; return 0; }; cleanup_this_container ci-build-X; echo rc=\$?"
   [ "$status" -eq 0 ]
-  # (The implementation reads labels via docker inspect -f; see impl. Test asserts the
-  # decision: when labels mismatch, 'rm-ran' must NOT appear.)
-  run bash -c "set +e; source '${PROVISIONER}'; \
-    docker(){ \
-      if [[ \"\$1\" == inspect ]]; then return 0; fi; \
-      if [[ \"\$1\" == rm ]]; then echo rm-ran; return 0; fi; \
-      return 0; }; \
-    # force a mismatch by stubbing the label helper to return wrong value for phase:
-    _label_managed_by(){ echo runner-provisioner; }; _label_phase(){ echo 9; }; _label_runner_name(){ echo ci-build-X; }; \
-    cleanup_this_container_mismatch ci-build-X 2>/dev/null; echo rc=\$?" || true
+  ! echo "$output" | grep -q 'rm-ran'
+}
+
+@test "preflight_no_orphan_managed: docker ps FAILS -> die (not masked as empty)" {
+  run bash -c "set +e; source '${PROVISIONER}'; docker(){ [[ \"\$1\" == ps ]] && return 1; return 0; }; preflight_no_orphan_managed; echo rc=\$?"
+  [ "$status" -ne 0 ]
+}
+
+@test "preflight_no_orphan_managed: docker ps -aq returns exited id -> die" {
+  run bash -c "set +e; source '${PROVISIONER}'; docker(){ [[ \"\$1\" == ps ]] && { echo deadid; return 0; }; return 0; }; preflight_no_orphan_managed; echo rc=\$?"
+  [ "$status" -ne 0 ]
 }
 
 @test "ensure_audit_sink: stub _path_metadata/_config_metadata; creates root:root dir 0750 + log 0640 regular; wrong owner/symlink/dir-as-log die" {
@@ -519,9 +533,12 @@ preflight_name_free() {
 # preflight_no_orphan_managed — ANY state (running/paused/exited/dead/removing).
 # Uses ps -aq so leftover exited/dead containers also block new launch (single-slot).
 # Does NOT auto-delete; operator cleans per runbook.
+# docker ps FAILURE (daemon down, permission) -> fail closed (NOT masked as "empty").
 preflight_no_orphan_managed() {
   local orphan
-  orphan="$(docker ps -aq --filter 'label=com.ocserv-ci.managed-by=runner-provisioner' --filter 'label=com.ocserv-ci.phase=1' 2>/dev/null || true)"
+  if ! orphan="$(docker ps -aq --filter 'label=com.ocserv-ci.managed-by=runner-provisioner' --filter 'label=com.ocserv-ci.phase=1' 2>/dev/null)"; then
+    die "cannot enumerate managed containers (docker ps failed); refusing live launch (fail closed)"
+  fi
   if [[ -n "${orphan}" ]]; then
     log "orphan managed container(s) present (inspect before cleanup):"
     docker inspect --format '{{.Name}} state={{.State.Status}}' ${orphan} >&2 2>/dev/null || true
@@ -529,30 +546,54 @@ preflight_no_orphan_managed() {
   fi
 }
 
-# ensure_audit_sink — strict; NO || true masking. Init failure aborts live launch.
+# ensure_audit_sink — STRICT, run ONCE before docker launch. Fails closed.
+# Verifies parent chain (/var, /var/log, AUDIT_DIR) trusted, rejects dangling
+# symlinks (-L before -e), creates root:root dir 0750 + log 0640 regular.
 ensure_audit_sink() {
-  # Directory: root:root, 0750, directory, non-symlink. Create if missing.
-  local dmeta; dmeta="$(_path_metadata "${AUDIT_DIR}")"
-  if [[ "${dmeta}" == missing ]]; then
+  # Parent chain of AUDIT_DIR must be trusted (root:root dir non-symlink, no g/w write).
+  assert_parent_paths_trusted "${AUDIT_DIR}"
+  # AUDIT_DIR: reject symlink FIRST (-L), then create-or-verify.
+  [[ ! -L "${AUDIT_DIR}" ]] || die "audit dir ${AUDIT_DIR} is a symlink (forbidden)"
+  if [[ ! -e "${AUDIT_DIR}" ]]; then
     install -d -o root -g root -m 0750 "${AUDIT_DIR}" || die "cannot create audit dir ${AUDIT_DIR}"
-  else
-    local downer dmode dkind; downer="${dmeta%% *}"; local dr="${dmeta#* }"; dmode="${dr%% *}"; dkind="${dr##* }"
-    [[ "${dkind}" == "directory" ]] || die "audit dir ${AUDIT_DIR} not a directory (got ${dkind})"
-    [[ "${downer}" == "root:root" ]] || die "audit dir ${AUDIT_DIR} owner=${downer} (need root:root)"
-    [[ "${dmode}" == "750" ]] || die "audit dir ${AUDIT_DIR} mode=${dmode} (need 750)"
   fi
-  # Logfile: root:root, 0640, regular, non-symlink. Create if missing.
+  # Re-read metadata after create and verify exactly.
+  local dmeta downer dmode dkind
+  dmeta="$(_path_metadata "${AUDIT_DIR}")"
+  [[ "${dmeta}" != missing ]] || die "audit dir ${AUDIT_DIR} missing after create"
+  downer="${dmeta%% *}"; local dr="${dmeta#* }"; dmode="${dr%% *}"; dkind="${dr##* }"
+  [[ "${dkind}" == "directory" ]] || die "audit dir ${AUDIT_DIR} not a directory (got ${dkind})"
+  [[ "${downer}" == "root:root" ]] || die "audit dir ${AUDIT_DIR} owner=${downer} (need root:root)"
+  [[ "${dmode}" == "750" ]] || die "audit dir ${AUDIT_DIR} mode=${dmode} (need 750)"
+  # AUDIT_LOG: reject symlink FIRST (-L), then create-or-verify. -e is false for
+  # dangling symlinks, so the -L check MUST come first to avoid writing through it.
+  [[ ! -L "${AUDIT_LOG}" ]] || die "audit log ${AUDIT_LOG} is a symlink (forbidden)"
   if [[ ! -e "${AUDIT_LOG}" ]]; then
     ( umask 037; : > "${AUDIT_LOG}" ) || die "cannot create audit log ${AUDIT_LOG}"
     chown root:root "${AUDIT_LOG}" || die "chown audit log failed"
     chmod 0640 "${AUDIT_LOG}" || die "chmod audit log failed"
-  else
-    local lmeta; lmeta="$(_config_metadata "${AUDIT_LOG}")"
-    local lowner lmode lkind; lowner="${lmeta%% *}"; local lr="${lmeta#* }"; lmode="${lr%% *}"; lkind="${lr##* }"
-    [[ "${lkind}" == "regular" ]] || die "audit log ${AUDIT_LOG} not regular (got ${lkind})"
-    [[ "${lowner}" == "root:root" ]] || die "audit log ${AUDIT_LOG} owner=${lowner} (need root:root)"
-    [[ "${lmode}" == "640" ]] || die "audit log ${AUDIT_LOG} mode=${lmode} (need 640)"
   fi
+  local lmeta lowner lmode lkind
+  lmeta="$(_config_metadata "${AUDIT_LOG}")"
+  lowner="${lmeta%% *}"; local lr="${lmeta#* }"; lmode="${lr%% *}"; lkind="${lr##* }"
+  [[ "${lkind}" == "regular" ]] || die "audit log ${AUDIT_LOG} not regular (got ${lkind})"
+  [[ "${lowner}" == "root:root" ]] || die "audit log ${AUDIT_LOG} owner=${lowner} (need root:root)"
+  [[ "${lmode}" == "640" ]] || die "audit log ${AUDIT_LOG} mode=${lmode} (need 640)"
+}
+
+# write_audit_event — BEST-EFFORT, used AFTER docker launch. Must NOT change the
+# runner's original exit code or break cleanup. Write failure -> stderr only.
+write_audit_event() {
+  local ev="$1" name="$2" image="$3" extra="${4:-}"
+  printf '%s event=%s name=%s image=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${ev}" "${name}" "${image}" "${extra}" \
+    >>"${AUDIT_LOG}" 2>/dev/null || log "WARN: audit write failed (best-effort, not aborting)"
+}
+
+# audit_event — STRICT (pre-launch); calls ensure_audit_sink then writes (die on failure).
+audit_event() {
+  ensure_audit_sink
+  printf '%s event=%s name=%s image=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "${4:-}" \
+    >>"${AUDIT_LOG}" || die "audit write failed ${AUDIT_LOG}"
 }
 
 acquire_single_slot() {
@@ -565,26 +606,24 @@ acquire_single_slot() {
 
 current_uid() { id -u; }
 
+# container_label <name> <label-key> — stubbable; real impl uses docker inspect.
+container_label() { docker inspect -f "{{index .Config.Labels \"$2\"}}" "$1" 2>/dev/null || true; }
+
 # cleanup_this_container: rm ONLY if all 3 ownership labels match exactly.
+# Uses container_label (stubbable in tests). Container absent -> safe return.
 cleanup_this_container() {
   local name="$1"
   docker inspect "${name}" >/dev/null 2>&1 || return 0
   local mb ph rn
-  mb="$(docker inspect -f '{{index .Config.Labels "com.ocserv-ci.managed-by"}}' "${name}" 2>/dev/null || true)"
-  ph="$(docker inspect -f '{{index .Config.Labels "com.ocserv-ci.phase"}}' "${name}" 2>/dev/null || true)"
-  rn="$(docker inspect -f '{{index .Config.Labels "com.ocserv-ci.runner-name"}}' "${name}" 2>/dev/null || true)"
+  mb="$(container_label "${name}" "com.ocserv-ci.managed-by")"
+  ph="$(container_label "${name}" "com.ocserv-ci.phase")"
+  rn="$(container_label "${name}" "com.ocserv-ci.runner-name")"
   if [[ "${mb}" == "runner-provisioner" && "${ph}" == "1" && "${rn}" == "${name}" ]]; then
     log "cleanup: removing this-provisioner container ${name}"
     docker rm -f "${name}" >/dev/null 2>&1 || true
   else
     log "WARN: container ${name} labels mismatch (mb=${mb} ph=${ph} rn=${rn}); NOT removing"
   fi
-}
-
-audit_event() {
-  local ev="$1" name="$2" image="$3" extra="${4:-}"
-  ensure_audit_sink
-  printf '%s event=%s name=%s image=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${ev}" "${name}" "${image}" "${extra}" >>"${AUDIT_LOG}" || die "audit write failed ${AUDIT_LOG}"
 }
 
 main() {
@@ -633,11 +672,13 @@ main() {
     if [[ ${rc} -eq 124 ]]; then ev=timeout
     elif [[ ${rc} -gt 128 ]]; then ev=signal; fi
   fi
-  CONTAINER_LAUNCHED=0
+  # Keep CONTAINER_LAUNCHED=1 through audit+cleanup so EXIT trap still cleans up
+  # if anything below throws. Use best-effort write (must not alter rc/break cleanup).
   log "runner ${RUNNER_NAME} ${ev} rc=${rc}"
-  audit_event "${ev}" "${RUNNER_NAME}" "${RUNNER_IMAGE}" "rc=${rc}"
+  write_audit_event "${ev}" "${RUNNER_NAME}" "${RUNNER_IMAGE}" "rc=${rc}"
   trap - EXIT TERM INT
   cleanup_this_container "${RUNNER_NAME}"
+  CONTAINER_LAUNCHED=0   # only clear after cleanup succeeded
   return ${rc}
 }
 
@@ -932,42 +973,54 @@ verify_path_trusted() {
 }
 
 # verify_ci_build_network — IPv4-only; same checks for new AND existing.
+# Uses real IPAM fields (.Subnet/.Gateway) — Docker has no reliable .IPv6Subnet field.
 verify_ci_build_network() {
-  local drv sub gw br ipv6
+  local drv br ipv6
   drv="$(docker network inspect ci-build-egress -f '{{.Driver}}')"
-  sub="$(docker network inspect ci-build-egress -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}')"
-  gw="$(docker network inspect ci-build-egress -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
   br="$(docker network inspect ci-build-egress -f '{{index .Options "com.docker.network.bridge.name"}}')"
   ipv6="$(docker network inspect ci-build-egress -f '{{.EnableIPv6}}')"
   [[ "${drv}" == bridge ]] || die "driver=${drv} (need bridge)"
-  [[ "${sub}" == "${SUBNET}" ]] || die "subnet=${sub} (need ${SUBNET})"
-  [[ "${gw}" == "${GW}" ]] || die "gateway=${gw} (need ${GW})"
   [[ "${br}" == "${BRIDGE}" ]] || die "bridge=${br} (need ${BRIDGE})"
   [[ "${ipv6}" == false ]] || die "EnableIPv6=${ipv6} (need false; Phase 1 is IPv4-only)"
-  # No IPv6 IPAM entries.
-  local v6ipam; v6ipam="$(docker network inspect ci-build-egress -f '{{range .IPAM.Config}}{{.IPv6Subnet}}{{end}}' 2>/dev/null || true)"
-  [[ -z "${v6ipam}" ]] || die "ci-build-egress has IPv6 IPAM subnet '${v6ipam}' (Phase 1 IPv4-only)"
+  # IPAM: exactly one entry, IPv4 subnet+gateway, no IPv6 data (no ':' in either field).
+  local -a ipam_lines=()
+  mapfile -t ipam_lines < <(docker network inspect ci-build-egress \
+    -f '{{range .IPAM.Config}}{{printf "%s\t%s\n" .Subnet .Gateway}}{{end}}')
+  [[ ${#ipam_lines[@]} -eq 1 ]] || die "ci-build-egress must have exactly one IPAM config (got ${#ipam_lines[@]})"
+  [[ "${ipam_lines[0]}" == "${SUBNET}"$'\t'"${GW}" ]] \
+    || die "ci-build-egress IPAM must be ${SUBNET} / ${GW} (got '${ipam_lines[0]}')"
+  [[ "${ipam_lines[0]}" != *:* ]] || die "ci-build-egress IPAM contains IPv6 data (':' present)"
 }
 
-# Reject host whose Docker daemon has global IPv6 enabled (could assign IPv6 to the bridge).
-assert_daemon_ipv4_only() {
-  local cidrv6; cidrv6="$(docker info -f '{{.IPv6Forwarding}}' 2>/dev/null || true)"
-  # If daemon advertises fixed-cidr-v6 in its config, fail closed.
-  if docker network inspect bridge -f '{{.EnableIPv6}}' 2>/dev/null | grep -qi true; then
-    die "Docker default bridge has EnableIPv6=true; daemon global IPv6 may leak to ci-build-egress. Use an IPv4-only runner host."
-  fi
-}
+# Phase 1 security boundary is the ci-build-egress network itself (EnableIPv6=false +
+# IPv4-only IPAM + runtime IPv6-absence), NOT a global daemon-IPv4-only promise.
+# We do NOT inspect daemon.json / dockerd flags (unreliable to prove); the per-network
+# + runtime checks above/below are the authoritative IPv4-only enforcement.
 
 main() {
   [[ "$(id -u)" -eq 0 ]] || die "run as root"
   [[ -f "${PROVISIONER_SRC}" ]] || die "provisioner source not found"
 
-  # 1. Verify persistence + backend FIRST.
+  # 1. Verify persistence + backend FIRST. (IPv4-only is enforced per-network +
+  #    at runtime, not via a global daemon promise — see verify_ci_build_network.)
   command -v netfilter-persistent >/dev/null 2>&1 || die "netfilter-persistent missing (install iptables-persistent)"
   systemctl is-enabled netfilter-persistent >/dev/null 2>&1 || die "netfilter-persistent not enabled (rules won't survive reboot)"
   iptables -n -L DOCKER-USER >/dev/null 2>&1 || die "DOCKER-USER missing — Docker must use iptables backend"
-  assert_daemon_ipv4_only
-  log "prerequisites OK (netfilter-persistent enabled + Docker iptables backend + daemon IPv4-only)"
+  log "prerequisites OK (netfilter-persistent enabled + Docker iptables backend)"
+
+  # 1b. Installer flock (prevent concurrent firewall rebuild) + refuse rebuild
+  #     while any Phase 1 managed container exists (avoid firewall gap mid-run).
+  install -d -m 0755 /run/lock 2>/dev/null || true
+  exec 8>/run/lock/ocserv-ci-firewall-install.lock
+  flock -n 8 || die "another installer holds the firewall-install lock; aborting"
+  local inst_orphan
+  if ! inst_orphan="$(docker ps -aq --filter 'label=com.ocserv-ci.managed-by=runner-provisioner' --filter 'label=com.ocserv-ci.phase=1' 2>/dev/null)"; then
+    die "cannot enumerate managed containers (docker ps failed); refusing firewall rebuild (fail closed)"
+  fi
+  if [[ -n "${inst_orphan}" ]]; then
+    die "Phase 1 managed container(s) running (${inst_orphan}); refusing firewall rebuild (stop/remove runners first)"
+  fi
+  log "installer lock acquired; no managed containers running"
 
   # 2. Install provisioner + verify source files + parent paths.
   install -d -o root -g root -m 0755 /usr/local/libexec
@@ -1026,7 +1079,11 @@ EOF
 build_and_persist_firewall() {
   iptables -N "${EGRESS_CHAIN}" 2>/dev/null || iptables -F "${EGRESS_CHAIN}"
   iptables -N "${HOST_GUARD}" 2>/dev/null || iptables -F "${HOST_GUARD}"
-  for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.0/8 169.254.0.0/16 "${GW}"; do
+  # Deny non-global IPv4 ranges (RFC1918 + loopback + link-local + CGNAT 100.64/10 +
+  # host gateway). After these denies, only the remaining (public) IPv4 space is
+  # eligible for the 443/80 RETURN — i.e. NOT a "public-only" claim, but
+  # "non-global ranges denied, then 443/80 allowed".
+  for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 0.0.0.0/8 "${GW}"; do
     iptables -A "${EGRESS_CHAIN}" -i "${BRIDGE}" -d "${cidr}" -j DROP -m comment --comment "ocserv-ci deny ${cidr}"
   done
   iptables -A "${EGRESS_CHAIN}" -i "${BRIDGE}" -p tcp --dport 443 -j RETURN -m comment --comment "ocserv-ci allow 443"
@@ -1038,14 +1095,29 @@ build_and_persist_firewall() {
   iptables -I DOCKER-USER -i "${BRIDGE}" -j "${EGRESS_CHAIN}" -m comment --comment "${JUMP_COMMENT}"
   while iptables -D INPUT -i "${BRIDGE}" -j "${HOST_GUARD}" -m comment --comment "${GUARD_COMMENT}" 2>/dev/null; do :; done
   iptables -I INPUT -i "${BRIDGE}" -j "${HOST_GUARD}" -m comment --comment "${GUARD_COMMENT}"
-  # Save + verify (exactly one jump each; chain content present). No ip6tables.
-  netfilter-persistent save >/dev/null 2>&1 || return 1
+
+  # Active-ruleset verification: exactly one jump each + full managed-chain order match.
   iptables -C DOCKER-USER -i "${BRIDGE}" -j "${EGRESS_CHAIN}" -m comment --comment "${JUMP_COMMENT}" >/dev/null 2>&1 || return 1
   iptables -C INPUT -i "${BRIDGE}" -j "${HOST_GUARD}" -m comment --comment "${GUARD_COMMENT}" >/dev/null 2>&1 || return 1
   local n_egress n_guard
   n_egress="$(iptables -S DOCKER-USER | grep -cF -- "-j ${EGRESS_CHAIN} -m comment --comment \"${JUMP_COMMENT}\"" || true)"
   n_guard="$(iptables -S INPUT | grep -cF -- "-j ${HOST_GUARD} -m comment --comment \"${GUARD_COMMENT}\"" || true)"
   [[ "${n_egress}" -eq 1 && "${n_guard}" -eq 1 ]] || { log "jump count egress=${n_egress} guard=${n_guard}"; return 1; }
+  # Full managed-chain content (fixed order) — not just "a rule exists".
+  local egress_rules guard_rules
+  egress_rules="$(iptables -S "${EGRESS_CHAIN}")"
+  guard_rules="$(iptables -S "${HOST_GUARD}")"
+  echo "${egress_rules}" | grep -q -- "-d 100.64.0.0/10 .*ocserv-ci deny 100.64.0.0/10" || return 1
+  echo "${egress_rules}" | grep -q -- "--dport 443 .*ocserv-ci allow 443" || return 1
+  echo "${egress_rules}" | grep -q -- "ocserv-ci default deny" || return 1
+  [[ "$(echo "${guard_rules}" | grep -c -- "${GUARD_COMMENT}")" -eq 1 ]] || return 1
+
+  # Persist + verify the PERSISTED ruleset (active ruleset alone ≠ survives reboot).
+  netfilter-persistent save >/dev/null 2>&1 || return 1
+  local persisted; persisted="$(iptables-save 2>/dev/null)"
+  echo "${persisted}" | grep -qF -- ":${EGRESS_CHAIN} " || { log "persisted ruleset missing chain ${EGRESS_CHAIN}"; return 1; }
+  echo "${persisted}" | grep -qF -- "-j ${EGRESS_CHAIN} -m comment --comment \"${JUMP_COMMENT}\"" || { log "persisted ruleset missing egress jump"; return 1; }
+  echo "${persisted}" | grep -qF -- "-j ${HOST_GUARD} -m comment --comment \"${GUARD_COMMENT}\"" || { log "persisted ruleset missing host-guard jump"; return 1; }
   return 0
 }
 
@@ -1174,46 +1246,85 @@ permissions:
           done < <(find source-lock -type f -name '*.lock.tsv' -print0 | sort -z)
 ```
 
-- [ ] **Step 2: Structural YAML boundary test** (`test/test_workflow_boundary.py` — not grep)
+- [ ] **Step 2: Structural YAML boundary test — recursive, all workflow files** (`test/test_workflow_boundary.py` — not grep)
 
 ```python
 #!/usr/bin/env python3
-"""Structural validation of the ci-build workflow scheduling boundary (Phase 1).
-Run: python3 test/test_workflow_boundary.py  (or via make test if wired)."""
-import sys, yaml, pathlib
+"""Recursive structural validation of the ci-build workflow scheduling boundary (Phase 1).
+Checks job- AND step-level (env/secrets/id-token forbidden recursively), job-level
+permissions override, exact runs-on, normalized trusted-event if-expression, and
+scans ALL .github/workflows/*.yml + *.yaml (structural parse, not text grep).
+Run: python3 test/test_workflow_boundary.py"""
+import sys, yaml, pathlib, re
 
-WF = pathlib.Path(".github/workflows/ci-testing.yml")
+WFDIR = pathlib.Path(".github/workflows")
 REPO_RUNNER_URL = "https://github.com/GentleKingson/ocserv-backport"
+ALLOWED_IF = re.compile(
+    r"\(\s*github\.event_name\s*==\s*['\"]push['\"]\s*&&\s*github\.ref\s*==\s*['\"]refs/heads/main['\"]\s*\)"
+    r"\s*\|\|\s*"
+    r"\(\s*github\.event_name\s*==\s*['\"]workflow_dispatch['\"]\s*&&\s*github\.ref\s*==\s*['\"]refs/heads/main['\"]\s*\)",
+    re.MULTILINE)
+
+def workflows():
+    for p in sorted(list(WFDIR.glob("*.yml")) + list(WFDIR.glob("*.yaml"))):
+        yield p, yaml.safe_load(p.read_text())
+
+# Recursively walk a job + its steps; collect any node whose key is a forbidden
+# scheduling-secret surface, or any string value referencing secrets./id-token.
+FORBIDDEN_KEYS = {"environment", "id-token"}
+def find_secret_surfaces(obj, path=""):
+    hits = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            p = f"{path}.{k}" if path else k
+            if k in FORBIDDEN_KEYS:
+                hits.append(p)
+            if k == "env":
+                hits.append(p)  # env at any level is forbidden on this job
+            if k == "permissions" and path:  # job-level permissions override
+                hits.append(f"{p}={v}")
+            if isinstance(v, str) and ("secrets." in v or "id-token" in v.lower()):
+                hits.append(f"{p}(str:{v[:40]})")
+            hits += find_secret_surfaces(v, p)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            hits += find_secret_surfaces(v, f"{path}[{i}]")
+    return hits
 
 def main():
-    doc = yaml.safe_load(WF.read_text())
     failures = []
-    perms = doc.get("permissions", {})
-    if perms != {"contents": "read"}:
-        failures.append(f"top-level permissions must be exactly contents:read (got {perms})")
-    jobs = doc.get("jobs", {})
-    cibuild_jobs = [n for n, j in jobs.items() if j.get("runs-on") == ["self-hosted", "ci-build"]]
-    if cibuild_jobs != ["lock-projection-cibuild"]:
-        failures.append(f"ci-build must appear on exactly lock-projection-cibuild (got {cibuild_jobs})")
-    j = jobs["lock-projection-cibuild"]
-    if "secrets" in j or "environment" in j:
-        failures.append("cibuild job must not declare secrets/environment")
-    steps_yaml = yaml.safe_dump(j.get("steps", []))
-    if "id-token" in steps_yaml and "write" in steps_yaml:
-        failures.append("cibuild job must not have id-token: write")
-    # trusted-event: if-expression restricts to push/main or workflow_dispatch/main.
-    expr = str(j.get("if", ""))
-    if "github.event_name == 'push'" not in expr or "github.ref == 'refs/heads/main'" not in expr \
-       or "github.event_name == 'workflow_dispatch'" not in expr:
-        failures.append(f"cibuild if-expression must restrict to push/main + workflow_dispatch/main (got: {expr})")
-    # No other workflow in .github uses ci-build.
-    other = [p.name for p in pathlib.Path(".github/workflows").glob("*.yml")
-             if p != WF and "ci-build" in p.read_text()]
-    if other:
-        failures.append(f"other workflows reference ci-build: {other}")
+    cibuild_locations = []  # (file, jobname)
+    top_perms_ok = False
+    for wf, doc in workflows():
+        if not isinstance(doc, dict):
+            continue
+        # top-level permissions only checked on ci-testing.yml
+        if wf.name == "ci-testing.yml":
+            if doc.get("permissions") != {"contents": "read"}:
+                failures.append(f"{wf.name}: top-level permissions must be exactly contents:read (got {doc.get('permissions')})")
+            top_perms_ok = True
+        for jn, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            if job.get("runs-on") == ["self-hosted", "ci-build"]:
+                cibuild_locations.append((wf.name, jn))
+                # ci-build job: recursive secret/env/id-token/environment/job-permissions scan
+                hits = find_secret_surfaces(job, jn)
+                if hits:
+                    failures.append(f"{wf.name}.{jn}: forbidden surfaces: {hits}")
+                # exact if-expression (normalized)
+                expr = str(job.get("if", ""))
+                if not ALLOWED_IF.search(expr.replace("\n", " ")):
+                    failures.append(f"{wf.name}.{jn}: if-expression must be exactly push/main OR workflow_dispatch/main (got: {expr[:120]})")
+    # ci-build must appear exactly once, only in ci-testing.yml.lock-projection-cibuild
+    if cibuild_locations != [("ci-testing.yml", "lock-projection-cibuild")]:
+        failures.append(f"ci-build must appear exactly once on ci-testing.yml.lock-projection-cibuild (got {cibuild_locations})")
+    if not top_perms_ok:
+        failures.append("ci-testing.yml missing or has no top-level permissions")
     if failures:
         print("FAIL:"); [print(" -", f) for f in failures]; sys.exit(1)
-    print("workflow boundary OK (ci-build exactly once, trusted-event, contents:read, no secrets/env/id-token)")
+    print("workflow boundary OK: ci-build exactly once; recursive no env/secrets/id-token/environment/job-permissions;")
+    print("  trusted-event if normalized; top-level permissions contents:read; no other workflow uses ci-build.")
     print(f"NOTE: runner registration URL must be repository-scoped: {REPO_RUNNER_URL} (verify in GitHub UI, not org-level)")
 
 if __name__ == "__main__":
