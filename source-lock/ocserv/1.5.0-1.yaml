@@ -1,10 +1,7 @@
+---
 schema_version: 1
 source: ocserv
 debian_version: "1.5.0-1"
-allowed_sources:
-  - pool
-  - snapshot
-snapshot_timestamp: "20260616T083027Z"
 pool_path: "main/o/ocserv"
 dsc:
   name: ocserv_1.5.0-1.dsc

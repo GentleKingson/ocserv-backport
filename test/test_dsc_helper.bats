@@ -61,6 +61,11 @@ call_dsc() {
   [ "$status" -ne 0 ]
 }
 
+@test "validate_artifact_basenames: rejects dash-prefixed names" {
+  call_dsc "validate_artifact_basenames 'a.tar -evil.tar'"
+  [ "$status" -ne 0 ]
+}
+
 # ---- parse_dsc_full strict cross-check (review fix #2) ----
 
 @test "parse_dsc_full: dies when Checksums-Sha256 has a file NOT in Files" {
@@ -104,6 +109,15 @@ call_dsc() {
   printf '%s\n' \
     'Files:' ' onlyonefield' \
     'Checksums-Sha256:' ' sha1 100 a.tar' > "$tmpd/x.dsc"
+  call_dsc "parse_dsc_full '$tmpd/x.dsc'"
+  rm -rf "$tmpd"; [ "$status" -ne 0 ]
+}
+
+@test "parse_dsc_full: dies on unsafe basename" {
+  tmpd="$(mktemp -d)"
+  printf '%s\n' \
+    'Files:' ' 1 100 -bad.tar' \
+    'Checksums-Sha256:' ' sha1 100 -bad.tar' > "$tmpd/x.dsc"
   call_dsc "parse_dsc_full '$tmpd/x.dsc'"
   rm -rf "$tmpd"; [ "$status" -ne 0 ]
 }

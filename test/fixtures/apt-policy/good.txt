@@ -1,8 +1,0 @@
-ocserv:
-  Installed: (none)
-  Candidate: 1.5.0-1~bpo13+1
-  Version Table:
-     1.5.0-1~bpo13+1 1001
-       1001 https://apt.example.com/prod trixie-production/main amd64 Packages
-     1.2.0-1 500
-        500 http://deb.debian.org/debian trixie/main amd64 Packages

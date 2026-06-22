@@ -1,74 +1,40 @@
-# ocserv-backport — local==CI entrypoint. Spec §4.5.
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 OCSERV_VERSION := 1.5.0-1~bpo13+1
 
 .PHONY: help
-help: ## Show targets
+help: ## Show supported targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*##/:/' | column -t -s:
 
 .PHONY: test
-test: ## run bats test suite
+test: ## Run Bats test suite
 	bats test/
 
-.PHONY: snapshot-name
-snapshot-name: ## Print the snapshot name for current context
-	@scripts/snapshot-name.sh
+.PHONY: verify-lock
+verify-lock: ## Verify source-lock YAML files match generated TSV projections
+	scripts/verify-source-lock.sh
 
 .PHONY: fetch rewrap src-pkg
-fetch: ## fetch ocserv source per FETCH_SOURCE (pool|cache), locked by source-lock/
+fetch: verify-lock ## Fetch locked ocserv source from Debian pool
 	scripts/fetch-source.sh
-rewrap: ## rewrite changelog to backport version
+
+rewrap: ## Rewrite changelog to the trixie backport version
 	scripts/rewrap-changelog.sh
-src-pkg: ## regenerate backport .dsc
+
+src-pkg: ## Build the backport source package
 	scripts/build-source-package.sh
 
 .PHONY: binary lint
-binary: ## sbuild binary deb in trixie schroot
+binary: ## Build amd64 binary package with sbuild in trixie
 	scripts/build-binary.sh
-lint: ## lintian on .changes (errors fatal)
+
+lint: ## Run lintian on the generated .changes
 	scripts/lint-package.sh
 
-.PHONY: smoke smoke-basic smoke-service
-smoke: smoke-basic           ## alias: smoke-basic
-smoke-basic:                 ## container smoke (no systemd)
-	scripts/smoke-test.sh basic
-smoke-service:               ## host smoke (needs systemd VM)
-	scripts/smoke-test.sh service
-
-.PHONY: pub-testing pub-prod require-SNAP
-require-SNAP:
-	@test -n "$(SNAP)" || { echo "SNAP is required"; exit 1; }
-
-pub-testing: ## publish testing channel (auto snapshot name)
-	scripts/aptly-publish.sh testing $$(scripts/snapshot-name.sh) $(OCSERV_VERSION)
-
-pub-prod: require-SNAP ## publish production channel (SNAP=... required)
-	scripts/aptly-publish.sh production $(SNAP) $(OCSERV_VERSION)
-
-.PHONY: sync-testing purge-testing sync-prod purge-prod \
-        rollback-testing rollback-prod require-TARGET_SNAP
-require-TARGET_SNAP:
-	@test -n "$(TARGET_SNAP)" || { echo "TARGET_SNAP is required"; exit 1; }
-
-sync-testing: ; scripts/r2-sync.sh testing
-sync-prod:    ; scripts/r2-sync.sh production
-purge-testing: ; scripts/cf-purge.sh testing
-purge-prod:    ; scripts/cf-purge.sh production
-
-rollback-testing: require-TARGET_SNAP
-	scripts/aptly-rollback.sh testing $(TARGET_SNAP)
-rollback-prod: require-TARGET_SNAP
-	scripts/aptly-rollback.sh production $(TARGET_SNAP)
-rollback-testing-auto: ## rollback testing using previous-good manifest (CI auto)
-	scripts/aptly-rollback.sh testing
-rollback-prod-auto: ## rollback production using previous-good manifest
-	scripts/aptly-rollback.sh production
+.PHONY: smoke-basic
+smoke-basic: ## Install and inspect the local .deb in a trixie container
+	scripts/smoke-test.sh
 
 .PHONY: dry-run
-dry-run: ## end-to-end local dry-run (no real aptly/R2/staging/prod)
+dry-run: ## Run the full local backport validation pipeline
 	scripts/dry-run.sh
-
-.PHONY: bootstrap-build-host
-bootstrap-build-host: ## Bootstrap the trixie build host (run ON the builder)
-	scripts/bootstrap-build-host.sh $(ARGS)
