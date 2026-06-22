@@ -1,4 +1,4 @@
-META	ocserv	1.5.0-1	pool,snapshot	20260616T083027Z	main/o/ocserv	ocserv_1.5.0-1.dsc	2761	20b758de26a7a372707556ec2e3bb1f847257efaa0d04b40783c20d91a82d9dc
+META	ocserv	1.5.0-1	main/o/ocserv	ocserv_1.5.0-1.dsc	2761	20b758de26a7a372707556ec2e3bb1f847257efaa0d04b40783c20d91a82d9dc
 ARTIFACT	ocserv_1.5.0.orig.tar.xz	547428	42ced08958b9576ab134fcb7bdc7f8df5e13214fd147855f99021fedcf0eedbe
 ARTIFACT	ocserv_1.5.0.orig.tar.xz.asc	667	2e8d560879f84643260cc61d1723bd49219042ea9967eb52d99af32a498673c7
 ARTIFACT	ocserv_1.5.0-1.debian.tar.xz	26864	36f1701707453c83ea97e0de2f776f3d9ed3ad6c7943c443bbb3a91fe36f0c4c

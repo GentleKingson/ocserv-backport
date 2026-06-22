@@ -34,7 +34,10 @@ validate_artifact_basenames() {
   local -a arr=( ${names} )
   local seen="" n
   for n in "${arr[@]}"; do
-    [[ "${n}" != *"/"* && "${n}" != *"\\"* && "${n}" != ".." && "${n}" != "." && "${n}" != *[[:cntrl:]]* && "${n}" != *" "* ]] \
+    [[ -n "${n}" && "${n}" != "." && "${n}" != ".." \
+      && "${n}" != -* \
+      && "${n}" != *"/"* && "${n}" != *"\\"* \
+      && ! "${n}" =~ [[:space:]] && ! "${n}" =~ [[:cntrl:]] ]] \
       || { echo "bad basename: ${n}" >&2; return 1; }
     if printf '%s\n' "${seen}" | grep -qxF -- "${n}"; then
       { echo "dup basename: ${n}" >&2; return 1; }

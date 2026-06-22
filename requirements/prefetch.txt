@@ -1,2 +1,0 @@
-# requirements/prefetch.txt
-PyYAML==6.0.2

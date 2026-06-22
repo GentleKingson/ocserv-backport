@@ -1,9 +1,9 @@
 # macOS Finder metadata
 .DS_Store
 
-# real bootstrap values
-.env
-.bootstrap.env
-
 # build artifacts (deb/dsc/changes produced by fetch/src-pkg/binary)
 build/
+
+# Python bytecode from local syntax checks
+__pycache__/
+*.pyc

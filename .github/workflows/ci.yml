@@ -1,0 +1,61 @@
+---
+name: ci
+
+"on":
+  push:
+    paths:
+      - 'scripts/**'
+      - 'test/**'
+      - 'source-lock/**'
+      - 'Makefile'
+      - 'README.md'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'test/**'
+      - 'source-lock/**'
+      - 'Makefile'
+      - 'README.md'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bats \
+            python3-yaml \
+            shellcheck \
+            yamllint
+
+      - name: Bash syntax
+        run: |
+          find scripts -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 \
+            | xargs -0 -r bash -n
+
+      - name: ShellCheck
+        run: |
+          find scripts -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 \
+            | xargs -0 -r shellcheck -x
+
+      - name: Python syntax
+        run: python3 -m compileall scripts test
+
+      - name: YAML lint
+        run: yamllint .github source-lock
+
+      - name: Verify source lock projection
+        run: make verify-lock
+
+      - name: Unit tests
+        run: make test

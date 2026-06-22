@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/_common.sh"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/_common.sh
+. "${SCRIPT_DIR}/_common.sh"
 
-# Spec §2.5. Rewrite changelog to backport version + trixie distribution.
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+1}"
+SOURCE_VERSION="1.5.0-1"
+TARGET_DISTRIBUTION="trixie"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 
@@ -11,12 +14,27 @@ SRCDIR="build/source/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~bpo13+1 -> 1.5.
 [[ -d "${SRCDIR}" ]] || die "missing source tree: ${SRCDIR}"
 cd "${SRCDIR}"
 
+current_version="$(dpkg-parsechangelog -SVersion)"
+if [[ "${current_version}" == "${BACKPORT_VERSION}" ]]; then
+  die "changelog already rewrapped to ${BACKPORT_VERSION}; rerun fetch before rewrap"
+fi
+[[ "${current_version}" == "${SOURCE_VERSION}" ]] \
+  || die "unexpected changelog version ${current_version}; expected ${SOURCE_VERSION}"
+
 export DEBEMAIL="${MAINTAINER_EMAIL}"
 export DEBFULLNAME="${MAINTAINER_NAME}"
 
-dch --distribution trixie --force-distribution \
+dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
     --force-bad-version \
     -v "${BACKPORT_VERSION}" \
-    "Private rebuild for Debian 13 trixie."
-log "changelog top version: $(dpkg-parsechangelog -SVersion)"
-log "changelog distribution: $(dpkg-parsechangelog -SDistribution)"
+    "Backport ocserv ${SOURCE_VERSION} for Debian trixie."
+
+new_version="$(dpkg-parsechangelog -SVersion)"
+new_distribution="$(dpkg-parsechangelog -SDistribution)"
+[[ "${new_version}" == "${BACKPORT_VERSION}" ]] \
+  || die "changelog version ${new_version} != ${BACKPORT_VERSION}"
+[[ "${new_distribution}" == "${TARGET_DISTRIBUTION}" ]] \
+  || die "changelog distribution ${new_distribution} != ${TARGET_DISTRIBUTION}"
+
+log "changelog top version: ${new_version}"
+log "changelog distribution: ${new_distribution}"
