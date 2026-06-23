@@ -27,6 +27,7 @@ RE_SOURCE = re.compile(r"^[a-z0-9][a-z0-9+.\-]*$")
 RE_DEBIAN_VERSION = re.compile(r"^[A-Za-z0-9.+~\-]+$")
 RE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RE_POOL_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+._\-]*$")
+RE_POOL_PATH_FORBIDDEN = re.compile(r"://|[?#%]")
 RE_SAFE_BASENAME = re.compile(r"^[^/\\\x00-\x1f\x7f\s]+$")
 
 
@@ -51,23 +52,35 @@ def check_lock_path_identity(lock_path, data):
         fail(f"lock path version {stem!r} != YAML debian_version {data['debian_version']!r}")
 
 
-def check_pool_path(path):
+def _require_pool_path_string(path):
     if not isinstance(path, str) or path == "":
         fail("pool_path must be a non-empty string")
+
+
+def _check_pool_path_syntax(path):
     if path.startswith("/") or path.endswith("/"):
         fail(f"pool_path must not have leading/trailing slash: {path!r}")
     if "\\" in path:
         fail("pool_path must not contain backslash")
     if re.search(r"[\x00-\x1f\x7f\s]", path):
         fail("pool_path must not contain control characters or whitespace")
-    if "://" in path or "?" in path or "#" in path or "%" in path:
+    if RE_POOL_PATH_FORBIDDEN.search(path):
         fail("pool_path must not contain :// ? # %")
-    segs = path.split("/")
-    if any(seg in ("", ".", "..") for seg in segs):
+
+
+def _check_pool_path_segments(path):
+    segments = path.split("/")
+    if any(segment in ("", ".", "..") for segment in segments):
         fail(f"pool_path has empty/./.. segment: {path!r}")
-    for seg in segs:
-        if not RE_POOL_SEGMENT.match(seg):
-            fail(f"pool_path segment invalid: {seg!r}")
+    for segment in segments:
+        if not RE_POOL_SEGMENT.match(segment):
+            fail(f"pool_path segment invalid: {segment!r}")
+
+
+def check_pool_path(path):
+    _require_pool_path_string(path)
+    _check_pool_path_syntax(path)
+    _check_pool_path_segments(path)
 
 
 def check_size(value, field):
