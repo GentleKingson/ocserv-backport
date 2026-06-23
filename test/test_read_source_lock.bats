@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 load helpers/bats-helper.bash
 
 READ_LOCK="python3 ${REPO_ROOT}/scripts/read-source-lock.py"
@@ -48,6 +49,19 @@ assert_invalid_lock_body() {
   run ${READ_LOCK} --lock "${LOCK_PATH}"
   cleanup_lock_tree
   [ "${status}" -eq 1 ]
+}
+
+write_lock_with_pool_path() {
+  local pool_path="$1"
+  make_lock_tree
+  cat > "${LOCK_PATH}" <<YAML
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "${pool_path}"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
 }
 
 @test "valid pool-only lock emits narrowed deterministic TSV" {
@@ -160,6 +174,47 @@ YAML
     cleanup_lock_tree
     [ "${status}" -eq 1 ]
   done
+}
+
+@test "pool_path validation preserves failure priority" {
+  write_lock_with_pool_path "/main//ocserv"
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [ "${stderr}" = "pool_path must not have leading/trailing slash: '/main//ocserv'" ]
+
+  write_lock_with_pool_path "main//ocserv"
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [ "${stderr}" = "pool_path has empty/./.. segment: 'main//ocserv'" ]
+
+  write_lock_with_pool_path "main/./ocserv"
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [ "${stderr}" = "pool_path has empty/./.. segment: 'main/./ocserv'" ]
+}
+
+@test "pool_path forbidden URL characters preserve exact error boundary" {
+  for pool_path in "https://evil.invalid/x" "main/o/ocserv?x=1" "main/o/ocserv#frag" "main/o/ocserv%20"; do
+    write_lock_with_pool_path "${pool_path}"
+    run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+    cleanup_lock_tree
+    [ "${status}" -eq 1 ]
+    [ "${output}" = "" ]
+    [ "${stderr}" = "pool_path must not contain :// ? # %" ]
+  done
+
+  write_lock_with_pool_path "main/:/ocserv"
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [ "${stderr}" = "pool_path segment invalid: ':'" ]
 }
 
 @test "rejects pool_path with control character" {
