@@ -134,6 +134,25 @@ artifacts: [{name: a.tar, size: 1, sha256: "000000000000000000000000000000000000
 YAML
 }
 
+@test "rejects mixed-type unknown top-level fields without traceback" {
+  write_lock_body <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+bogus: 1
+2: 1
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [[ "${stderr}" == unknown\ top-level\ fields:* ]]
+  [[ "${stderr}" != *Traceback* ]]
+}
+
 @test "rejects schema_version boolean true" {
   assert_invalid_lock_body_stderr "schema_version must be == 1" <<'YAML'
 schema_version: true
@@ -143,6 +162,61 @@ pool_path: "main/o/ocserv"
 dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
 YAML
+}
+
+@test "rejects mixed-type unknown nested fields without traceback" {
+  write_lock_body <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc:
+  name: ocserv_1.5.0-1.dsc
+  size: 1
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  bogus: 1
+  2: 1
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [[ "${stderr}" == unknown\ dsc\ fields:* ]]
+  [[ "${stderr}" != *Traceback* ]]
+
+  write_lock_body <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts:
+  - name: a.tar
+    size: 1
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    bogus: 1
+    2: 1
+YAML
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [[ "${stderr}" == unknown\ artifact\ fields:* ]]
+  [[ "${stderr}" != *Traceback* ]]
+}
+
+@test "rejects unhashable YAML mapping key without traceback" {
+  write_lock_body <<'YAML'
+? [bad]
+: value
+YAML
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [[ "${stderr}" == YAML\ parse\ error:* ]]
+  [[ "${stderr}" != *Traceback* ]]
 }
 
 @test "rejects removed acquisition fields" {
