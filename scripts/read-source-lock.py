@@ -247,44 +247,73 @@ def validate(data: object, lock_path: str) -> dict:
     return checked_data
 
 
-def emit(data):
+def emit(data: dict) -> None:
     dsc = data["dsc"]
     print(
         f"META\t{data['source']}\t{data['debian_version']}\t{data['pool_path']}"
         f"\t{dsc['name']}\t{dsc['size']}\t{dsc['sha256']}"
     )
     for artifact in data["artifacts"]:
-        print(f"ARTIFACT\t{artifact['name']}\t{artifact['size']}\t{artifact['sha256']}")
+        print(
+            f"ARTIFACT\t{artifact['name']}\t{artifact['size']}"
+            f"\t{artifact['sha256']}"
+        )
 
 
-def main():
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--lock", help="path to <source>/<version>.yaml")
-    group.add_argument("--source", help="source name (resolves source-lock/<source>/<version>.yaml)")
-    parser.add_argument("--debian-version", dest="debian_version", help="required with --source")
-    args = parser.parse_args()
+    group.add_argument(
+        "--source",
+        help="source name (resolves source-lock/<source>/<version>.yaml)",
+    )
+    parser.add_argument(
+        "--debian-version",
+        dest="debian_version",
+        help="required with --source",
+    )
+    return parser
 
+
+def _resolve_lock_path(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> str:
+    if args.lock is not None and args.debian_version is not None:
+        parser.error("--lock is mutually exclusive with --source/--debian-version")
     if args.lock is not None:
-        if args.debian_version is not None:
-            parser.error("--lock is mutually exclusive with --source/--debian-version")
-        lock_path = args.lock
-    else:
-        if args.debian_version is None:
-            parser.error("--source requires --debian-version")
-        lock_path = os.path.join("source-lock", args.source, f"{args.debian_version}.yaml")
+        return args.lock
+    if args.debian_version is None:
+        parser.error("--source requires --debian-version")
+    return os.path.join(
+        "source-lock",
+        args.source,
+        f"{args.debian_version}.yaml",
+    )
 
+
+def _read_raw(lock_path: str) -> str:
     try:
         with open(lock_path, "r", encoding="utf-8") as handle:
-            raw = handle.read()
+            return handle.read()
     except FileNotFoundError:
         fail(f"lock file not found: {lock_path}")
 
+
+def _parse_lock(raw: str) -> object:
     try:
-        data = strict_safe_load(raw)
+        return strict_safe_load(raw)
     except yaml.YAMLError as exc:
         fail(f"YAML parse error: {exc}")
 
+
+def main() -> None:
+    parser = _build_parser()
+    args = parser.parse_args()
+    lock_path = _resolve_lock_path(args, parser)
+    raw = _read_raw(lock_path)
+    data = _parse_lock(raw)
     emit(validate(data, lock_path))
 
 
