@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import sys
+from typing import NoReturn
 
 import yaml
 
@@ -23,144 +24,213 @@ class StrictSafeLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-RE_SOURCE = re.compile(r"^[a-z0-9][a-z0-9+.\-]*$")
-RE_DEBIAN_VERSION = re.compile(r"^[A-Za-z0-9.+~\-]+$")
-RE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
-RE_POOL_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+._\-]*$")
+ALLOWED_TOP_LEVEL_FIELDS = {
+    "schema_version",
+    "source",
+    "debian_version",
+    "pool_path",
+    "dsc",
+    "artifacts",
+}
+ARTIFACT_FIELDS = {"name", "size", "sha256"}
+
+RE_SOURCE = re.compile(r"[a-z0-9][a-z0-9+.\-]*")
+RE_DEBIAN_VERSION_WITHOUT_EPOCH = re.compile(r"[A-Za-z0-9.+~-]+")
+RE_SHA256 = re.compile(r"[0-9a-f]{64}")
+RE_POOL_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9+._\-]*")
 RE_POOL_PATH_FORBIDDEN = re.compile(r"://|[?#%]")
-RE_SAFE_BASENAME = re.compile(r"^[^/\\\x00-\x1f\x7f\s]+$")
+RE_POOL_PATH_WHITESPACE = re.compile(r"[\x00-\x1f\x7f\s]")
+RE_SAFE_BASENAME = re.compile(r"[^/\\\x00-\x1f\x7f\s]+")
 
 
-def fail(msg):
+def fail(msg: str) -> NoReturn:
     print(msg, file=sys.stderr)
     raise SystemExit(1)
 
 
-def strict_safe_load(raw):
+def strict_safe_load(raw: str) -> object:
     return yaml.load(raw, Loader=StrictSafeLoader)
 
 
-def check_lock_path_identity(lock_path, data):
+def check_lock_path_identity(lock_path: str, data: dict) -> None:
     parent = os.path.basename(os.path.dirname(lock_path))
     filename = os.path.basename(lock_path)
+
     if not filename.endswith(".yaml"):
         fail(f"lock path must end with .yaml: {lock_path}")
+
     stem = filename[:-5]
     if parent != data["source"]:
         fail(f"lock path source {parent!r} != YAML source {data['source']!r}")
     if stem != data["debian_version"]:
-        fail(f"lock path version {stem!r} != YAML debian_version {data['debian_version']!r}")
+        fail(
+            f"lock path version {stem!r} "
+            f"!= YAML debian_version {data['debian_version']!r}"
+        )
 
 
-def _require_pool_path_string(path):
-    if not isinstance(path, str) or path == "":
+def _require_pool_path_string(path: object) -> str:
+    if not isinstance(path, str):
         fail("pool_path must be a non-empty string")
+    if path == "":
+        fail("pool_path must be a non-empty string")
+    return path
 
 
-def _check_pool_path_syntax(path):
-    if path.startswith("/") or path.endswith("/"):
+def _check_pool_path_syntax(path: str) -> None:
+    if path.startswith("/"):
+        fail(f"pool_path must not have leading/trailing slash: {path!r}")
+    if path.endswith("/"):
         fail(f"pool_path must not have leading/trailing slash: {path!r}")
     if "\\" in path:
         fail("pool_path must not contain backslash")
-    if re.search(r"[\x00-\x1f\x7f\s]", path):
+    if RE_POOL_PATH_WHITESPACE.search(path):
         fail("pool_path must not contain control characters or whitespace")
     if RE_POOL_PATH_FORBIDDEN.search(path):
         fail("pool_path must not contain :// ? # %")
 
 
-def _check_pool_path_segments(path):
+def _check_pool_path_segments(path: str) -> None:
     segments = path.split("/")
     if any(segment in ("", ".", "..") for segment in segments):
         fail(f"pool_path has empty/./.. segment: {path!r}")
+
     for segment in segments:
-        if not RE_POOL_SEGMENT.match(segment):
+        if RE_POOL_SEGMENT.fullmatch(segment) is None:
             fail(f"pool_path segment invalid: {segment!r}")
 
 
-def check_pool_path(path):
-    _require_pool_path_string(path)
-    _check_pool_path_syntax(path)
-    _check_pool_path_segments(path)
+def check_pool_path(path: object) -> None:
+    checked_path = _require_pool_path_string(path)
+    _check_pool_path_syntax(checked_path)
+    _check_pool_path_segments(checked_path)
 
 
-def check_size(value, field):
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+def check_size(value: object, field: str) -> None:
+    if isinstance(value, bool):
+        fail(f"{field} must be a non-negative int (got {value!r})")
+    if not isinstance(value, int):
+        fail(f"{field} must be a non-negative int (got {value!r})")
+    if value < 0:
         fail(f"{field} must be a non-negative int (got {value!r})")
 
 
-def check_safe_name(value, field):
-    if (
-        not isinstance(value, str)
-        or not RE_SAFE_BASENAME.match(value)
-        or value in (".", "..")
-        or value.startswith("-")
-    ):
+def check_safe_name(value: object, field: str) -> None:
+    if not isinstance(value, str):
+        fail(f"{field} invalid basename: {value!r}")
+    if RE_SAFE_BASENAME.fullmatch(value) is None:
+        fail(f"{field} invalid basename: {value!r}")
+    if value in (".", ".."):
+        fail(f"{field} invalid basename: {value!r}")
+    if value.startswith("-"):
         fail(f"{field} invalid basename: {value!r}")
 
 
-def check_sha(value, field):
-    if not isinstance(value, str) or not RE_SHA256.match(value):
+def check_sha(value: object, field: str) -> None:
+    if not isinstance(value, str):
+        fail(f"{field} must be 64 lowercase hex")
+    if RE_SHA256.fullmatch(value) is None:
         fail(f"{field} must be 64 lowercase hex")
 
 
-def validate(data, lock_path):
+def _check_top_level(data: object) -> dict:
     if not isinstance(data, dict):
         fail("lock root must be a mapping")
-    allowed_top = {"schema_version", "source", "debian_version", "pool_path", "dsc", "artifacts"}
-    unknown = set(data) - allowed_top
+
+    unknown = set(data) - ALLOWED_TOP_LEVEL_FIELDS
     if unknown:
         fail(f"unknown top-level fields: {sorted(unknown)}")
 
-    if data.get("schema_version") != 1:
+    schema_version = data.get("schema_version")
+    if isinstance(schema_version, bool):
         fail("schema_version must be == 1")
-    src = data.get("source")
-    if not isinstance(src, str) or not RE_SOURCE.match(src):
-        fail(f"source invalid: {src!r}")
-    ver = data.get("debian_version")
-    if not isinstance(ver, str) or not RE_DEBIAN_VERSION.match(ver) or ":" in ver:
-        fail(f"debian_version invalid: {ver!r}")
+    if not isinstance(schema_version, int):
+        fail("schema_version must be == 1")
+    if schema_version != 1:
+        fail("schema_version must be == 1")
 
-    check_pool_path(data.get("pool_path"))
+    return data
 
+
+def _check_identity_fields(data: dict) -> None:
+    source = data.get("source")
+    if not isinstance(source, str):
+        fail(f"source invalid: {source!r}")
+    if RE_SOURCE.fullmatch(source) is None:
+        fail(f"source invalid: {source!r}")
+
+    debian_version = data.get("debian_version")
+    if not isinstance(debian_version, str):
+        fail(f"debian_version invalid: {debian_version!r}")
+    if RE_DEBIAN_VERSION_WITHOUT_EPOCH.fullmatch(debian_version) is None:
+        fail(f"debian_version invalid: {debian_version!r}")
+
+
+def _check_dsc(data: dict) -> dict:
     dsc = data.get("dsc")
     if not isinstance(dsc, dict):
         fail("dsc must be a mapping")
-    unknown_dsc = set(dsc) - {"name", "size", "sha256"}
-    if unknown_dsc:
-        fail(f"unknown dsc fields: {sorted(unknown_dsc)}")
+
+    unknown = set(dsc) - ARTIFACT_FIELDS
+    if unknown:
+        fail(f"unknown dsc fields: {sorted(unknown)}")
+
     for key in ("name", "size", "sha256"):
         if key not in dsc:
             fail(f"dsc.{key} missing")
+
     check_safe_name(dsc["name"], "dsc.name")
     if not dsc["name"].endswith(".dsc"):
         fail("dsc.name must end with .dsc")
     check_size(dsc["size"], "dsc.size")
     check_sha(dsc["sha256"], "dsc.sha256")
+    return dsc
 
+
+def _check_artifact(artifact: object, idx: int, dsc_name: str) -> str:
+    if not isinstance(artifact, dict):
+        fail(f"artifacts[{idx}] must be a mapping")
+
+    unknown = set(artifact) - ARTIFACT_FIELDS
+    if unknown:
+        fail(f"unknown artifact fields: {sorted(unknown)}")
+
+    for key in ("name", "size", "sha256"):
+        if key not in artifact:
+            fail(f"artifacts[{idx}].{key} missing")
+
+    name = artifact["name"]
+    check_safe_name(name, f"artifacts[{idx}].name")
+    if name == dsc_name:
+        fail(f"artifacts[{idx}].name must not equal dsc.name")
+    check_size(artifact["size"], f"artifacts[{idx}].size")
+    check_sha(artifact["sha256"], f"artifacts[{idx}].sha256")
+    return name
+
+
+def _check_artifacts(data: dict, dsc_name: str) -> None:
     artifacts = data.get("artifacts")
-    if not isinstance(artifacts, list) or not artifacts:
+    if not isinstance(artifacts, list):
         fail("artifacts must be a non-empty list")
+    if not artifacts:
+        fail("artifacts must be a non-empty list")
+
     names = []
     for idx, artifact in enumerate(artifacts):
-        if not isinstance(artifact, dict):
-            fail(f"artifacts[{idx}] must be a mapping")
-        unknown_artifact = set(artifact) - {"name", "size", "sha256"}
-        if unknown_artifact:
-            fail(f"unknown artifact fields: {sorted(unknown_artifact)}")
-        for key in ("name", "size", "sha256"):
-            if key not in artifact:
-                fail(f"artifacts[{idx}].{key} missing")
-        check_safe_name(artifact["name"], f"artifacts[{idx}].name")
-        if artifact["name"] == dsc["name"]:
-            fail(f"artifacts[{idx}].name must not equal dsc.name")
-        check_size(artifact["size"], f"artifacts[{idx}].size")
-        check_sha(artifact["sha256"], f"artifacts[{idx}].sha256")
-        names.append(artifact["name"])
+        names.append(_check_artifact(artifact, idx, dsc_name))
+
     if len(set(names)) != len(names):
         fail("artifact names must be unique")
 
-    check_lock_path_identity(lock_path, data)
-    return data
+
+def validate(data: object, lock_path: str) -> dict:
+    checked_data = _check_top_level(data)
+    _check_identity_fields(checked_data)
+    check_pool_path(checked_data.get("pool_path"))
+    dsc = _check_dsc(checked_data)
+    _check_artifacts(checked_data, dsc["name"])
+    check_lock_path_identity(lock_path, checked_data)
+    return checked_data
 
 
 def emit(data):
