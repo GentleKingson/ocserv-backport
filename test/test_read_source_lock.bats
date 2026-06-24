@@ -51,6 +51,16 @@ assert_invalid_lock_body() {
   [ "${status}" -eq 1 ]
 }
 
+assert_invalid_lock_body_stderr() {
+  local expected_stderr="$1"
+  write_lock_body
+  run --separate-stderr ${READ_LOCK} --lock "${LOCK_PATH}"
+  cleanup_lock_tree
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "" ]
+  [ "${stderr}" = "${expected_stderr}" ]
+}
+
 write_lock_with_pool_path() {
   local pool_path="$1"
   make_lock_tree
@@ -119,6 +129,17 @@ source: ocserv
 debian_version: "1.5.0-1"
 pool_path: "main/o/ocserv"
 bogus: 1
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+}
+
+@test "rejects schema_version boolean true" {
+  assert_invalid_lock_body_stderr "schema_version must be == 1" <<'YAML'
+schema_version: true
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
 dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
 YAML
@@ -244,6 +265,26 @@ artifacts: [{name: a.tar, size: 1, sha256: "000000000000000000000000000000000000
 YAML
 }
 
+@test "rejects source and debian_version trailing newline before path identity" {
+  assert_invalid_lock_body_stderr "source invalid: 'ocserv\\n'" <<'YAML'
+schema_version: 1
+source: "ocserv\n"
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+
+  assert_invalid_lock_body_stderr "debian_version invalid: '1.5.0-1\\n'" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1\n"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+}
+
 @test "rejects invalid sizes and sha256" {
   assert_invalid_lock_body <<'YAML'
 schema_version: 1
@@ -276,6 +317,55 @@ debian_version: "1.5.0-1"
 pool_path: "main/o/ocserv"
 dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "nothex"}
 artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+}
+
+@test "rejects hash and basename trailing newline boundaries" {
+  assert_invalid_lock_body_stderr "dsc.name invalid basename: 'ocserv_1.5.0-1.dsc\\n'" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: "ocserv_1.5.0-1.dsc\n", size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+
+  assert_invalid_lock_body_stderr "dsc.sha256 must be 64 lowercase hex" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000\n"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+
+  assert_invalid_lock_body_stderr "artifacts[0].name invalid basename: 'a.tar\\n'" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: "a.tar\n", size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
+YAML
+
+  assert_invalid_lock_body_stderr "artifacts[0].sha256 must be 64 lowercase hex" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000\n"}]
+YAML
+}
+
+@test "rejects artifact boolean size" {
+  assert_invalid_lock_body_stderr "artifacts[0].size must be a non-negative int (got True)" <<'YAML'
+schema_version: 1
+source: ocserv
+debian_version: "1.5.0-1"
+pool_path: "main/o/ocserv"
+dsc: {name: ocserv_1.5.0-1.dsc, size: 1, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+artifacts: [{name: a.tar, size: true, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}]
 YAML
 }
 
