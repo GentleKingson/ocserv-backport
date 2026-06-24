@@ -16,11 +16,19 @@ class StrictSafeLoader(yaml.SafeLoader):
         seen = set()
         for key_node, _ in node.value:
             key = self.construct_object(key_node, deep=deep)
-            if key in seen:
+            try:
+                if key in seen:
+                    raise yaml.constructor.ConstructorError(
+                        None,
+                        None,
+                        f"duplicate key {key!r} in mapping",
+                        key_node.start_mark,
+                    )
+                seen.add(key)
+            except TypeError as exc:
                 raise yaml.constructor.ConstructorError(
-                    None, None, f"duplicate key {key!r} in mapping", key_node.start_mark
-                )
-            seen.add(key)
+                    None, None, f"found unhashable key {key!r}", key_node.start_mark
+                ) from exc
         return super().construct_mapping(node, deep=deep)
 
 
@@ -133,13 +141,19 @@ def check_sha(value: object, field: str) -> None:
         fail(f"{field} must be 64 lowercase hex")
 
 
+def _sorted_unknown_fields(unknown: set) -> list:
+    if all(isinstance(field, str) for field in unknown):
+        return sorted(unknown)
+    return sorted(unknown, key=lambda field: (type(field).__name__, repr(field)))
+
+
 def _check_top_level(data: object) -> dict:
     if not isinstance(data, dict):
         fail("lock root must be a mapping")
 
     unknown = set(data) - ALLOWED_TOP_LEVEL_FIELDS
     if unknown:
-        fail(f"unknown top-level fields: {sorted(unknown)}")
+        fail(f"unknown top-level fields: {_sorted_unknown_fields(unknown)}")
 
     schema_version = data.get("schema_version")
     if isinstance(schema_version, bool):
@@ -173,7 +187,7 @@ def _check_dsc(data: dict) -> dict:
 
     unknown = set(dsc) - ARTIFACT_FIELDS
     if unknown:
-        fail(f"unknown dsc fields: {sorted(unknown)}")
+        fail(f"unknown dsc fields: {_sorted_unknown_fields(unknown)}")
 
     for key in ("name", "size", "sha256"):
         if key not in dsc:
@@ -193,7 +207,7 @@ def _check_artifact(artifact: object, idx: int, dsc_name: str) -> str:
 
     unknown = set(artifact) - ARTIFACT_FIELDS
     if unknown:
-        fail(f"unknown artifact fields: {sorted(unknown)}")
+        fail(f"unknown artifact fields: {_sorted_unknown_fields(unknown)}")
 
     for key in ("name", "size", "sha256"):
         if key not in artifact:
