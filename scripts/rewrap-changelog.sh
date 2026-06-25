@@ -4,13 +4,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+1}"
+BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
 SOURCE_VERSION="1.5.0-1"
 TARGET_DISTRIBUTION="trixie"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 
-SRCDIR="build/source/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~bpo13+1 -> 1.5.0
+SRCDIR="build/source/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~bpo13+0local1 -> 1.5.0
 [[ -d "${SRCDIR}" ]] || die "missing source tree: ${SRCDIR}"
 cd "${SRCDIR}"
 

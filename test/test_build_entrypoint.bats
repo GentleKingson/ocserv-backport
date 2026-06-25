@@ -41,6 +41,26 @@ SH
   chmod +x "${FAKEBIN}/make"
 }
 
+install_make_target_stub() {
+  local script="$1" call="$2"
+  cat > "${ENTRY_REPO}/scripts/${script}" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${call}" >> "${ENTRY_REPO}/target-calls"
+SH
+  chmod +x "${ENTRY_REPO}/scripts/${script}"
+}
+
+install_pipeline_target_stubs() {
+  install_make_target_stub verify-source-lock.sh verify-lock
+  install_make_target_stub fetch-source.sh fetch
+  install_make_target_stub rewrap-changelog.sh rewrap
+  install_make_target_stub build-source-package.sh src-pkg
+  install_make_target_stub build-binary.sh binary
+  install_make_target_stub lint-package.sh lint
+  install_make_target_stub smoke-test.sh smoke-basic
+}
+
 run_build_direct() {
   run bash -c "cd '${ENTRY_REPO}' && if [[ ! -f scripts/build.sh ]]; then echo 'scripts/build.sh is missing' >&2; exit 99; fi; PATH='${FAKEBIN}:${PATH}' bash scripts/build.sh"
 }
@@ -166,4 +186,31 @@ SH
   version="$(entrypoint_file dry-run-forwarded-version)"
   [ "${args}" = "alpha beta" ]
   [ "${version}" = "1.5.0-1~bpo13+wrapped1" ]
+}
+
+@test "fetch target verifies lock unless internal skip is set" {
+  setup_entrypoint_repo
+  install_make_target_stub verify-source-lock.sh verify-lock
+  install_make_target_stub fetch-source.sh fetch
+
+  run bash -c "cd '${ENTRY_REPO}' && '${SYSTEM_MAKE}' fetch"
+  assert_status 0
+  calls="$(entrypoint_file target-calls)"
+  [ "${calls}" = $'verify-lock\nfetch' ]
+
+  rm -f "${ENTRY_REPO}/target-calls"
+  run bash -c "cd '${ENTRY_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK=1 '${SYSTEM_MAKE}' fetch"
+  assert_status 0
+  calls="$(entrypoint_file target-calls)"
+  [ "${calls}" = "fetch" ]
+}
+
+@test "build skips fetch target's duplicate lock verification" {
+  setup_entrypoint_repo
+  install_pipeline_target_stubs
+
+  run bash -c "cd '${ENTRY_REPO}' && '${SYSTEM_MAKE}' build"
+  assert_status 0
+  calls="$(entrypoint_file target-calls)"
+  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
 }
