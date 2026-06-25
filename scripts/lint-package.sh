@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+1}"
+BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
 CHANGES="build/binary/ocserv_${BACKPORT_VERSION}_amd64.changes"
 [[ -f "${CHANGES}" ]] || die "missing .changes: ${CHANGES} (run 'make binary' first)"
 
