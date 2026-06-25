@@ -5,12 +5,14 @@ setup() {
   cd "${REPO_ROOT}"
   ENTRY_REPO=""
   FAKEBIN=""
+  OUTSIDE_DIR=""
   SYSTEM_MAKE=""
 }
 
 teardown() {
-  [[ -n "${ENTRY_REPO:-}" ]] && rm -rf "${ENTRY_REPO}"
-  [[ -n "${FAKEBIN:-}" ]] && rm -rf "${FAKEBIN}"
+  if [[ -n "${ENTRY_REPO:-}" ]]; then rm -rf "${ENTRY_REPO}"; fi
+  if [[ -n "${FAKEBIN:-}" ]]; then rm -rf "${FAKEBIN}"; fi
+  if [[ -n "${OUTSIDE_DIR:-}" ]]; then rm -rf "${OUTSIDE_DIR}"; fi
 }
 
 setup_entrypoint_repo() {
@@ -74,6 +76,16 @@ run_make_build_with_version() {
   run bash -c "cd '${ENTRY_REPO}' && PATH='${FAKEBIN}:${PATH}' OCSERV_VERSION='${version}' '${SYSTEM_MAKE}' build"
 }
 
+run_build_from_outside() {
+  OUTSIDE_DIR="$(mktemp -d)"
+  run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${ENTRY_REPO}/scripts/build.sh'"
+}
+
+run_dry_run_from_outside() {
+  OUTSIDE_DIR="$(mktemp -d)"
+  run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${ENTRY_REPO}/scripts/dry-run.sh'"
+}
+
 require_make_calls() {
   if [[ ! -f "${ENTRY_REPO}/make-calls" ]]; then
     echo "expected fake make calls at ${ENTRY_REPO}/make-calls, but the file does not exist" >&2
@@ -115,6 +127,15 @@ assert_status() {
   run_build_direct
   assert_status 0
   calls="$(make_targets)"
+  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
+}
+
+@test "build entrypoint runs from outside the repo root" {
+  setup_entrypoint_repo
+  install_pipeline_target_stubs
+  run_build_from_outside
+  assert_status 0
+  calls="$(entrypoint_file target-calls)"
   [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
 }
 
@@ -186,6 +207,15 @@ SH
   version="$(entrypoint_file dry-run-forwarded-version)"
   [ "${args}" = "alpha beta" ]
   [ "${version}" = "1.5.0-1~bpo13+wrapped1" ]
+}
+
+@test "dry-run entrypoint runs build pipeline from outside the repo root" {
+  setup_entrypoint_repo
+  install_pipeline_target_stubs
+  run_dry_run_from_outside
+  assert_status 0
+  calls="$(entrypoint_file target-calls)"
+  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
 }
 
 @test "fetch target delegates verification to fetch-source script" {
