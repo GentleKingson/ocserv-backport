@@ -112,8 +112,61 @@ SH
   chmod +x "${FAKEBIN}/curl" "${FAKEBIN}/dscverify" "${FAKEBIN}/dpkg-source"
 }
 
+install_verify_source_lock_stub() {
+  local exit_status="${1:-0}"
+  cat > "${FETCH_REPO}/scripts/verify-source-lock.sh" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' verify-source-lock >> "${FETCH_REPO}/verify-calls"
+exit "${exit_status}"
+SH
+  chmod +x "${FETCH_REPO}/scripts/verify-source-lock.sh"
+}
+
 run_fetch() {
   run bash -c "cd '${FETCH_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+}
+
+run_fetch_with_skip_var() {
+  local skip_value="$1"
+  run bash -c "cd '${FETCH_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK='${skip_value}' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+}
+
+verify_source_lock_calls() {
+  [[ -f "${FETCH_REPO}/verify-calls" ]] && cat "${FETCH_REPO}/verify-calls"
+  return 0
+}
+
+@test "fetch verifies source lock by default and skips only the exact internal sentinel" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  install_verify_source_lock_stub 37
+  run_fetch
+  calls="$(verify_source_lock_calls)"
+  teardown_fetch_repo
+  [ "${status}" -eq 37 ]
+  [ "${calls}" = "verify-source-lock" ]
+
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  install_verify_source_lock_stub 37
+  run_fetch_with_skip_var 0
+  calls="$(verify_source_lock_calls)"
+  teardown_fetch_repo
+  [ "${status}" -eq 37 ]
+  [ "${calls}" = "verify-source-lock" ]
+
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  install_verify_source_lock_stub 37
+  run_fetch_with_skip_var 1
+  calls="$(verify_source_lock_calls)"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [ "${calls}" = "" ]
 }
 
 @test "fetch constructs Debian pool URLs and downloads dsc before artifacts" {
