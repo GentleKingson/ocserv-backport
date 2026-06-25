@@ -5,6 +5,7 @@ setup() {
   cd "${REPO_ROOT}"
   SOURCE_CI_REPO=""
   FAKEBIN=""
+  OUTSIDE_DIR=""
   SYSTEM_MAKE=""
 }
 
@@ -25,8 +26,10 @@ setup_source_ci_repo() {
 teardown_source_ci_repo() {
   [[ -n "${SOURCE_CI_REPO:-}" ]] && rm -rf "${SOURCE_CI_REPO}"
   [[ -n "${FAKEBIN:-}" ]] && rm -rf "${FAKEBIN}"
+  [[ -n "${OUTSIDE_DIR:-}" ]] && rm -rf "${OUTSIDE_DIR}"
   SOURCE_CI_REPO=""
   FAKEBIN=""
+  OUTSIDE_DIR=""
   SYSTEM_MAKE=""
 }
 
@@ -70,6 +73,11 @@ run_source_ci() {
   run bash -c "cd '${SOURCE_CI_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/source-package-ci.sh"
 }
 
+run_source_ci_from_outside() {
+  OUTSIDE_DIR="$(mktemp -d)"
+  run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${SOURCE_CI_REPO}/scripts/source-package-ci.sh'"
+}
+
 source_ci_targets() {
   cut -f1 "${SOURCE_CI_REPO}/make-calls"
 }
@@ -93,6 +101,15 @@ source_ci_file() {
   run_source_ci
   calls="$(source_ci_targets)"
   [ "${status}" -eq 0 ]
+  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg' ]
+}
+
+@test "source CI entrypoint runs from outside the repo root" {
+  setup_source_ci_repo
+  install_source_target_stubs
+  run_source_ci_from_outside
+  [ "${status}" -eq 0 ]
+  calls="$(source_ci_file target-calls)"
   [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg' ]
 }
 
