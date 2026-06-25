@@ -188,18 +188,11 @@ SH
   [ "${version}" = "1.5.0-1~bpo13+wrapped1" ]
 }
 
-@test "fetch target verifies lock unless internal skip is set" {
+@test "fetch target delegates verification to fetch-source script" {
   setup_entrypoint_repo
-  install_make_target_stub verify-source-lock.sh verify-lock
   install_make_target_stub fetch-source.sh fetch
 
   run bash -c "cd '${ENTRY_REPO}' && '${SYSTEM_MAKE}' fetch"
-  assert_status 0
-  calls="$(entrypoint_file target-calls)"
-  [ "${calls}" = $'verify-lock\nfetch' ]
-
-  rm -f "${ENTRY_REPO}/target-calls"
-  run bash -c "cd '${ENTRY_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK=1 '${SYSTEM_MAKE}' fetch"
   assert_status 0
   calls="$(entrypoint_file target-calls)"
   [ "${calls}" = "fetch" ]

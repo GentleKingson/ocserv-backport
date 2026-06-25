@@ -11,12 +11,16 @@ help: ## Show supported targets
 test: ## Run Bats test suite
 	bats test/
 
+.PHONY: ci-script-test
+ci-script-test: ## Run stubbed build-entrypoint orchestration tests
+	bats test/test_build_entrypoint.bats test/test_source_ci.bats
+
 .PHONY: verify-lock
 verify-lock: ## Verify source-lock YAML files match generated TSV projections
 	scripts/verify-source-lock.sh
 
 .PHONY: fetch rewrap src-pkg
-fetch: $(if $(OCSERV_SKIP_FETCH_VERIFY_LOCK),,verify-lock) ## Fetch locked ocserv source from Debian pool
+fetch: ## Fetch locked ocserv source from Debian pool
 	scripts/fetch-source.sh
 
 rewrap: ## Rewrite changelog to the trixie backport version
@@ -39,6 +43,10 @@ smoke-basic: ## Install and inspect the local .deb in a trixie container
 .PHONY: build
 build: ## Run the full local backport validation pipeline
 	scripts/build.sh
+
+.PHONY: source-ci
+source-ci: ## Run the real source-package CI pipeline
+	scripts/source-package-ci.sh
 
 .PHONY: dry-run
 dry-run: ## Compatibility alias for the full local build pipeline
