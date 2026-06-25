@@ -48,6 +48,13 @@ dscverify_cmd() {
   "${args[@]}"
 }
 
+verify_source_lock_unless_internal_skip() {
+  if [[ "${OCSERV_SKIP_FETCH_VERIFY_LOCK:-}" == "1" ]]; then
+    return 0
+  fi
+  "${SCRIPT_DIR}/verify-source-lock.sh"
+}
+
 download_artifact() {
   local url="$1" dest="$2" name="$3"
   if ! curl --fail --show-error --location --output "${dest}" "${url}"; then
@@ -105,7 +112,7 @@ main() {
   local legacy_source_var="FETCH""_SOURCE"
   [[ -z "${!legacy_source_var:-}" ]] || die "legacy source mode environment variable is no longer supported; fetch is pool-only"
 
-  "${SCRIPT_DIR}/verify-source-lock.sh"
+  verify_source_lock_unless_internal_skip
   read_lock_tsv "${LOCK_TSV}" "${SOURCE_VERSION}"
 
   mkdir -p "${BUILD_ROOT}"

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_dsc.sh
 . "${SCRIPT_DIR}/_dsc.sh"
 
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+1}"
+BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
 SOURCE_NAME="ocserv"
 SRCDIR="build/source/ocserv-${BACKPORT_VERSION%%-*}"
 [[ -d "${SRCDIR}" ]] || die "missing rewrapped source tree: ${SRCDIR} (run 'make rewrap' first)"

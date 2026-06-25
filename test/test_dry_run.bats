@@ -1,67 +1,92 @@
 #!/usr/bin/env bats
 load helpers/bats-helper.bash
 
-setup_dry_repo() {
+setup() {
+  cd "${REPO_ROOT}"
   DRY_REPO="$(mktemp -d)"
-  mkdir -p "${DRY_REPO}/scripts"
-  cp "${REPO_ROOT}/scripts/_common.sh" "${DRY_REPO}/scripts/_common.sh"
-  cp "${REPO_ROOT}/scripts/dry-run.sh" "${DRY_REPO}/scripts/dry-run.sh"
   FAKEBIN="$(mktemp -d)"
+  mkdir -p "${DRY_REPO}/scripts"
+  cp "${REPO_ROOT}/scripts/dry-run.sh" "${DRY_REPO}/scripts/dry-run.sh"
 }
 
-teardown_dry_repo() {
+teardown() {
   [[ -n "${DRY_REPO:-}" ]] && rm -rf "${DRY_REPO}"
   [[ -n "${FAKEBIN:-}" ]] && rm -rf "${FAKEBIN}"
-  DRY_REPO=""
-  FAKEBIN=""
 }
 
-install_fake_make() {
-  local fail_target="${1:-}"
-  cat > "${FAKEBIN}/make" <<SH
+install_forwarding_build_stub() {
+  cat > "${DRY_REPO}/scripts/build.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-target="\${1:-}"
-echo "\${target}" >> "${DRY_REPO}/make-calls"
-if [[ "\${target}" == "${fail_target}" ]]; then
-  echo "fake failure for \${target}" >&2
-  exit 42
-fi
+printf '%s\n' "$#" > build-argc
+printf '<%s>\n' "$@" > build-argv
+printf '%s\n' "${OCSERV_VERSION:-}" > build-version
+SH
+  chmod +x "${DRY_REPO}/scripts/build.sh"
+}
+
+install_failing_build_stub() {
+  cat > "${DRY_REPO}/scripts/build.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "build stdout"
+echo "build stderr" >&2
+exit 37
+SH
+  chmod +x "${DRY_REPO}/scripts/build.sh"
+}
+
+install_success_build_stub() {
+  cat > "${DRY_REPO}/scripts/build.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "build ok"
+SH
+  chmod +x "${DRY_REPO}/scripts/build.sh"
+}
+
+install_make_that_must_not_run() {
+  cat > "${FAKEBIN}/make" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'make called\n' > make-called
+exit 99
 SH
   chmod +x "${FAKEBIN}/make"
 }
 
 run_dry() {
-  run bash -c "cd '${DRY_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/dry-run.sh"
+  run bash -c "cd '${DRY_REPO}' && PATH='${FAKEBIN}:${PATH}' $*"
 }
 
-@test "dry-run executes exactly the seven validation stages in order" {
-  setup_dry_repo
-  install_fake_make
-  run_dry
-  calls="$(cat "${DRY_REPO}/make-calls")"
-  teardown_dry_repo
+@test "dry-run forwards arguments and OCSERV_VERSION to build.sh" {
+  install_forwarding_build_stub
+
+  run_dry "OCSERV_VERSION='1.5.0-1~bpo13+wrapped1' bash scripts/dry-run.sh alpha beta"
+
   [ "${status}" -eq 0 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
+  [ "$(cat "${DRY_REPO}/build-argc")" = "2" ]
+  [ "$(cat "${DRY_REPO}/build-argv")" = $'<alpha>\n<beta>' ]
+  [ "$(cat "${DRY_REPO}/build-version")" = "1.5.0-1~bpo13+wrapped1" ]
 }
 
-@test "dry-run stops immediately and reports the failing stage" {
-  setup_dry_repo
-  install_fake_make binary
-  run_dry
-  calls="$(cat "${DRY_REPO}/make-calls")"
-  teardown_dry_repo
-  [ "${status}" -eq 1 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary' ]
-  [[ "${output}" == *"DRY-RUN FAILED at: binary"* ]]
+@test "dry-run propagates build.sh exit status and output" {
+  install_failing_build_stub
+
+  run_dry "bash scripts/dry-run.sh"
+
+  [ "${status}" -eq 37 ]
+  [[ "${output}" == *"build stdout"* ]]
+  [[ "${output}" == *"build stderr"* ]]
 }
 
-@test "dry-run calls no targets outside the seven-stage validation chain" {
-  setup_dry_repo
-  install_fake_make
-  run_dry
-  calls="$(cat "${DRY_REPO}/make-calls")"
-  teardown_dry_repo
+@test "dry-run wrapper does not invoke make directly" {
+  install_success_build_stub
+  install_make_that_must_not_run
+
+  run_dry "bash scripts/dry-run.sh"
+
   [ "${status}" -eq 0 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg\nbinary\nlint\nsmoke-basic' ]
+  [[ "${output}" == *"build ok"* ]]
+  [ ! -e "${DRY_REPO}/make-called" ]
 }
