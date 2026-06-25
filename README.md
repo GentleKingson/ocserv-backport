@@ -5,7 +5,8 @@ Single-purpose local build and validation repository for an ocserv Debian backpo
 This repository locks the Debian sid source package `ocserv` version `1.5.0-1`,
 fetches that source from the official Debian pool path `main/o/ocserv`, rewrites
 the changelog for Debian trixie, and builds the amd64 backport package version
-`1.5.0-1~bpo13+1`.
+`1.5.0-1~bpo13+0local1` by default. Set `OCSERV_VERSION` to override the local
+version.
 
 The source identity is pinned. The build procedure is repeatable. This repository
 does not claim bit-for-bit reproducible builds because trixie build dependencies
@@ -36,26 +37,39 @@ verify-lock
 The full local validation entry point is:
 
 ```bash
-make dry-run
+make build
 ```
 
-`make dry-run` is intended to run on a Debian trixie amd64 builder with a working
+`make build` is intended to run on a Debian trixie amd64 builder with a working
 trixie sbuild schroot. It builds and validates local artifacts only. It does not
 publish packages, deploy hosts, promote channels, or roll back external state.
 
+`make dry-run` remains as a compatibility alias for `make build`.
+
 ## CI
 
-GitHub Actions CI uses a GitHub-hosted Ubuntu runner for static checks and
-unit tests only. It does not build Debian binary packages, run sbuild, run the
-container smoke test, publish artifacts, deploy hosts, or read repository
-secrets.
+Pull request CI uses a GitHub-hosted Ubuntu runner for static checks, lock
+verification, unit tests, and stubbed build-entrypoint orchestration tests. It
+does not build Debian binary packages, create sbuild chroots, run Docker smoke
+tests, publish artifacts, deploy hosts, or read repository secrets.
 
-CI runs syntax checks, ShellCheck, Python compilation, YAML linting,
-`make verify-lock`, and `make test`.
+Manual and scheduled source CI runs in a `debian:trixie` container. It executes
+the real source package path:
+
+```text
+verify-lock -> fetch -> rewrap -> src-pkg
+```
+
+Source CI uploads source package artifacts only. It does not run `binary`,
+`lint`, or `smoke-basic`, and it does not upload `.deb` files.
 
 ## Local Targets
 
 ```bash
+make build
+make dry-run
+make ci-script-test
+make source-ci
 make verify-lock
 make fetch
 make rewrap
@@ -63,13 +77,12 @@ make src-pkg
 make binary
 make lint
 make smoke-basic
-make dry-run
 make test
 ```
 
 ## Builder Requirements
 
-For the full `make dry-run` path on a trixie amd64 builder:
+For the full `make build` path on a trixie amd64 builder:
 
 - Python 3 with PyYAML
 - curl
@@ -88,9 +101,10 @@ For the full `make dry-run` path on a trixie amd64 builder:
 | Path | Purpose |
 |---|---|
 | `source-lock/` | Pinned Debian source identity and generated TSV projection |
-| `scripts/` | Source fetch, package build, lint, smoke, and dry-run scripts |
-| `test/` | Bats tests for parser, lock projection, fetch, smoke, and dry-run behavior |
-| `.github/workflows/ci.yml` | GitHub-hosted static checks and unit tests |
+| `scripts/` | Source fetch, package build, lint, smoke, local build, and source CI scripts |
+| `test/` | Bats tests for parser, lock projection, fetch, smoke, build entrypoints, and source CI behavior |
+| `.github/workflows/ci.yml` | GitHub-hosted static checks, unit tests, and stubbed entrypoint tests |
+| `.github/workflows/source-ci.yml` | Manual and scheduled source-package CI in `debian:trixie` |
 | `Makefile` | Local entry points |
 
 This repository intentionally excludes package publishing, repository hosting,
