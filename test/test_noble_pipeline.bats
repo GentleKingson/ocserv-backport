@@ -1,0 +1,230 @@
+#!/usr/bin/env bats
+load helpers/bats-helper.bash
+
+setup() {
+  cd "${REPO_ROOT}"
+  NOBLE_REPO=""
+  FAKEBIN=""
+  OUTSIDE_DIR=""
+  SYSTEM_MAKE=""
+}
+
+teardown() {
+  if [[ -n "${NOBLE_REPO:-}" ]]; then rm -rf "${NOBLE_REPO}"; fi
+  if [[ -n "${FAKEBIN:-}" ]]; then rm -rf "${FAKEBIN}"; fi
+  if [[ -n "${OUTSIDE_DIR:-}" ]]; then rm -rf "${OUTSIDE_DIR}"; fi
+}
+
+setup_noble_repo() {
+  NOBLE_REPO="$(mktemp -d)"
+  mkdir -p "${NOBLE_REPO}/scripts"
+  cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
+  if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
+    cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
+  fi
+  cp "${REPO_ROOT}/Makefile" "${NOBLE_REPO}/Makefile"
+  local script
+  for script in \
+    noble-build.sh \
+    noble-build-repo.sh \
+    noble-build-binary-ocserv.sh; do
+    if [[ -f "${REPO_ROOT}/scripts/${script}" ]]; then
+      cp "${REPO_ROOT}/scripts/${script}" "${NOBLE_REPO}/scripts/${script}"
+    fi
+  done
+  SYSTEM_MAKE="$(command -v make)"
+  FAKEBIN="$(mktemp -d)"
+}
+
+install_fake_make() {
+  cat > "${FAKEBIN}/make" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+target="\${1:-}"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  "\${target}" \
+  "\${NODE_UNDICI_DEBIAN_VERSION:-}" \
+  "\${NODE_UNDICI_NOBLE_VERSION:-}" \
+  "\${OCSERV_DEBIAN_VERSION:-}" \
+  "\${OCSERV_NOBLE_VERSION:-}" \
+  "\${TARGET_DISTRIBUTION:-}" \
+  "\${TARGET_ARCH:-}" >> "${NOBLE_REPO}/make-calls"
+SH
+  chmod +x "${FAKEBIN}/make"
+}
+
+run_noble_build_direct() {
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build.sh"
+}
+
+run_noble_build_direct_with_arch() {
+  local arch="$1"
+  run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH='${arch}' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build.sh"
+}
+
+make_call_targets() {
+  cut -f1 "${NOBLE_REPO}/make-calls"
+}
+
+unique_make_env_rows() {
+  cut -f2- "${NOBLE_REPO}/make-calls" | sort -u
+}
+
+@test "noble-build executes the twelve Noble stages in order" {
+  setup_noble_repo
+  install_fake_make
+  run_noble_build_direct
+  [ "${status}" -eq 0 ]
+  calls="$(make_call_targets)"
+  [ "${calls}" = $'noble-verify-locks\nnoble-fetch-node-undici\nnoble-rewrap-node-undici\nnoble-src-pkg-node-undici\nnoble-binary-node-undici\nnoble-repo\nnoble-fetch-ocserv\nnoble-rewrap-ocserv\nnoble-src-pkg-ocserv\nnoble-binary-ocserv\nnoble-lint\nnoble-smoke-basic' ]
+}
+
+@test "noble-build exports Noble default versions and amd64 architecture" {
+  setup_noble_repo
+  install_fake_make
+  run_noble_build_direct
+  [ "${status}" -eq 0 ]
+  vars="$(unique_make_env_rows)"
+  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tamd64' ]
+}
+
+@test "noble-build preserves TARGET_ARCH override without cross-build setup" {
+  setup_noble_repo
+  install_fake_make
+  run_noble_build_direct_with_arch arm64
+  [ "${status}" -eq 0 ]
+  vars="$(unique_make_env_rows)"
+  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
+  [[ ! -e "${NOBLE_REPO}/cross-build-requested" ]]
+}
+
+@test "make noble-build delegates to scripts/noble-build.sh" {
+  setup_noble_repo
+  cat > "${NOBLE_REPO}/scripts/noble-build.sh" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\${TARGET_ARCH:-}" > "${NOBLE_REPO}/noble-build-target-arch"
+SH
+  chmod +x "${NOBLE_REPO}/scripts/noble-build.sh"
+  run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 '${SYSTEM_MAKE}' noble-build"
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${NOBLE_REPO}/noble-build-target-arch")" = "arm64" ]
+}
+
+install_fake_dpkg_scanpackages() {
+  cat > "${FAKEBIN}/dpkg-scanpackages" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "dpkg-scanpackages \$*" >> "${NOBLE_REPO}/scanpackages-calls"
+printf '%s\n' \
+  "Package: libllhttp9.2" \
+  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1" \
+  "Architecture: all" \
+  "" \
+  "Package: libllhttp-dev" \
+  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1" \
+  "Architecture: all"
+SH
+  chmod +x "${FAKEBIN}/dpkg-scanpackages"
+}
+
+@test "noble-repo copies only libllhttp runtime and development debs" {
+  setup_noble_repo
+  install_fake_dpkg_scanpackages
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/node-undici_7.3.0_all.deb"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/node-llhttp_7.3.0_all.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
+  [ "${status}" -eq 0 ]
+  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb" ]
+  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb" ]
+  [ ! -e "${NOBLE_REPO}/build/noble/amd64/repo/node-undici_7.3.0_all.deb" ]
+  [ ! -e "${NOBLE_REPO}/build/noble/amd64/repo/node-llhttp_7.3.0_all.deb" ]
+  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/Packages" ]
+  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/Packages.gz" ]
+}
+
+@test "noble-repo rejects missing libllhttp runtime or development debs" {
+  setup_noble_repo
+  install_fake_dpkg_scanpackages
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"libllhttp-dev"* ]]
+}
+
+@test "noble-repo uses TARGET_ARCH-specific build and repo paths" {
+  setup_noble_repo
+  install_fake_dpkg_scanpackages
+  mkdir -p "${NOBLE_REPO}/build/noble/arm64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/noble/arm64/binary/node-undici/libllhttp9.2_7.3.0_arm64.deb"
+  touch "${NOBLE_REPO}/build/noble/arm64/binary/node-undici/libllhttp-dev_7.3.0_arm64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
+  [ "${status}" -eq 0 ]
+  [ -f "${NOBLE_REPO}/build/noble/arm64/repo/libllhttp9.2_7.3.0_arm64.deb" ]
+  [ -f "${NOBLE_REPO}/build/noble/arm64/repo/libllhttp-dev_7.3.0_arm64.deb" ]
+  [ ! -d "${NOBLE_REPO}/build/noble/amd64/repo" ]
+}
+
+install_fake_http_python_and_sbuild() {
+  cat > "${FAKEBIN}/python3" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "-m" && "\${2:-}" == "http.server" ]]; then
+  printf '%s\n' "\$*" > "${NOBLE_REPO}/http-server-args"
+  printf '%s\n' "\$\$" > "${NOBLE_REPO}/http-server-pid"
+  trap 'exit 0' TERM INT
+  while true; do sleep 1; done
+fi
+printf '%s\n' "43123"
+SH
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "${NOBLE_REPO}/sbuild-args"
+build_dir=""
+arch="\${TARGET_ARCH:-amd64}"
+prev=""
+for arg in "\$@"; do
+  if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi
+  case "\${arg}" in
+    --build-dir=*) build_dir="\${arg#--build-dir=}" ;;
+    --arch=*) arch="\${arg#--arch=}" ;;
+  esac
+  prev="\${arg}"
+done
+mkdir -p "\${build_dir}"
+version="\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
+touch "\${build_dir}/ocserv_\${version}_\${arch}.deb"
+touch "\${build_dir}/ocserv_\${version}_\${arch}.changes"
+touch "\${build_dir}/ocserv_\${version}_\${arch}.buildinfo"
+SH
+  chmod +x "${FAKEBIN}/python3" "${FAKEBIN}/sbuild"
+}
+
+@test "noble-binary-ocserv injects a temporary localhost HTTP repo and cleans it up" {
+  setup_noble_repo
+  install_fake_http_python_and_sbuild
+  mkdir -p "${NOBLE_REPO}/build/noble/arm64/source/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/noble/arm64/repo"
+  touch "${NOBLE_REPO}/build/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/noble/arm64/repo/Packages"
+
+  run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "--arch=arm64" "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "deb [trusted=yes] http://127.0.0.1:43123/ ./" "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "--bind" "${NOBLE_REPO}/http-server-args"
+  grep -Fq -- "127.0.0.1" "${NOBLE_REPO}/http-server-args"
+  server_pid="$(cat "${NOBLE_REPO}/http-server-pid")"
+  if kill -0 "${server_pid}" 2>/dev/null; then
+    echo "HTTP server still running: ${server_pid}" >&2
+    return 1
+  fi
+}

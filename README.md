@@ -1,12 +1,18 @@
 # ocserv-backport
 
-Single-purpose local build and validation repository for an ocserv Debian backport.
+Single-purpose local build and validation repository for ocserv backports.
 
-This repository locks the Debian sid source package `ocserv` version `1.5.0-1`,
-fetches that source from the official Debian pool path `main/o/ocserv`, rewrites
-the changelog for Debian trixie, and builds the amd64 backport package version
-`1.5.0-1~bpo13+0local1` by default. Set `OCSERV_VERSION` to override the local
-version.
+The default `make build` path locks the Debian sid source package `ocserv`
+version `1.5.0-1`, fetches that source from the official Debian pool path
+`main/o/ocserv`, rewrites the changelog for Debian trixie, and builds the amd64
+backport package version `1.5.0-1~bpo13+0local1` by default. Set
+`OCSERV_VERSION` to override the local trixie version.
+
+The optional `make noble-build` path builds an Ubuntu 24.04 Noble local backport
+pipeline. It first backports Debian `node-undici` to produce `libllhttp9.2` and
+`libllhttp-dev`, creates a local file APT repository from only those libllhttp
+packages, and then builds `ocserv 1.5.0` in a Noble sbuild chroot using that
+local repository.
 
 The source identity is pinned. The build procedure is repeatable. This repository
 does not claim bit-for-bit reproducible builds because trixie build dependencies
@@ -14,9 +20,10 @@ and container images are not timestamp- or digest-pinned here.
 
 ## Source Lock
 
-`source-lock/ocserv/1.5.0-1.yaml` is the source identity authority. It records
-the expected `.dsc` and source artifact names, sizes, SHA-256 hashes, and Debian
-pool path.
+`source-lock/ocserv/1.5.0-1.yaml` and
+`source-lock/node-undici/7.3.0+dfsg1+~cs24.12.11-1.yaml` are the source identity
+authorities. They record the expected `.dsc` and source artifact names, sizes,
+SHA-256 hashes, and Debian pool paths.
 
 `source-lock/ocserv/1.5.0-1.lock.tsv` is a generated projection for Shell scripts.
 It is not the authority. Run `make verify-lock` to regenerate the projection in a
@@ -45,6 +52,32 @@ trixie sbuild schroot. It builds and validates local artifacts only. It does not
 publish packages, deploy hosts, promote channels, or roll back external state.
 
 `make dry-run` remains as a compatibility alias for `make build`.
+
+The Noble local validation entry point is:
+
+```bash
+make noble-build
+```
+
+It runs:
+
+```text
+noble-verify-locks
+  -> noble-fetch-node-undici
+  -> noble-rewrap-node-undici
+  -> noble-src-pkg-node-undici
+  -> noble-binary-node-undici
+  -> noble-repo
+  -> noble-fetch-ocserv
+  -> noble-rewrap-ocserv
+  -> noble-src-pkg-ocserv
+  -> noble-binary-ocserv
+  -> noble-lint
+  -> noble-smoke-basic
+```
+
+The Noble path is separate from the trixie path. `make build` does not invoke the
+Noble flow.
 
 ## CI
 
@@ -78,6 +111,19 @@ make binary
 make lint
 make smoke-basic
 make test
+make noble-build
+make noble-verify-locks
+make noble-fetch-node-undici
+make noble-rewrap-node-undici
+make noble-src-pkg-node-undici
+make noble-binary-node-undici
+make noble-repo
+make noble-fetch-ocserv
+make noble-rewrap-ocserv
+make noble-src-pkg-ocserv
+make noble-binary-ocserv
+make noble-lint
+make noble-smoke-basic
 ```
 
 ## Builder Requirements
@@ -96,6 +142,11 @@ For the full `make build` path on a trixie amd64 builder:
 - bats
 - shellcheck
 
+For the full `make noble-build` path, use an Ubuntu 24.04 Noble builder with a
+matching Noble sbuild schroot for `TARGET_ARCH`. `TARGET_ARCH` defaults to
+`amd64`; `TARGET_ARCH=arm64` expects an already working arm64 build environment
+and does not enable automatic cross-builds.
+
 ## Repository Layout
 
 | Path | Purpose |
@@ -107,6 +158,11 @@ For the full `make build` path on a trixie amd64 builder:
 | `.github/workflows/source-ci.yml` | Manual and scheduled source-package CI in `debian:trixie` |
 | `Makefile` | Local entry points |
 
-This repository intentionally excludes package publishing, repository hosting,
-environment deployment, production promotion, rollback automation, and build-host
-provisioning automation.
+This repository intentionally excludes package publishing, external repository
+hosting, production VPS deployment, production promotion, rollback automation,
+and build-host provisioning automation. The Noble repo under
+`build/noble/${TARGET_ARCH}/repo/` is local build plumbing for clean chroots, not
+a production APT repository.
+
+For the detailed Noble workflow, see
+`docs/build-ocserv-backport-on-ubuntu24.04.md`.
