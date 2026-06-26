@@ -32,6 +32,8 @@ DOCKER_CE_PACKAGES=(
   docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 )
 
+SBUILD_CHROOT_INCLUDE="eatmydata,ccache,gnupg,ca-certificates"
+
 usage() {
   cat <<'EOF'
 Usage: scripts/noble-auto-build.sh [--provision]
@@ -149,6 +151,164 @@ check_debian_dscverify_keyrings() {
     log "Install them with: sudo apt-get install -y --no-install-recommends debian-keyring debian-maintainers"
     return 1
   fi
+}
+
+current_user_in_sbuild_group() {
+  local groups
+
+  groups="$(id -nG)"
+  [[ " ${groups} " == *" sbuild "* ]]
+}
+
+print_sbuild_group_guidance() {
+  printf 'Current user is not in the sbuild group.\n' >&2
+  printf 'Run these commands, then rerun provisioning from the new shell:\n' >&2
+  printf "  sudo sbuild-adduser \"\$USER\"\n" >&2
+  printf '  newgrp sbuild\n' >&2
+  printf '  scripts/noble-auto-build.sh --provision\n' >&2
+}
+
+print_sbuild_group_rerun_guidance() {
+  printf 'The current shell does not have the sbuild group yet.\n' >&2
+  printf 'Run:\n' >&2
+  printf '  newgrp sbuild\n' >&2
+  printf '  scripts/noble-auto-build.sh --provision\n' >&2
+  printf 'Then rerun scripts/noble-auto-build.sh --provision from that shell.\n' >&2
+}
+
+ensure_sbuild_group() {
+  local build_user
+
+  if [[ "$(id -u)" -eq 0 ]]; then
+    return 0
+  fi
+
+  if current_user_in_sbuild_group; then
+    return 0
+  fi
+
+  if [[ "${PROVISION}" -ne 1 ]]; then
+    print_sbuild_group_guidance
+    return 1
+  fi
+
+  build_user="${USER:-$(id -un)}"
+  log "adding ${build_user} to the sbuild group"
+  "${SUDO[@]}" sbuild-adduser "${build_user}"
+  print_sbuild_group_rerun_guidance
+
+  if [[ "${NOBLE_AUTO_BUILD_SKIP_NEWGRP:-0}" == 1 ]]; then
+    return 1
+  fi
+
+  if [[ -t 0 && -t 1 ]]; then
+    log "starting a new shell with the sbuild group active"
+    exec newgrp sbuild
+  fi
+
+  return 1
+}
+
+sbuild_chroot_name() {
+  printf 'noble-%s\n' "${TARGET_ARCH}"
+}
+
+sbuild_chroot_path() {
+  printf '/srv/chroot/%s\n' "$(sbuild_chroot_name)"
+}
+
+print_sbuild_createchroot_command() {
+  printf '  sudo sbuild-createchroot --arch=%s --chroot-suffix= --include=%s noble %s %s\n' \
+    "${TARGET_ARCH}" \
+    "${SBUILD_CHROOT_INCLUDE}" \
+    "$(sbuild_chroot_path)" \
+    "${NOBLE_AUTO_BUILD_MIRROR}" >&2
+}
+
+chroot_listing_contains_target() {
+  local target="$1"
+  local listing="$2"
+  local line
+
+  while IFS= read -r line; do
+    case "${line}" in
+      "${target}"|"chroot:${target}"|"source:${target}")
+        return 0
+        ;;
+    esac
+  done <<<"${listing}"
+
+  return 1
+}
+
+sbuild_chroot_exists() {
+  local target="$1"
+  local listing
+  local found=1
+
+  if command -v schroot >/dev/null 2>&1; then
+    if listing="$(schroot -l 2>/dev/null)" && chroot_listing_contains_target "${target}" "${listing}"; then
+      found=0
+    fi
+  fi
+
+  if command -v sbuild >/dev/null 2>&1; then
+    if listing="$(sbuild --list-chroots 2>/dev/null)" && chroot_listing_contains_target "${target}" "${listing}"; then
+      found=0
+    fi
+  fi
+
+  return "${found}"
+}
+
+print_missing_sbuild_chroot_guidance() {
+  printf 'Missing sbuild chroot: %s\n' "$(sbuild_chroot_name)" >&2
+  printf 'Create it with:\n' >&2
+  print_sbuild_createchroot_command
+}
+
+provision_sbuild_chroot() {
+  local answer target
+
+  target="$(sbuild_chroot_name)"
+  print_missing_sbuild_chroot_guidance
+  printf 'Type yes to create this chroot now: ' >&2
+  IFS= read -r answer || answer=""
+
+  if [[ "${answer}" != "yes" ]]; then
+    log "sbuild chroot creation cancelled; rerun after creating ${target}"
+    return 1
+  fi
+
+  "${SUDO[@]}" sbuild-createchroot \
+    "--arch=${TARGET_ARCH}" \
+    "--chroot-suffix=" \
+    "--include=${SBUILD_CHROOT_INCLUDE}" \
+    noble \
+    "$(sbuild_chroot_path)" \
+    "${NOBLE_AUTO_BUILD_MIRROR}"
+
+  if ! sbuild_chroot_exists "${target}"; then
+    log "sbuild chroot ${target} is still not visible after creation"
+    return 1
+  fi
+}
+
+ensure_sbuild_chroot() {
+  local target
+
+  target="$(sbuild_chroot_name)"
+  if sbuild_chroot_exists "${target}"; then
+    return 0
+  fi
+
+  if [[ "${PROVISION}" -eq 1 ]]; then
+    provision_sbuild_chroot
+    return
+  fi
+
+  print_missing_sbuild_chroot_guidance
+  return 1
 }
 
 provision_core_dependencies() {
@@ -356,12 +516,15 @@ fi
 
 if [[ "${PROVISION}" -eq 1 ]]; then
   provision_core_dependencies
-  provision_docker_ce
 fi
 
 check_core_dependencies || die "missing core build dependencies"
 check_debian_dscverify_keyrings || die "missing readable Debian dscverify keyring"
+ensure_sbuild_group || die "sbuild group membership is not active"
+ensure_sbuild_chroot || die "sbuild chroot is unavailable"
+
 if [[ "${PROVISION}" -eq 1 ]]; then
+  provision_docker_ce
   check_docker_provisioned || die "Docker daemon is unavailable after Docker CE provisioning"
 else
   check_docker_default || die "Docker CE is unavailable"

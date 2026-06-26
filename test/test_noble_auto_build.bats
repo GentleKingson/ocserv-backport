@@ -41,8 +41,8 @@ case "$(basename "$0")" in
     echo "dpkg-query stub was not replaced" >&2
     exit 99
     ;;
-  sbuild) echo "noble-amd64" ;;
-  schroot) echo "chroot:noble-amd64" ;;
+  sbuild) echo "noble-${TARGET_ARCH:-amd64}" ;;
+  schroot) echo "chroot:noble-${TARGET_ARCH:-amd64}" ;;
   docker)
     case "${1:-}" in
       info) exit 0 ;;
@@ -62,6 +62,34 @@ esac
 SH
     chmod +x "${FAKEBIN}/${cmd}"
   done
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+case "\${1:-}" in
+  --list-chroots)
+    echo "noble-\${TARGET_ARCH:-amd64}"
+    exit 0
+    ;;
+  *)
+    echo "unexpected sbuild command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+case "\${1:-}" in
+  -l|--list)
+    echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+    exit 0
+    ;;
+  *)
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
   cat > "${FAKEBIN}/id" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}" in
@@ -75,7 +103,7 @@ SH
 if [[ "${1:-}" == "-c" ]]; then exit 0; fi
 exit 0
 SH
-  chmod +x "${FAKEBIN}/id" "${FAKEBIN}/python3"
+  chmod +x "${FAKEBIN}/sbuild" "${FAKEBIN}/schroot" "${FAKEBIN}/id" "${FAKEBIN}/python3"
   install_fake_dpkg_query
 }
 
@@ -98,6 +126,149 @@ fi
 exit 1
 SH
   chmod +x "${FAKEBIN}/dpkg-query"
+}
+
+install_fake_groups() {
+  local groups="$1"
+  cat > "${FAKEBIN}/id" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  -u) echo 1000 ;;
+  -nG) echo "${groups}" ;;
+  *) /usr/bin/id "\$@" ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/id"
+}
+
+install_fake_root_user() {
+  cat > "${FAKEBIN}/id" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -u) echo 0 ;;
+  -nG) echo "root adm" ;;
+  *) /usr/bin/id "$@" ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/id"
+}
+
+install_fake_missing_chroot() {
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+case "\${1:-}" in
+  -l|--list)
+    exit 0
+    ;;
+  *)
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+case "\${1:-}" in
+  --list-chroots)
+    exit 0
+    ;;
+  *)
+    echo "unexpected sbuild command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild-createchroot" <<SH
+#!/usr/bin/env bash
+printf 'sbuild-createchroot %s\n' "\$*" >> "${AUTO_REPO}/sbuild-createchroot-calls"
+echo "unexpected sbuild-createchroot command: \$*" >&2
+exit 99
+SH
+  chmod +x "${FAKEBIN}/schroot" "${FAKEBIN}/sbuild" "${FAKEBIN}/sbuild-createchroot"
+}
+
+install_fake_source_chroot() {
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+case "\${1:-}" in
+  -l|--list)
+    echo "source:noble-\${TARGET_ARCH:-amd64}"
+    exit 0
+    ;;
+  *)
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+case "\${1:-}" in
+  --list-chroots)
+    exit 0
+    ;;
+  *)
+    echo "unexpected sbuild command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/schroot" "${FAKEBIN}/sbuild"
+}
+
+allow_fake_sbuild_adduser() {
+  cat > "${FAKEBIN}/sbuild-adduser" <<SH
+#!/usr/bin/env bash
+printf 'sbuild-adduser %s\n' "\$*" >> "${AUTO_REPO}/sbuild-adduser-calls"
+exit 0
+SH
+  chmod +x "${FAKEBIN}/sbuild-adduser"
+}
+
+install_fake_sbuild_createchroot() {
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+case "\${1:-}" in
+  -l|--list)
+    if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
+      echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+    fi
+    exit 0
+    ;;
+  *)
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+case "\${1:-}" in
+  --list-chroots)
+    if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
+      echo "noble-\${TARGET_ARCH:-amd64}"
+    fi
+    exit 0
+    ;;
+  *)
+    echo "unexpected sbuild command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild-createchroot" <<SH
+#!/usr/bin/env bash
+printf 'sbuild-createchroot %s\n' "\$*" >> "${AUTO_REPO}/sbuild-createchroot-calls"
+: > "${AUTO_REPO}/chroot-created"
+exit 0
+SH
+  chmod +x "${FAKEBIN}/schroot" "${FAKEBIN}/sbuild" "${FAKEBIN}/sbuild-createchroot"
 }
 
 allow_fake_provision_commands() {
@@ -259,9 +430,31 @@ run_auto_isolated() {
   if [[ "${FAKE_DPKG_QUERY_INSTALLED+x}" == x ]]; then
     env_args+=("FAKE_DPKG_QUERY_INSTALLED=${FAKE_DPKG_QUERY_INSTALLED}")
   fi
+  if [[ "${NOBLE_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
+    env_args+=("NOBLE_AUTO_BUILD_SKIP_NEWGRP=${NOBLE_AUTO_BUILD_SKIP_NEWGRP}")
+  fi
+  if [[ "${USER+x}" == x ]]; then
+    env_args+=("USER=${USER}")
+  fi
 
   # shellcheck disable=SC2016
-  run env "${env_args[@]}" /bin/bash -c 'cd "$1" || exit; shift; /bin/bash scripts/noble-auto-build.sh "$@"' _ "${AUTO_REPO}" "$@"
+  if [[ "${RUN_AUTO_INPUT+x}" == x ]]; then
+    local env_count="${#env_args[@]}"
+    run /bin/bash -c '
+      input="$1"
+      repo="$2"
+      env_count="$3"
+      shift 3
+      env_args=()
+      for ((i = 0; i < env_count; i++)); do
+        env_args+=("$1")
+        shift
+      done
+      printf "%s" "${input}" | env "${env_args[@]}" /bin/bash -c '"'"'cd "$1" || exit; shift; /bin/bash scripts/noble-auto-build.sh "$@"'"'"' _ "${repo}" "$@"
+    ' _ "${RUN_AUTO_INPUT}" "${AUTO_REPO}" "${env_count}" "${env_args[@]}" "$@"
+  else
+    run env "${env_args[@]}" /bin/bash -c 'cd "$1" || exit; shift; /bin/bash scripts/noble-auto-build.sh "$@"' _ "${AUTO_REPO}" "$@"
+  fi
 }
 
 @test "noble-auto-build --help prints usage" {
@@ -413,6 +606,180 @@ run_auto_isolated() {
   grep -Fq -- "containerd.io" "${AUTO_REPO}/dpkg-query-calls"
   grep -Fxq -- "docker info" "${AUTO_REPO}/docker-calls"
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build default mode reports missing sbuild group commands" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_groups "users adm"
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  expected_group_command="sudo sbuild-adduser \"\$USER\""
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"${expected_group_command}"* ]]
+  [[ "${output}" == *"newgrp sbuild"* ]]
+  [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build skips sbuild group handling for root" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_root_user
+  allow_fake_sbuild_adduser
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-adduser-calls" ]
+  [[ "${output}" != *"sudo sbuild-adduser"* ]]
+  grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
+  grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
+}
+
+@test "noble-auto-build --provision adds sbuild group and skips real newgrp in tests" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_groups "users adm"
+  allow_fake_provision_commands
+  allow_fake_sbuild_adduser
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    USER=builder \
+    NOBLE_AUTO_BUILD_SKIP_NEWGRP=1 \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "sudo sbuild-adduser builder" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-adduser builder" "${AUTO_REPO}/sbuild-adduser-calls"
+  [[ "${output}" == *"newgrp sbuild"* ]]
+  [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
+  [[ "${output}" == *"rerun"* ]]
+  [ ! -e "${AUTO_REPO}/newgrp-calls" ]
+}
+
+@test "noble-auto-build --provision stops in old non-interactive shell after adding sbuild group" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_groups "users adm"
+  allow_fake_provision_commands
+  allow_fake_sbuild_adduser
+  install_fake_missing_chroot
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    USER=builder \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "sudo sbuild-adduser builder" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-adduser builder" "${AUTO_REPO}/sbuild-adduser-calls"
+  [ ! -e "${AUTO_REPO}/schroot-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+  if grep -Fq -- "apt-get remove -y docker.io" "${AUTO_REPO}/apt-get-calls"; then
+    false
+  fi
+}
+
+@test "noble-auto-build default mode reports missing amd64 sbuild chroot command" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
+  grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+}
+
+@test "noble-auto-build accepts source sbuild chroot listing" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_source_chroot
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
+  grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
+  [[ "${output}" != *"Missing sbuild chroot"* ]]
+}
+
+@test "noble-auto-build --provision creates chroot only after literal yes" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT=$'YES\n' \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT=$'yes\n' \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+}
+
+@test "noble-auto-build TARGET_ARCH arm64 reports ports mirror for missing chroot" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    TARGET_ARCH=arm64 \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports"* ]]
 }
 
 @test "noble-auto-build default mode rejects missing Docker CE package even when daemon works" {
