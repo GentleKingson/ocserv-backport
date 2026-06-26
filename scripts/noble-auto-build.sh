@@ -32,7 +32,9 @@ DOCKER_CE_PACKAGES=(
   docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 )
 
+SBUILD_CHROOT_COMPONENTS="${SBUILD_CHROOT_COMPONENTS:-main,universe}"
 SBUILD_CHROOT_INCLUDE="eatmydata,ccache,gnupg,ca-certificates"
+NOBLE_AUTO_BUILD_CHROOT_BASE="${NOBLE_AUTO_BUILD_CHROOT_BASE:-/srv/chroot}"
 
 usage() {
   cat <<'EOF'
@@ -223,15 +225,31 @@ sbuild_chroot_name() {
 }
 
 sbuild_chroot_path() {
-  printf '/srv/chroot/%s\n' "$(sbuild_chroot_name)"
+  printf '%s/%s\n' "${NOBLE_AUTO_BUILD_CHROOT_BASE}" "$(sbuild_chroot_name)"
 }
 
 print_sbuild_createchroot_command() {
-  printf '  sudo sbuild-createchroot --arch=%s --chroot-suffix= --include=%s noble %s %s\n' \
+  printf '  sudo sbuild-createchroot --arch=%s --chroot-suffix= --components=%s --include=%s noble %s %s\n' \
     "${TARGET_ARCH}" \
+    "${SBUILD_CHROOT_COMPONENTS}" \
     "${SBUILD_CHROOT_INCLUDE}" \
     "$(sbuild_chroot_path)" \
     "${NOBLE_AUTO_BUILD_MIRROR}" >&2
+}
+
+print_existing_sbuild_chroot_path_guidance() {
+  local chroot_path="$1"
+  local sudo_prefix=""
+
+  if [[ "${#SUDO[@]}" -gt 0 ]]; then
+    sudo_prefix="${SUDO[*]} "
+  fi
+
+  log "sbuild chroot path exists but is not registered: ${chroot_path}"
+  printf 'The directory already exists, but schroot/sbuild does not list %s.\n' "$(sbuild_chroot_name)" >&2
+  printf 'If this is a failed chroot creation attempt, review the path and remove it manually before retrying:\n' >&2
+  printf '  %srm -rf %s\n' "${sudo_prefix}" "${chroot_path}" >&2
+  printf '  scripts/noble-auto-build.sh --provision\n' >&2
 }
 
 chroot_listing_contains_target() {
@@ -278,6 +296,7 @@ print_missing_sbuild_chroot_guidance() {
 
 provision_sbuild_chroot() {
   local answer target
+  local -a sbuild_createchroot_args
 
   target="$(sbuild_chroot_name)"
   print_missing_sbuild_chroot_guidance
@@ -289,13 +308,17 @@ provision_sbuild_chroot() {
     return 1
   fi
 
-  "${SUDO[@]}" sbuild-createchroot \
-    "--arch=${TARGET_ARCH}" \
-    "--chroot-suffix=" \
-    "--include=${SBUILD_CHROOT_INCLUDE}" \
-    noble \
-    "$(sbuild_chroot_path)" \
+  sbuild_createchroot_args=(
+    "--arch=${TARGET_ARCH}"
+    "--chroot-suffix="
+    "--components=${SBUILD_CHROOT_COMPONENTS}"
+    "--include=${SBUILD_CHROOT_INCLUDE}"
+    noble
+    "$(sbuild_chroot_path)"
     "${NOBLE_AUTO_BUILD_MIRROR}"
+  )
+
+  "${SUDO[@]}" sbuild-createchroot "${sbuild_createchroot_args[@]}"
 
   if ! sbuild_chroot_exists "${target}"; then
     log "sbuild chroot ${target} is still not visible after creation"
@@ -304,11 +327,17 @@ provision_sbuild_chroot() {
 }
 
 ensure_sbuild_chroot() {
-  local target
+  local chroot_path target
 
   target="$(sbuild_chroot_name)"
   if sbuild_chroot_exists "${target}"; then
     return 0
+  fi
+
+  chroot_path="$(sbuild_chroot_path)"
+  if [[ -d "${chroot_path}" ]]; then
+    print_existing_sbuild_chroot_path_guidance "${chroot_path}"
+    return 1
   fi
 
   if [[ "${PROVISION}" -eq 1 ]]; then

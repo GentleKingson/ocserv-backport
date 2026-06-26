@@ -468,6 +468,12 @@ run_auto_isolated() {
   if [[ "${NOBLE_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
     env_args+=("NOBLE_AUTO_BUILD_SKIP_NEWGRP=${NOBLE_AUTO_BUILD_SKIP_NEWGRP}")
   fi
+  if [[ "${SBUILD_CHROOT_COMPONENTS+x}" == x ]]; then
+    env_args+=("SBUILD_CHROOT_COMPONENTS=${SBUILD_CHROOT_COMPONENTS}")
+  fi
+  if [[ "${NOBLE_AUTO_BUILD_CHROOT_BASE+x}" == x ]]; then
+    env_args+=("NOBLE_AUTO_BUILD_CHROOT_BASE=${NOBLE_AUTO_BUILD_CHROOT_BASE}")
+  fi
   if [[ "${USER+x}" == x ]]; then
     env_args+=("USER=${USER}")
   fi
@@ -807,7 +813,7 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu"* ]]
+  grep -Fq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" <<<"${output}"
   [[ "${output}" != *"unexpected host command"* ]]
   grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
   grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
@@ -859,9 +865,83 @@ run_auto_isolated() {
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
-  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "noble-auto-build supports chroot component and base path overrides" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+  chroot_base="${AUTO_REPO}/custom-chroots"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT=$'yes\n' \
+    SBUILD_CHROOT_COMPONENTS="main,universe,multiverse" \
+    NOBLE_AUTO_BUILD_CHROOT_BASE="${chroot_base}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe,multiverse --include=eatmydata,ccache,gnupg,ca-certificates noble ${chroot_base}/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe,multiverse --include=eatmydata,ccache,gnupg,ca-certificates noble ${chroot_base}/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+}
+
+@test "noble-auto-build default mode reports unregistered existing chroot directory" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  chroot_base="${AUTO_REPO}/srv/chroot"
+  mkdir -p "${chroot_base}/noble-amd64"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_CHROOT_BASE="${chroot_base}" \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  grep -Fq -- "sbuild chroot path exists but is not registered: ${chroot_base}/noble-amd64" <<<"${output}"
+  grep -Fq -- "sudo rm -rf ${chroot_base}/noble-amd64" <<<"${output}"
+  grep -Fq -- "scripts/noble-auto-build.sh --provision" <<<"${output}"
+  if grep -Fq -- "Missing sbuild chroot" <<<"${output}"; then
+    false
+  fi
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+}
+
+@test "noble-auto-build --provision refuses to create over unregistered existing chroot directory" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  chroot_base="${AUTO_REPO}/srv/chroot"
+  mkdir -p "${chroot_base}/noble-amd64"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_CHROOT_BASE="${chroot_base}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  grep -Fq -- "sbuild chroot path exists but is not registered: ${chroot_base}/noble-amd64" <<<"${output}"
+  grep -Fq -- "sudo rm -rf ${chroot_base}/noble-amd64" <<<"${output}"
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 }
 
 @test "noble-auto-build TARGET_ARCH arm64 reports ports mirror for missing chroot" {
@@ -877,7 +957,7 @@ run_auto_isolated() {
     run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports"* ]]
+  grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports" <<<"${output}"
 }
 
 @test "noble-auto-build default mode rejects missing Docker CE package even when daemon works" {
