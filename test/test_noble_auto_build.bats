@@ -32,27 +32,27 @@ install_minimal_valid_fakebin() {
   ln -s /usr/bin/basename "${FAKEBIN}/basename"
   ln -s /usr/bin/dirname "${FAKEBIN}/dirname"
   ln -s /bin/date "${FAKEBIN}/date"
-  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source sbuild schroot debootstrap lintian bats shellcheck docker dpkg make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
+  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
     cat > "${FAKEBIN}/${cmd}" <<'SH'
 #!/usr/bin/env bash
 case "$(basename "$0")" in
   dpkg) echo amd64 ;;
+  dpkg-query)
+    echo "dpkg-query stub was not replaced" >&2
+    exit 99
+    ;;
   sbuild) echo "noble-amd64" ;;
   schroot) echo "chroot:noble-amd64" ;;
   docker)
     case "${1:-}" in
       info) exit 0 ;;
       pull) echo "unexpected docker pull: $*" >&2; exit 99 ;;
-      *) exit 0 ;;
+      *) echo "unexpected docker command: $*" >&2; exit 99 ;;
     esac
     ;;
   make)
-    printf '%s\n' "$*" > make-calls
-    mkdir -p build/noble/amd64/binary/node-undici build/noble/amd64/binary/ocserv build/noble/amd64/repo
-    touch build/noble/amd64/binary/node-undici/libllhttp9.2_fake_amd64.deb
-    touch build/noble/amd64/binary/node-undici/libllhttp-dev_fake_amd64.deb
-    touch build/noble/amd64/binary/ocserv/ocserv_fake_amd64.deb
-    touch build/noble/amd64/repo/Packages
+    echo "unexpected make command: $*" >&2
+    exit 99
     ;;
   sudo|apt-get|systemctl|sbuild-adduser|sbuild-createchroot|newgrp)
     echo "unexpected host command: $(basename "$0") $*" >&2
@@ -76,6 +76,28 @@ if [[ "${1:-}" == "-c" ]]; then exit 0; fi
 exit 0
 SH
   chmod +x "${FAKEBIN}/id" "${FAKEBIN}/python3"
+  install_fake_dpkg_query
+}
+
+install_fake_dpkg_query() {
+  cat > "${FAKEBIN}/dpkg-query" <<SH
+#!/usr/bin/env bash
+printf 'dpkg-query %s\n' "\$*" >> "${AUTO_REPO}/dpkg-query-calls"
+package="\${!#}"
+installed=" \${FAKE_DPKG_QUERY_INSTALLED:-docker-ce docker-ce-cli containerd.io} "
+case "\$*" in
+  *"--print-avail"*)
+    echo "unexpected dpkg-query command: \$*" >&2
+    exit 99
+    ;;
+esac
+if [[ "\${installed}" == *" \${package} "* ]]; then
+  printf 'install ok installed\n'
+  exit 0
+fi
+exit 1
+SH
+  chmod +x "${FAKEBIN}/dpkg-query"
 }
 
 allow_fake_provision_commands() {
@@ -88,10 +110,29 @@ SH
 #!/usr/bin/env bash
 printf 'apt-get %s\n' "\$*" >> "${AUTO_REPO}/apt-get-calls"
 case "\${1:-}" in
+  remove)
+    expected="remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc"
+    if [[ "\$*" != "\${expected}" ]]; then
+      echo "unexpected docker conflict package remove: \$*" >&2
+      exit 99
+    fi
+    exit 0
+    ;;
   update)
     exit 0
     ;;
   install)
+    if [[ " \$* " == *" docker-ce "* && "\${FAKE_APT_DOCKER_CONFLICT:-0}" == 1 ]]; then
+      echo "containerd.io : Conflicts: containerd" >&2
+      exit 100
+    fi
+    if [[ " \$* " == *" docker-ce "* ]]; then
+      expected="install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+      if [[ "\$*" != "\${expected}" ]]; then
+        echo "unexpected docker-ce install: \$*" >&2
+        exit 99
+      fi
+    fi
     : > "\${DSCVERIFY_KEYRING_PATHS%%:*}"
     exit 0
     ;;
@@ -101,7 +142,89 @@ case "\${1:-}" in
     ;;
 esac
 SH
-  chmod +x "${FAKEBIN}/sudo" "${FAKEBIN}/apt-get"
+  cat > "${FAKEBIN}/install" <<SH
+#!/usr/bin/env bash
+printf 'install %s\n' "\$*" >> "${AUTO_REPO}/install-calls"
+/usr/bin/install "\$@"
+SH
+  cat > "${FAKEBIN}/curl" <<SH
+#!/usr/bin/env bash
+printf 'curl %s\n' "\$*" >> "${AUTO_REPO}/curl-calls"
+case "\$*" in
+  "-fsSL https://download.docker.com/linux/ubuntu/gpg -o "*)
+    ;;
+  *)
+    echo "unexpected curl command: \$*" >&2
+    exit 99
+    ;;
+esac
+output=""
+while [[ "\$#" -gt 0 ]]; do
+  case "\$1" in
+    -o)
+      output="\$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [[ -n "\${output}" ]]; then
+  printf 'fake docker gpg\n' > "\${output}"
+fi
+SH
+  cat > "${FAKEBIN}/chmod" <<SH
+#!/usr/bin/env bash
+printf 'chmod %s\n' "\$*" >> "${AUTO_REPO}/chmod-calls"
+/bin/chmod "\$@"
+SH
+  cat > "${FAKEBIN}/tee" <<SH
+#!/usr/bin/env bash
+printf 'tee %s\n' "\$*" >> "${AUTO_REPO}/tee-calls"
+/usr/bin/tee "\$@"
+SH
+  cat > "${FAKEBIN}/systemctl" <<SH
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "\$*" >> "${AUTO_REPO}/systemctl-calls"
+if [[ " \$* " == *" containerd "* && "\${FAKE_SYSTEMCTL_CONTAINERD_FAIL:-0}" == 1 ]]; then
+  exit 1
+fi
+exit 0
+SH
+  chmod +x "${FAKEBIN}/sudo" "${FAKEBIN}/apt-get" "${FAKEBIN}/install" "${FAKEBIN}/curl" "${FAKEBIN}/chmod" "${FAKEBIN}/tee" "${FAKEBIN}/systemctl"
+}
+
+install_fake_docker_info_sequence() {
+  local first_status="$1"
+  local second_status="${2:-$1}"
+  cat > "${FAKEBIN}/docker" <<SH
+#!/usr/bin/env bash
+printf 'docker %s\n' "\$*" >> "${AUTO_REPO}/docker-calls"
+case "\${1:-}" in
+  info)
+    count=0
+    if [[ -f "${AUTO_REPO}/docker-info-count" ]]; then
+      IFS= read -r count < "${AUTO_REPO}/docker-info-count"
+    fi
+    count=\$((count + 1))
+    printf '%s\n' "\${count}" > "${AUTO_REPO}/docker-info-count"
+    if [[ "\${count}" -eq 1 ]]; then
+      exit "${first_status}"
+    fi
+    exit "${second_status}"
+    ;;
+  pull|run)
+    echo "unexpected docker \${1}: \$*" >&2
+    exit 99
+    ;;
+  *)
+    echo "unexpected docker command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/docker"
 }
 
 run_auto() {
@@ -117,6 +240,24 @@ run_auto_isolated() {
   )
   if [[ "${DSCVERIFY_KEYRING_PATHS+x}" == x ]]; then
     env_args+=("DSCVERIFY_KEYRING_PATHS=${DSCVERIFY_KEYRING_PATHS}")
+  fi
+  if [[ "${TARGET_ARCH+x}" == x ]]; then
+    env_args+=("TARGET_ARCH=${TARGET_ARCH}")
+  fi
+  if [[ "${NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH+x}" == x ]]; then
+    env_args+=("NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH=${NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH}")
+  fi
+  if [[ "${NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH+x}" == x ]]; then
+    env_args+=("NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH=${NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH}")
+  fi
+  if [[ "${FAKE_APT_DOCKER_CONFLICT+x}" == x ]]; then
+    env_args+=("FAKE_APT_DOCKER_CONFLICT=${FAKE_APT_DOCKER_CONFLICT}")
+  fi
+  if [[ "${FAKE_SYSTEMCTL_CONTAINERD_FAIL+x}" == x ]]; then
+    env_args+=("FAKE_SYSTEMCTL_CONTAINERD_FAIL=${FAKE_SYSTEMCTL_CONTAINERD_FAIL}")
+  fi
+  if [[ "${FAKE_DPKG_QUERY_INSTALLED+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_QUERY_INSTALLED=${FAKE_DPKG_QUERY_INSTALLED}")
   fi
 
   # shellcheck disable=SC2016
@@ -185,8 +326,13 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   allow_fake_provision_commands
   keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
 
-  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated --provision
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
   grep -Fq -- "apt-get update" "${AUTO_REPO}/apt-get-calls"
@@ -211,4 +357,155 @@ run_auto_isolated() {
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
   [ ! -e "${AUTO_REPO}/apt-get-calls" ]
+}
+
+@test "noble-auto-build default mode reports missing Docker CE without docker.io guidance" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  rm "${FAKEBIN}/docker"
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Docker CE"* ]]
+  [[ "${output}" == *"docker-ce"* ]]
+  [[ "${output}" == *"download.docker.com"* ]]
+  [[ "${output}" != *"docker.io"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/apt-get-calls" ]
+}
+
+@test "noble-auto-build default mode reports Docker daemon repair commands without sudo execution" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 1
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"sudo systemctl enable --now docker"* ]]
+  [[ "${output}" == *"sudo docker info"* ]]
+  [[ "${output}" != *"docker.io"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  grep -Fxq -- "docker info" "${AUTO_REPO}/docker-calls"
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/systemctl-calls" ]
+}
+
+@test "noble-auto-build default mode verifies Docker CE packages and daemon without sudo" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "dpkg-query" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fq -- "docker-ce" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fq -- "docker-ce-cli" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fq -- "containerd.io" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fxq -- "docker info" "${AUTO_REPO}/docker-calls"
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build default mode rejects missing Docker CE package even when daemon works" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli" \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Docker CE"* ]]
+  [[ "${output}" == *"containerd.io"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build default mode rejects Ubuntu docker packages even when daemon works" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli containerd.io docker.io containerd runc" \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Docker CE"* ]]
+  [[ "${output}" == *"Do not mix Ubuntu docker.io/containerd with Docker CE/containerd.io"* ]]
+  grep -Fq -- "docker.io" "${AUTO_REPO}/dpkg-query-calls"
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build --provision installs Docker CE and repairs daemon" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 1 0
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    TARGET_ARCH=arm64 \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    FAKE_SYSTEMCTL_CONTAINERD_FAIL=1 \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "apt-get remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "apt-get install -y --no-install-recommends ca-certificates curl" "${AUTO_REPO}/apt-get-calls"
+  docker_install_call="$(grep -F -- "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "${AUTO_REPO}/apt-get-calls")"
+  [[ "${docker_install_call}" == *"apt-get install"* ]]
+  update_count="$(grep -Fc -- "apt-get update" "${AUTO_REPO}/apt-get-calls")"
+  [ "${update_count}" -ge 2 ]
+  grep -Fq -- "curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o ${docker_keyring}" "${AUTO_REPO}/curl-calls"
+  grep -Fq -- "chmod a+r ${docker_keyring}" "${AUTO_REPO}/chmod-calls"
+  grep -Fq -- "systemctl enable --now docker" "${AUTO_REPO}/systemctl-calls"
+  grep -Fq -- "systemctl enable --now containerd" "${AUTO_REPO}/systemctl-calls"
+  info_count="$(grep -Fxc -- "docker info" "${AUTO_REPO}/docker-calls")"
+  [ "${info_count}" -eq 2 ]
+  grep -Fxq -- "sudo docker info" "${AUTO_REPO}/sudo-calls"
+  grep -Fq -- "Architectures: amd64" "${docker_source}"
+  grep -Fq -- "Suites: noble" "${docker_source}"
+  grep -Fq -- "Signed-By: ${docker_keyring}" "${docker_source}"
+  if grep -Eq -- "docker (pull|run)" "${AUTO_REPO}/docker-calls"; then
+    false
+  fi
+}
+
+@test "noble-auto-build --provision diagnoses Docker CE containerd conflict" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    FAKE_APT_DOCKER_CONFLICT=1 \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"containerd.io : Conflicts: containerd"* ]]
+  [[ "${output}" == *"Do not mix Ubuntu docker.io/containerd with Docker CE/containerd.io"* ]]
 }
