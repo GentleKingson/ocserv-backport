@@ -51,6 +51,7 @@ usage_stderr() {
 }
 
 PROVISION=0
+SUDO=()
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -107,11 +108,19 @@ select_noble_mirror() {
 }
 
 print_core_install_guidance() {
+  local apt_prefix=""
+
+  if [[ "${#SUDO[@]}" -gt 0 ]]; then
+    apt_prefix="${SUDO[*]} "
+  fi
+
   printf 'Install core build dependencies with:\n' >&2
-  printf '  sudo apt-get update\n' >&2
-  printf '  sudo apt-get install -y --no-install-recommends' >&2
+  printf '  %sapt-get update\n' "${apt_prefix}" >&2
+  printf '  %sapt-get install -y --no-install-recommends' "${apt_prefix}" >&2
   printf ' %s' "${CORE_PACKAGES[@]}" >&2
-  printf '\n' >&2
+  printf '\n\n' >&2
+  printf 'Or let the wrapper install them with:\n' >&2
+  printf '  scripts/noble-auto-build.sh --provision\n' >&2
 }
 
 check_core_dependencies() {

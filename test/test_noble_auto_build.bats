@@ -543,7 +543,30 @@ run_auto_isolated() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required command: curl"* ]]
   [[ "${output}" == *"sudo apt-get install -y --no-install-recommends"* ]]
+  [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
   [[ "${output}" == *"curl"* ]]
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/apt-get-calls" ]
+}
+
+@test "noble-auto-build root default mode reports missing core command without sudo prefix" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_root_user
+  rm "${FAKEBIN}/curl"
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required command: curl"* ]]
+  [[ "${output}" == *"apt-get update"* ]]
+  [[ "${output}" == *"apt-get install -y --no-install-recommends"* ]]
+  [[ "${output}" != *"sudo apt-get update"* ]]
+  [[ "${output}" != *"sudo apt-get install"* ]]
+  [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
   [ ! -e "${AUTO_REPO}/apt-get-calls" ]
