@@ -49,7 +49,9 @@ scripts/noble-auto-build.sh --provision
 source 并安装 `docker-ce`、`docker-ce-cli`、`containerd.io`、
 `docker-buildx-plugin` 和 `docker-compose-plugin`。宿主 apt 操作会使用
 `apt-get -q=1 -o=Dpkg::Use-Pty=0` 静默执行；成功时隐藏 apt 过程输出，失败时显示
-原始 apt 错误。如果 Docker 已安装但 daemon 不可达，provision 模式会尝试有限修复：
+原始 apt 错误。Noble binary 阶段的 `sbuild` 成功输出也会静默，隐藏 chroot 内部
+apt/build 细节；失败时会显示原始 `sbuild` 输出。如果 Docker 已安装但 daemon 不可达，
+provision 模式会尝试有限修复：
 
 ```bash
 sudo systemctl enable --now docker
@@ -326,6 +328,8 @@ deb [trusted=yes] http://127.0.0.1:<port>/ ./
 
 这样可以避免裸 `file:/host/path` 在 schroot 内不可见的问题。HTTP server 只在
 `noble-binary-ocserv` 阶段存在，脚本会在成功、失败或中断时清理该进程。
+Noble binary 阶段仍会显示外层阶段和产物日志；静默的只是成功路径中的 `sbuild`
+内部输出。若 `sbuild` 失败，脚本会完整打印原始 stdout/stderr。
 
 ## 生产边界
 

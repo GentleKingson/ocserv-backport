@@ -20,6 +20,9 @@ setup_noble_repo() {
   mkdir -p "${NOBLE_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
   cp "${REPO_ROOT}/scripts/_dsc.sh" "${NOBLE_REPO}/scripts/_dsc.sh"
+  if [[ -f "${REPO_ROOT}/scripts/_noble_sbuild.sh" ]]; then
+    cp "${REPO_ROOT}/scripts/_noble_sbuild.sh" "${NOBLE_REPO}/scripts/_noble_sbuild.sh"
+  fi
   if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
   fi
@@ -29,6 +32,7 @@ setup_noble_repo() {
     noble-build.sh \
     noble-build-repo.sh \
     noble-build-source-package.sh \
+    noble-build-binary-node-undici.sh \
     noble-build-binary-ocserv.sh \
     noble-smoke-test.sh; do
     if [[ -f "${REPO_ROOT}/scripts/${script}" ]]; then
@@ -371,6 +375,151 @@ touch "\${build_dir}/ocserv_\${version}_\${arch}.changes"
 touch "\${build_dir}/ocserv_\${version}_\${arch}.buildinfo"
 SH
   chmod +x "${FAKEBIN}/python3" "${FAKEBIN}/sbuild"
+}
+
+install_fake_noble_binary_sbuild() {
+  local exit_status="${1:-0}"
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "${NOBLE_REPO}/sbuild-args"
+printf '%s\n' "Installing build dependencies"
+printf '%s\n' "Reading package lists..."
+printf '%s\n' "Building dependency tree..." >&2
+if [[ "${exit_status}" -ne 0 ]]; then
+  exit "${exit_status}"
+fi
+build_dir=""
+arch="\${TARGET_ARCH:-amd64}"
+prev=""
+for arg in "\$@"; do
+  if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi
+  case "\${arg}" in
+    --build-dir=*) build_dir="\${arg#--build-dir=}" ;;
+    --arch=*) arch="\${arg#--arch=}" ;;
+  esac
+  prev="\${arg}"
+done
+mkdir -p "\${build_dir}"
+case "\${*: -1}" in
+  *node-undici_*.dsc)
+    version="\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}"
+    touch "\${build_dir}/libllhttp9.2_\${version}_\${arch}.deb"
+    touch "\${build_dir}/libllhttp-dev_\${version}_\${arch}.deb"
+    touch "\${build_dir}/node-undici_\${version}_\${arch}.changes"
+    touch "\${build_dir}/node-undici_\${version}_\${arch}.buildinfo"
+    ;;
+  *ocserv_*.dsc)
+    version="\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
+    touch "\${build_dir}/ocserv_\${version}_\${arch}.deb"
+    touch "\${build_dir}/ocserv_\${version}_\${arch}.changes"
+    touch "\${build_dir}/ocserv_\${version}_\${arch}.buildinfo"
+    ;;
+  *)
+    echo "unexpected dsc argument: \${*: -1}" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/sbuild"
+}
+
+create_node_undici_dsc() {
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/node-undici"
+  touch "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc"
+}
+
+create_ocserv_dsc_and_repo() {
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/noble/amd64/repo/Packages"
+}
+
+assert_sbuild_common_args() {
+  local args_file="$1"
+  grep -Fxq -- "--chroot-mode=schroot" "${args_file}"
+  grep -Fxq -- "-d" "${args_file}"
+  grep -Fxq -- "noble" "${args_file}"
+  grep -Fq -- "--arch=amd64" "${args_file}"
+  grep -Fxq -- "--build-dir" "${args_file}"
+  grep -Fxq -- "--no-run-lintian" "${args_file}"
+}
+
+@test "noble-binary-node-undici hides successful sbuild dependency output and preserves args" {
+  setup_noble_repo
+  install_fake_noble_binary_sbuild
+  create_node_undici_dsc
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-node-undici.sh > '${NOBLE_REPO}/script-output' 2>&1"
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Installing build dependencies" "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  if grep -Fq -- "Reading package lists..." "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  if grep -Fq -- "Building dependency tree..." "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc" "${NOBLE_REPO}/sbuild-args"
+  [ -f "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1_amd64.deb" ]
+}
+
+@test "noble-binary-node-undici prints original sbuild output on failure" {
+  setup_noble_repo
+  install_fake_noble_binary_sbuild 42
+  create_node_undici_dsc
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-node-undici.sh"
+
+  [ "${status}" -eq 42 ]
+  [[ "${output}" == *"Installing build dependencies"* ]]
+  [[ "${output}" == *"Reading package lists..."* ]]
+  [[ "${output}" == *"Building dependency tree..."* ]]
+}
+
+@test "noble-binary-ocserv hides successful sbuild dependency output and preserves extra repo args" {
+  setup_noble_repo
+  install_fake_noble_binary_sbuild
+  create_ocserv_dsc_and_repo
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' NOBLE_HTTP_STARTUP_SLEEP=0 bash scripts/noble-build-binary-ocserv.sh > '${NOBLE_REPO}/script-output' 2>&1"
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Installing build dependencies" "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  if grep -Fq -- "Reading package lists..." "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  if grep -Fq -- "Building dependency tree..." "${NOBLE_REPO}/script-output"; then
+    cat "${NOBLE_REPO}/script-output" >&2
+    return 1
+  fi
+  assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "--extra-repository=deb [trusted=yes] http://127.0.0.1:" "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "ocserv_1.5.0-1~ubuntu24.04.1.dsc" "${NOBLE_REPO}/sbuild-args"
+}
+
+@test "noble-binary-ocserv prints original sbuild output on failure" {
+  setup_noble_repo
+  install_fake_noble_binary_sbuild 43
+  create_ocserv_dsc_and_repo
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' NOBLE_HTTP_STARTUP_SLEEP=0 bash scripts/noble-build-binary-ocserv.sh"
+
+  [ "${status}" -eq 43 ]
+  [[ "${output}" == *"Installing build dependencies"* ]]
+  [[ "${output}" == *"Reading package lists..."* ]]
+  [[ "${output}" == *"Building dependency tree..."* ]]
 }
 
 @test "noble-binary-ocserv injects a temporary localhost HTTP repo and cleans it up" {

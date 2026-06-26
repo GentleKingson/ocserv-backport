@@ -69,7 +69,8 @@ attempt, add the current user to the `sbuild` group, and create the Noble sbuild
 chroot after an interactive `yes` confirmation. Once the foundation is ready, it
 runs `make noble-build`. Host APT operations run with
 `apt-get -q=1 -o=Dpkg::Use-Pty=0`; successful APT output is hidden, and failures
-print the original APT output.
+print the original APT output. Noble binary `sbuild` stages also hide successful
+internal chroot output and print the original `sbuild` output on failure.
 
 `make noble-build` is the lower-level Noble validation entry point for builders
 that are already prepared:
