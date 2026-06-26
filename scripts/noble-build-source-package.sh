@@ -15,6 +15,41 @@ noble_package_vars "$1"
 
 [[ -d "${PKG_SOURCE_TREE}" ]] || die "missing rewrapped source tree: ${PKG_SOURCE_TREE} (run noble-rewrap-${PKG_SOURCE} first)"
 
+print_source_package_host_dependency_guidance() {
+  local apt_prefix=""
+
+  if [[ "$(id -u)" -ne 0 ]]; then
+    apt_prefix="sudo "
+  fi
+
+  printf 'Install Noble source package host dependencies with:\n' >&2
+  printf '  %sapt-get update\n' "${apt_prefix}" >&2
+  printf '  %sapt-get install -y --no-install-recommends debhelper dh-nodejs\n' "${apt_prefix}" >&2
+}
+
+ensure_source_package_host_commands() {
+  local cmd missing_count=0
+  local -a required_commands=(dh)
+
+  if [[ "${PKG_SOURCE}" == "node-undici" ]]; then
+    required_commands+=(pkgjs-pjson)
+  fi
+
+  for cmd in "${required_commands[@]}"; do
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+      log "missing required source package command: ${cmd}"
+      missing_count=$((missing_count + 1))
+    fi
+  done
+
+  if [[ "${missing_count}" -gt 0 ]]; then
+    print_source_package_host_dependency_guidance
+    return 1
+  fi
+}
+
+ensure_source_package_host_commands || die "missing Noble source package host dependencies"
+
 shopt -s nullglob
 old_artifacts=("${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_NOBLE_VERSION}"*)
 shopt -u nullglob

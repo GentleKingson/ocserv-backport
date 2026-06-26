@@ -105,7 +105,7 @@ sudo apt update
 ```bash
 sudo apt install -y --no-install-recommends \
   git ca-certificates curl gnupg \
-  build-essential fakeroot devscripts dpkg-dev \
+  build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs \
   debian-archive-keyring debian-keyring debian-maintainers \
   sbuild schroot debootstrap lintian \
   python3 python3-yaml bats shellcheck
@@ -113,7 +113,9 @@ sudo apt install -y --no-install-recommends \
 
 `debian-keyring` 是必需的。fetch 阶段会用 `dscverify` 验证 Debian `.dsc`
 签名；如果没有任何可读 Debian keyring，脚本会提前失败，而不会降级成跳过签名
-验证。
+验证。`debhelper` 和 `dh-nodejs` 也是 Noble 源码包阶段的宿主依赖：
+`dpkg-buildpackage -S` 会执行 `debian/rules clean`，`node-undici` 的 clean 阶段
+需要 `dh` 和 `pkgjs-pjson`。
 
 ## 安装 Docker CE
 
@@ -388,6 +390,31 @@ scripts/noble-auto-build.sh --provision
 ```
 
 不要让脚本自动删除 `/srv/chroot` 下的目录；该路径可能包含用户已有的 chroot。
+
+### `pkgjs-pjson: not found` 或 `dh: No such file or directory`
+
+如果 `make noble-build` 在 `noble-src-pkg-node-undici` 或 `noble-src-pkg-ocserv`
+阶段出现：
+
+```text
+/bin/sh: 1: pkgjs-pjson: not found
+make: dh: No such file or directory
+dpkg-buildpackage: error: debian/rules clean subprocess returned exit status
+```
+
+说明宿主构建机缺少 source package clean 阶段需要的工具。这不是 sbuild chroot
+里的依赖问题；`dpkg-buildpackage -S` 在宿主机上生成 `.dsc`，会先运行
+`debian/rules clean`。
+
+安装宿主工具后重试：
+
+```bash
+sudo apt update
+sudo apt install -y --no-install-recommends debhelper dh-nodejs
+```
+
+如果 apt 找不到 `dh-nodejs`，先确认 Noble 构建机启用了 Ubuntu `universe`
+组件或检查 apt sources。
 
 ### `dscverify failed` 且 keyring unreadable
 

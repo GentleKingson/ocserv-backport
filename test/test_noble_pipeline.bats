@@ -2,7 +2,7 @@
 load helpers/bats-helper.bash
 
 setup() {
-  cd "${REPO_ROOT}"
+  cd "${REPO_ROOT}" || return
   NOBLE_REPO=""
   FAKEBIN=""
   OUTSIDE_DIR=""
@@ -19,6 +19,7 @@ setup_noble_repo() {
   NOBLE_REPO="$(mktemp -d)"
   mkdir -p "${NOBLE_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_dsc.sh" "${NOBLE_REPO}/scripts/_dsc.sh"
   if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
   fi
@@ -27,6 +28,7 @@ setup_noble_repo() {
   for script in \
     noble-build.sh \
     noble-build-repo.sh \
+    noble-build-source-package.sh \
     noble-build-binary-ocserv.sh \
     noble-smoke-test.sh; do
     if [[ -f "${REPO_ROOT}/scripts/${script}" ]]; then
@@ -69,6 +71,69 @@ make_call_targets() {
 
 unique_make_env_rows() {
   cut -f2- "${NOBLE_REPO}/make-calls" | sort -u
+}
+
+install_fake_source_package_commands() {
+  local with_dh="${1:-1}"
+  local with_pkgjs_pjson="${2:-1}"
+
+  ln -s /bin/bash "${FAKEBIN}/bash"
+  ln -s "$(command -v dirname)" "${FAKEBIN}/dirname"
+  ln -s "$(command -v date)" "${FAKEBIN}/date"
+  ln -s "$(command -v awk)" "${FAKEBIN}/awk"
+  ln -s "$(command -v rm)" "${FAKEBIN}/rm"
+
+  cat > "${FAKEBIN}/dpkg-buildpackage" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'dpkg-buildpackage %s\n' "\$*" >> "${NOBLE_REPO}/dpkg-buildpackage-calls"
+case "\${PWD}" in
+  */source/node-undici/node-undici-*)
+    dsc="\${PWD%/*}/node-undici_\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}.dsc"
+    printf 'Source: node-undici\nVersion: %s\n' "\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}" > "\${dsc}"
+    ;;
+  */source/ocserv/ocserv-*)
+    dsc="\${PWD%/*}/ocserv_\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}.dsc"
+    printf 'Source: ocserv\nVersion: %s\n' "\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}" > "\${dsc}"
+    ;;
+  *)
+    echo "unexpected source package cwd: \${PWD}" >&2
+    exit 99
+    ;;
+esac
+SH
+
+  cat > "${FAKEBIN}/id" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -u) echo 1000 ;;
+  *) /usr/bin/id "$@" ;;
+esac
+SH
+
+  if [[ "${with_dh}" == 1 ]]; then
+    cat > "${FAKEBIN}/dh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  fi
+
+  if [[ "${with_pkgjs_pjson}" == 1 ]]; then
+    cat > "${FAKEBIN}/pkgjs-pjson" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  fi
+
+  chmod +x "${FAKEBIN}/dpkg-buildpackage" "${FAKEBIN}/id"
+  [[ "${with_dh}" != 1 ]] || chmod +x "${FAKEBIN}/dh"
+  [[ "${with_pkgjs_pjson}" != 1 ]] || chmod +x "${FAKEBIN}/pkgjs-pjson"
+}
+
+create_noble_source_tree() {
+  local package="$1"
+  local version="$2"
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${version}"
 }
 
 @test "noble-build executes the twelve Noble stages in order" {
@@ -123,6 +188,47 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 '${SYSTEM_MAKE}' noble-auto-build"
   [ "${status}" -eq 0 ]
   [ "$(cat "${NOBLE_REPO}/noble-auto-build-target-arch")" = "arm64" ]
+}
+
+@test "noble source package fails before deleting artifacts when node-undici pkgjs-pjson is missing" {
+  setup_noble_repo
+  install_fake_source_package_commands 1 0
+  create_noble_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11"
+  old_artifact="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.old"
+  : > "${old_artifact}"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh node-undici"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required source package command: pkgjs-pjson"* ]]
+  [[ "${output}" == *"sudo apt-get install -y --no-install-recommends debhelper dh-nodejs"* ]]
+  [ -f "${old_artifact}" ]
+  [ ! -e "${NOBLE_REPO}/dpkg-buildpackage-calls" ]
+}
+
+@test "noble source package fails early when ocserv dh is missing" {
+  setup_noble_repo
+  install_fake_source_package_commands 0 1
+  create_noble_source_tree ocserv "1.5.0"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh ocserv"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required source package command: dh"* ]]
+  [[ "${output}" == *"sudo apt-get install -y --no-install-recommends debhelper dh-nodejs"* ]]
+  [ ! -e "${NOBLE_REPO}/dpkg-buildpackage-calls" ]
+}
+
+@test "noble source package builds dsc when host clean commands exist" {
+  setup_noble_repo
+  install_fake_source_package_commands 1 1
+  create_noble_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh node-undici"
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "dpkg-buildpackage -S -d -us -uc" "${NOBLE_REPO}/dpkg-buildpackage-calls"
+  [ -f "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc" ]
 }
 
 install_fake_smoke_tools() {

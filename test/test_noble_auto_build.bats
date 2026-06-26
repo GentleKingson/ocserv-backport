@@ -32,7 +32,7 @@ install_minimal_valid_fakebin() {
   ln -s /usr/bin/basename "${FAKEBIN}/basename"
   ln -s /usr/bin/dirname "${FAKEBIN}/dirname"
   ln -s /bin/date "${FAKEBIN}/date"
-  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
+  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source dh pkgjs-pjson sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
     cat > "${FAKEBIN}/${cmd}" <<'SH'
 #!/usr/bin/env bash
 case "$(basename "$0")" in
@@ -556,6 +556,26 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/apt-get-calls" ]
 }
 
+@test "noble-auto-build default mode reports missing pkgjs-pjson without sudo side effects" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  rm "${FAKEBIN}/pkgjs-pjson"
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  grep -Fq -- "missing required command: pkgjs-pjson" <<<"${output}"
+  grep -Fq -- "sudo apt-get install -y --no-install-recommends" <<<"${output}"
+  grep -Fq -- "debhelper" <<<"${output}"
+  grep -Fq -- "dh-nodejs" <<<"${output}"
+  grep -Fq -- "scripts/noble-auto-build.sh --provision" <<<"${output}"
+  [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+  [ ! -e "${AUTO_REPO}/apt-get-calls" ]
+}
+
 @test "noble-auto-build root default mode reports missing core command without sudo prefix" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
@@ -595,7 +615,7 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fq -- "apt-get update" "${AUTO_REPO}/apt-get-calls"
   install_call="$(grep -F -- "apt-get install" "${AUTO_REPO}/apt-get-calls")"
-  for package in git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev debian-archive-keyring debian-keyring debian-maintainers sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck; do
+  for package in git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs debian-archive-keyring debian-keyring debian-maintainers sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck; do
     [[ "${install_call}" == *" ${package}"* || "${install_call}" == *" ${package} "* ]]
   done
   grep -Fq -- "sudo apt-get update" "${AUTO_REPO}/sudo-calls"

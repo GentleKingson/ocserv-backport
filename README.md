@@ -152,6 +152,7 @@ For the full `make build` path on a trixie amd64 builder:
 - curl
 - debian-keyring and devscripts
 - dpkg-dev
+- debhelper and dh-nodejs for Noble source-package clean steps
 - sbuild
 - schroot
 - trixie amd64 sbuild chroot
