@@ -260,7 +260,7 @@ chroot_listing_contains_target() {
 
   while IFS= read -r line; do
     case "${line}" in
-      "${target}"|"chroot:${target}"|"source:${target}")
+      "${target}"|"chroot:${target}")
         return 0
         ;;
     esac

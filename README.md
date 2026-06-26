@@ -70,7 +70,8 @@ chroot after an interactive `yes` confirmation. Once the foundation is ready, it
 runs `make noble-build`. Host APT operations run with
 `apt-get -q=1 -o=Dpkg::Use-Pty=0`; successful APT output is hidden, and failures
 print the original APT output. Noble binary `sbuild` stages also hide successful
-internal chroot output and print the original `sbuild` output on failure.
+internal chroot output and print the original `sbuild` output on failure. Those
+binary stages explicitly use `--chroot=noble-${TARGET_ARCH}`.
 
 `make noble-build` is the lower-level Noble validation entry point for builders
 that are already prepared:
@@ -167,7 +168,8 @@ For the full `make build` path on a trixie amd64 builder:
 For the full `make noble-build` path, use an Ubuntu 24.04 Noble builder with a
 matching Noble sbuild schroot for `TARGET_ARCH`. `TARGET_ARCH` defaults to
 `amd64`; `TARGET_ARCH=arm64` expects an already working arm64 build environment
-and does not enable automatic cross-builds.
+and does not enable automatic cross-builds. The expected chroot name is
+`noble-${TARGET_ARCH}`, for example `noble-amd64`.
 
 The Noble builder needs the same Debian source verification tooling as the
 trixie builder, including a readable Debian keyring for `dscverify`:

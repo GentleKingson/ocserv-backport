@@ -89,6 +89,16 @@ sudo sbuild-createchroot \
 覆盖创建，也不会自动删除目录。确认这是失败的 chroot 创建残留后，再手工删除并
 重新运行 provision。
 
+Noble binary 阶段会显式传入：
+
+```text
+--chroot=noble-${TARGET_ARCH}
+```
+
+因此 `schroot -l` / `sbuild --list-chroots` 至少需要能看到 `noble-amd64` 或
+`chroot:noble-amd64` 这类可直接用于构建 session 的条目。只有
+`source:noble-amd64` 不会被视为可用构建 chroot。
+
 `TARGET_ARCH` 默认是 `amd64`。使用 `TARGET_ARCH=arm64` 时，自动包装脚本只会选择
 ports mirror，并创建或检查 `noble-arm64` sbuild chroot；它不会配置
 qemu/binfmt，也不会把 amd64 主机变成自动 cross-build 环境。
@@ -329,7 +339,9 @@ deb [trusted=yes] http://127.0.0.1:<port>/ ./
 这样可以避免裸 `file:/host/path` 在 schroot 内不可见的问题。HTTP server 只在
 `noble-binary-ocserv` 阶段存在，脚本会在成功、失败或中断时清理该进程。
 Noble binary 阶段仍会显示外层阶段和产物日志；静默的只是成功路径中的 `sbuild`
-内部输出。若 `sbuild` 失败，脚本会完整打印原始 stdout/stderr。
+内部输出。若 `sbuild` 失败，脚本会完整打印原始 stdout/stderr。两个 Noble binary
+阶段都会显式使用 `--chroot=noble-${TARGET_ARCH}`，避免 sbuild 按默认规则误选
+其他同发行版/架构 chroot。
 
 ## 生产边界
 
@@ -395,6 +407,40 @@ scripts/noble-auto-build.sh --provision
 ```
 
 不要让脚本自动删除 `/srv/chroot` 下的目录；该路径可能包含用户已有的 chroot。
+
+### `E: Error creating chroot session: skipping node-undici`
+
+如果 `make noble-build` 在 `noble-binary-node-undici` 阶段出现：
+
+```text
+E: Error creating chroot session: skipping node-undici
+```
+
+通常说明 Noble sbuild chroot 名称或注册状态不符合本仓库约定。Noble binary 阶段
+会显式使用 `--chroot=noble-${TARGET_ARCH}`，例如 `--chroot=noble-amd64`。
+
+检查当前注册的 chroot：
+
+```bash
+schroot -l
+sbuild --list-chroots
+```
+
+确认输出中存在：
+
+```text
+noble-amd64
+```
+
+或：
+
+```text
+chroot:noble-amd64
+```
+
+如果只看到 `source:noble-amd64`，它不是可直接用于 binary build 的 session。
+重新运行 `scripts/noble-auto-build.sh --provision` 创建/检查目标 chroot，或按本文
+创建命令手工准备 `noble-${TARGET_ARCH}`。
 
 ### `pkgjs-pjson: not found` 或 `dh: No such file or directory`
 

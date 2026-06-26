@@ -19,6 +19,7 @@ rm -f -- "${PKG_BINARY_DIR}"/*
 
 run_noble_sbuild \
   --chroot-mode=schroot \
+  --chroot="${NOBLE_SBUILD_CHROOT}" \
   -d "${TARGET_DISTRIBUTION}" \
   --arch="${TARGET_ARCH}" \
   --build-dir "${PKG_BINARY_DIR}" \

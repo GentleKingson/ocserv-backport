@@ -438,10 +438,12 @@ create_ocserv_dsc_and_repo() {
 
 assert_sbuild_common_args() {
   local args_file="$1"
+  local expected_arch="${2:-amd64}"
   grep -Fxq -- "--chroot-mode=schroot" "${args_file}"
+  grep -Fxq -- "--chroot=noble-${expected_arch}" "${args_file}"
   grep -Fxq -- "-d" "${args_file}"
   grep -Fxq -- "noble" "${args_file}"
-  grep -Fq -- "--arch=amd64" "${args_file}"
+  grep -Fq -- "--arch=${expected_arch}" "${args_file}"
   grep -Fxq -- "--build-dir" "${args_file}"
   grep -Fxq -- "--no-run-lintian" "${args_file}"
 }
@@ -533,6 +535,7 @@ assert_sbuild_common_args() {
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
   [ "${status}" -eq 0 ]
   grep -Fq -- "--arch=arm64" "${NOBLE_REPO}/sbuild-args"
+  assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args" arm64
   grep -Fq -- "deb [trusted=yes] http://127.0.0.1:43123/ ./" "${NOBLE_REPO}/sbuild-args"
   grep -Fq -- "--bind" "${NOBLE_REPO}/http-server-args"
   grep -Fq -- "127.0.0.1" "${NOBLE_REPO}/http-server-args"

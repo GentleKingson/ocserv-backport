@@ -872,10 +872,27 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 }
 
-@test "noble-auto-build accepts source sbuild chroot listing" {
+@test "noble-auto-build rejects source-only sbuild chroot listing" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   install_fake_source_chroot
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
+  grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
+  grep -Fq -- "Missing sbuild chroot: noble-amd64" <<<"${output}"
+  [ ! -e "${AUTO_REPO}/make-calls" ]
+}
+
+@test "noble-auto-build accepts plain sbuild chroot listing" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
   install_fake_successful_make
   keyring="${AUTO_REPO}/debian-keyring.gpg"

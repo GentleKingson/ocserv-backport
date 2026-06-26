@@ -54,6 +54,7 @@ repo_line="deb [trusted=yes] http://127.0.0.1:${HTTP_PORT}/ ./"
 
 run_noble_sbuild \
   --chroot-mode=schroot \
+  --chroot="${NOBLE_SBUILD_CHROOT}" \
   -d "${TARGET_DISTRIBUTION}" \
   --arch="${TARGET_ARCH}" \
   --build-dir "${PKG_BINARY_DIR}" \
