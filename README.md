@@ -53,7 +53,24 @@ publish packages, deploy hosts, promote channels, or roll back external state.
 
 `make dry-run` remains as a compatibility alias for `make build`.
 
-The Noble local validation entry point is:
+The Noble host wrapper entry point is:
+
+```bash
+scripts/noble-auto-build.sh
+scripts/noble-auto-build.sh --provision
+```
+
+The wrapper default mode checks the Noble host foundation and prints repair
+commands when something is missing. It does not install packages, write Docker
+configuration, start daemons, add groups, or create chroots. With `--provision`,
+it can install build dependencies, configure Docker CE from Docker's official
+APT repository, repair the Docker daemon with a limited `systemctl enable --now`
+attempt, add the current user to the `sbuild` group, and create the Noble sbuild
+chroot after an interactive `yes` confirmation. Once the foundation is ready, it
+runs `make noble-build`.
+
+`make noble-build` is the lower-level Noble validation entry point for builders
+that are already prepared:
 
 ```bash
 make noble-build
@@ -112,6 +129,7 @@ make lint
 make smoke-basic
 make test
 make noble-build
+make noble-auto-build
 make noble-verify-locks
 make noble-fetch-node-undici
 make noble-rewrap-node-undici
@@ -190,8 +208,9 @@ builder uses non-standard keyring paths.
 | `Makefile` | Local entry points |
 
 This repository intentionally excludes package publishing, external repository
-hosting, production VPS deployment, production promotion, rollback automation,
-and build-host provisioning automation. The Noble repo under
+hosting, production VPS deployment, production promotion, and rollback
+automation. `scripts/noble-auto-build.sh --provision` can prepare a local Noble
+builder, but it does not manage production hosts. The Noble repo under
 `build/noble/${TARGET_ARCH}/repo/` is local build plumbing for clean chroots, not
 a production APT repository.
 

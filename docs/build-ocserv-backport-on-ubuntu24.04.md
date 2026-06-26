@@ -25,6 +25,57 @@ make noble-build
 
 完整本地构建会使用 sbuild、schroot、lintian 和 Docker。
 
+## 自动准备并构建
+
+Noble 构建机可以先使用自动包装脚本检查环境：
+
+```bash
+scripts/noble-auto-build.sh
+```
+
+这个默认模式只检查并打印修复命令，不会安装软件包、写入 Docker APT 配置、启动
+daemon、修改用户组或创建 chroot。环境已经准备好时，它会继续运行
+`make noble-build`。`make noble-auto-build` 等价于这个默认检查模式。
+
+需要脚本代为准备主机时，使用：
+
+```bash
+scripts/noble-auto-build.sh --provision
+```
+
+`--provision` 会安装构建依赖，检查 Debian `dscverify` keyring，配置 Docker CE，
+并移除会和 Docker CE 冲突的 Ubuntu `docker.io` / `containerd` 相关包。Docker
+必须来自 Docker 官方 APT 源；脚本会写入 `download.docker.com` 的 Noble APT
+source 并安装 `docker-ce`、`docker-ce-cli`、`containerd.io`、
+`docker-buildx-plugin` 和 `docker-compose-plugin`。如果 Docker 已安装但 daemon
+不可达，provision 模式会尝试有限修复：
+
+```bash
+sudo systemctl enable --now docker
+```
+
+普通用户还需要有效的 `sbuild` 组成员身份。默认模式会打印：
+
+```bash
+sudo sbuild-adduser "$USER"
+newgrp sbuild
+scripts/noble-auto-build.sh --provision
+```
+
+provision 模式可以执行 `sbuild-adduser`，但刚加入的组不会自动出现在旧 shell
+里；脚本不会在旧 shell 中继续构建。按提示执行 `newgrp sbuild` 后，在新 shell
+重新运行 `scripts/noble-auto-build.sh --provision`。
+
+如果缺少 sbuild chroot，默认模式只打印创建命令。provision 模式会先提示
+`Type yes to create this chroot now:`，只有输入完整的 `yes` 后才会执行
+`sbuild-createchroot` 创建 `noble-${TARGET_ARCH}` chroot。
+
+`TARGET_ARCH` 默认是 `amd64`。使用 `TARGET_ARCH=arm64` 时，自动包装脚本只会选择
+ports mirror，并创建或检查 `noble-arm64` sbuild chroot；它不会配置
+qemu/binfmt，也不会把 amd64 主机变成自动 cross-build 环境。
+
+下面的手动安装章节仍保留，用于审计、复现包装脚本行为和排障。
+
 ## 安装工具
 
 更新 apt 索引：
