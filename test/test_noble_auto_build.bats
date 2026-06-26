@@ -398,6 +398,41 @@ SH
   chmod +x "${FAKEBIN}/docker"
 }
 
+install_fake_successful_make() {
+  cat > "${FAKEBIN}/make" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'make %s NOBLE_DOCKER_CMD=%s\n' "\$*" "\${NOBLE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+if [[ "\$*" != "noble-build" ]]; then
+  echo "unexpected make command: \$*" >&2
+  exit 99
+fi
+/bin/mkdir -p \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici" \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/ocserv" \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/repo"
+/usr/bin/touch \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/repo/Packages"
+SH
+  chmod +x "${FAKEBIN}/make"
+}
+
+install_fake_make_without_artifacts() {
+  cat > "${FAKEBIN}/make" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'make %s NOBLE_DOCKER_CMD=%s\n' "\$*" "\${NOBLE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+if [[ "\$*" != "noble-build" ]]; then
+  echo "unexpected make command: \$*" >&2
+  exit 99
+fi
+SH
+  chmod +x "${FAKEBIN}/make"
+}
+
 run_auto() {
   # shellcheck disable=SC2016
   run env "PATH=${FAKEBIN}:${PATH}" "NOBLE_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release" \
@@ -518,6 +553,7 @@ run_auto_isolated() {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   allow_fake_provision_commands
+  install_fake_successful_make
   keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
   docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
   docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
@@ -594,6 +630,7 @@ run_auto_isolated() {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
+  install_fake_successful_make
   keyring="${AUTO_REPO}/debian-keyring.gpg"
   : > "${keyring}"
 
@@ -606,6 +643,39 @@ run_auto_isolated() {
   grep -Fq -- "containerd.io" "${AUTO_REPO}/dpkg-query-calls"
   grep -Fxq -- "docker info" "${AUTO_REPO}/docker-calls"
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "noble-auto-build default mode runs noble-build and prints artifacts" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/ocserv/ocserv_1.5.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/repo/Packages"* ]]
+}
+
+@test "noble-auto-build fails after successful make when expected artifacts are missing" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_make_without_artifacts
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_*.deb"* ]]
 }
 
 @test "noble-auto-build default mode reports missing sbuild group commands" {
@@ -633,6 +703,7 @@ run_auto_isolated() {
   install_fake_root_user
   allow_fake_sbuild_adduser
   install_fake_docker_info_sequence 0
+  install_fake_successful_make
   keyring="${AUTO_REPO}/debian-keyring.gpg"
   : > "${keyring}"
 
@@ -643,6 +714,7 @@ run_auto_isolated() {
   [[ "${output}" != *"sudo sbuild-adduser"* ]]
   grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
   grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
 }
 
 @test "noble-auto-build --provision adds sbuild group and skips real newgrp in tests" {
@@ -725,6 +797,7 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   install_fake_source_chroot
   install_fake_docker_info_sequence 0
+  install_fake_successful_make
   keyring="${AUTO_REPO}/debian-keyring.gpg"
   : > "${keyring}"
 
@@ -742,6 +815,7 @@ run_auto_isolated() {
   allow_fake_provision_commands
   install_fake_docker_info_sequence 0
   install_fake_sbuild_createchroot
+  install_fake_successful_make
   keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
   docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
   docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
@@ -764,6 +838,7 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
 
 @test "noble-auto-build TARGET_ARCH arm64 reports ports mirror for missing chroot" {
@@ -824,6 +899,7 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   allow_fake_provision_commands
   install_fake_docker_info_sequence 1 0
+  install_fake_successful_make
   keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
   docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
   docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"

@@ -65,6 +65,10 @@ dry-run: ## Compatibility alias for the full local build pipeline
 noble-build: ## Run the Ubuntu 24.04 Noble two-stage local backport pipeline
 	scripts/noble-build.sh
 
+.PHONY: noble-auto-build
+noble-auto-build: ## Run the Ubuntu 24.04 Noble host auto-build pipeline
+	scripts/noble-auto-build.sh
+
 .PHONY: noble-verify-locks
 noble-verify-locks: ## Verify ocserv and node-undici source locks
 	scripts/verify-source-lock.sh

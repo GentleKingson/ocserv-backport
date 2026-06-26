@@ -382,7 +382,43 @@ docker_info() {
 }
 
 docker_command_for_make() {
-  printf '%s\n' "${DOCKER_COMMAND[@]}"
+  local IFS=" "
+  printf '%s\n' "${DOCKER_COMMAND[*]}"
+}
+
+run_noble_build() {
+  local docker_cmd
+
+  docker_cmd="$(docker_command_for_make)"
+  log "running make noble-build with NOBLE_DOCKER_CMD=${docker_cmd}"
+  NOBLE_DOCKER_CMD="${docker_cmd}" make noble-build
+}
+
+print_noble_artifacts() {
+  local build_root="${REPO_ROOT}/build/noble/${TARGET_ARCH}"
+  local artifact pattern
+  local artifacts=()
+  local matches=()
+  local patterns=(
+    "${build_root}/binary/node-undici/libllhttp9.2_*.deb"
+    "${build_root}/binary/node-undici/libllhttp-dev_*.deb"
+    "${build_root}/binary/ocserv/ocserv_*.deb"
+    "${build_root}/repo/Packages"
+  )
+
+  for pattern in "${patterns[@]}"; do
+    matches=()
+    while IFS= read -r artifact; do
+      matches+=("${artifact}")
+    done < <(compgen -G "${pattern}" || true)
+    if [[ "${#matches[@]}" -eq 0 ]]; then
+      die "expected artifact not found: ${pattern}"
+    fi
+    artifacts+=("${matches[@]}")
+  done
+
+  log "noble-auto-build artifacts:"
+  printf '%s\n' "${artifacts[@]}"
 }
 
 docker_keyring_path() {
@@ -533,3 +569,5 @@ fi
 cd -- "${REPO_ROOT}"
 
 log "noble-auto-build foundation ready: TARGET_ARCH=${TARGET_ARCH} mirror=${NOBLE_AUTO_BUILD_MIRROR} provision=${PROVISION} sudo=${sudo_mode}"
+run_noble_build
+print_noble_artifacts

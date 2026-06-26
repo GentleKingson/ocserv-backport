@@ -9,6 +9,9 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 . "${SCRIPT_DIR}/noble-env.sh"
 noble_package_vars ocserv
 
+read -r -a DOCKER_COMMAND <<< "${NOBLE_DOCKER_CMD:-docker}"
+[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "NOBLE_DOCKER_CMD must not be empty"
+
 if [[ "${1:-}" == "basic" ]]; then
   shift
 fi
@@ -37,7 +40,8 @@ repo_dir="$(cd -- "${NOBLE_REPO_DIR}" && pwd)"
 deb_name="$(basename "${DEB}")"
 
 log "noble-smoke-basic: container install and package assertions"
-docker run --rm -v "${binary_dir}:/deb:ro" -v "${repo_dir}:/repo:ro" ubuntu:24.04 bash -euxc '
+# shellcheck disable=SC2016
+"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" -v "${repo_dir}:/repo:ro" ubuntu:24.04 bash -euxc '
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"

@@ -27,7 +27,8 @@ setup_noble_repo() {
   for script in \
     noble-build.sh \
     noble-build-repo.sh \
-    noble-build-binary-ocserv.sh; do
+    noble-build-binary-ocserv.sh \
+    noble-smoke-test.sh; do
     if [[ -f "${REPO_ROOT}/scripts/${script}" ]]; then
       cp "${REPO_ROOT}/scripts/${script}" "${NOBLE_REPO}/scripts/${script}"
     fi
@@ -109,6 +110,64 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 '${SYSTEM_MAKE}' noble-build"
   [ "${status}" -eq 0 ]
   [ "$(cat "${NOBLE_REPO}/noble-build-target-arch")" = "arm64" ]
+}
+
+@test "make noble-auto-build delegates to scripts/noble-auto-build.sh" {
+  setup_noble_repo
+  cat > "${NOBLE_REPO}/scripts/noble-auto-build.sh" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\${TARGET_ARCH:-}" > "${NOBLE_REPO}/noble-auto-build-target-arch"
+SH
+  chmod +x "${NOBLE_REPO}/scripts/noble-auto-build.sh"
+  run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 '${SYSTEM_MAKE}' noble-auto-build"
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${NOBLE_REPO}/noble-auto-build-target-arch")" = "arm64" ]
+}
+
+install_fake_smoke_tools() {
+  cat > "${FAKEBIN}/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+field="${3:-}"
+case "${field}" in
+  Package) printf '%s\n' "ocserv" ;;
+  Version) printf '%s\n' "1.5.0-1~ubuntu24.04.1" ;;
+  Architecture) printf '%s\n' "${TARGET_ARCH:-amd64}" ;;
+  Depends) printf '%s\n' "libc6, libllhttp9.2 (>= 7.3.0)" ;;
+  *)
+    echo "unexpected dpkg-deb command: $*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sudo" <<SH
+#!/usr/bin/env bash
+printf 'sudo %s\n' "\$*" >> "${NOBLE_REPO}/sudo-calls"
+exit 0
+SH
+  cat > "${FAKEBIN}/docker" <<SH
+#!/usr/bin/env bash
+printf 'docker %s\n' "\$*" >> "${NOBLE_REPO}/docker-calls"
+echo "unexpected direct docker command: \$*" >&2
+exit 99
+SH
+  chmod +x "${FAKEBIN}/dpkg-deb" "${FAKEBIN}/sudo" "${FAKEBIN}/docker"
+}
+
+@test "noble-smoke-basic honors NOBLE_DOCKER_CMD override" {
+  setup_noble_repo
+  install_fake_smoke_tools
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "sudo docker run --rm" "${NOBLE_REPO}/sudo-calls"
+  [ ! -e "${NOBLE_REPO}/docker-calls" ]
 }
 
 install_fake_dpkg_scanpackages() {
