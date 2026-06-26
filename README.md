@@ -147,6 +147,33 @@ matching Noble sbuild schroot for `TARGET_ARCH`. `TARGET_ARCH` defaults to
 `amd64`; `TARGET_ARCH=arm64` expects an already working arm64 build environment
 and does not enable automatic cross-builds.
 
+The Noble builder needs the same Debian source verification tooling as the
+trixie builder, including a readable Debian keyring for `dscverify`:
+
+- Python 3 with PyYAML
+- curl
+- debian-keyring and devscripts
+- dpkg-dev
+- sbuild
+- schroot
+- Noble sbuild chroot for `TARGET_ARCH`
+- lintian
+- Docker
+- bats
+- shellcheck
+
+If `make noble-build` fails with unreadable `/usr/share/keyrings/debian-*.gpg`
+paths, install the keyring package:
+
+```bash
+sudo apt install -y --no-install-recommends debian-keyring
+```
+
+The fetch scripts ignore missing optional keyring candidates, such as
+`debian-tag2upload.pgp` on Ubuntu 24.04, but at least one Debian keyring must be
+readable. Set `DSCVERIFY_KEYRING_PATHS` to a colon-separated list only when a
+builder uses non-standard keyring paths.
+
 ## Repository Layout
 
 | Path | Purpose |

@@ -15,6 +15,39 @@ Ubuntu 24.04 Noble 使用专用入口：
 make noble-build
 ```
 
+## 前置条件
+
+准备一台 Ubuntu 24.04 Noble 构建机。
+
+需要 root 或 sudo 权限。
+
+需要能访问 Debian mirror 和 GitHub。
+
+完整本地构建会使用 sbuild、schroot、lintian 和 Docker。
+
+## 安装工具
+
+更新 apt 索引：
+
+```bash
+sudo apt update
+```
+
+安装构建工具：
+
+```bash
+sudo apt install -y --no-install-recommends \
+  git ca-certificates curl gnupg \
+  build-essential fakeroot devscripts dpkg-dev \
+  debian-archive-keyring debian-keyring debian-maintainers \
+  sbuild schroot debootstrap lintian docker.io \
+  python3 python3-yaml bats shellcheck
+```
+
+`debian-keyring` 是必需的。fetch 阶段会用 `dscverify` 验证 Debian `.dsc`
+签名；如果没有任何可读 Debian keyring，脚本会提前失败，而不会降级成跳过签名
+验证。
+
 ## 为什么需要 node-undici
 
 Ubuntu 24.04 Noble 官方 `ocserv` 仍来自旧版本，构建依赖使用
@@ -52,6 +85,32 @@ TARGET_ARCH=amd64
 `*_NOBLE_VERSION` 只用于 `debian/changelog` 和最终 Noble 构建产物。
 
 不要把 `~ubuntu24.04.1` 写入 `source-lock` 路径。
+
+## 源码签名验证 keyring
+
+fetch 脚本默认检查这些候选 keyring：
+
+```text
+/usr/share/keyrings/debian-keyring.gpg
+/usr/share/keyrings/debian-maintainers.gpg
+/usr/share/keyrings/debian-nonupload.gpg
+/usr/share/keyrings/debian-tag2upload.pgp
+```
+
+脚本只会把实际可读的 keyring 传给 `dscverify`。Ubuntu 24.04 Noble 上可能没有
+`debian-tag2upload.pgp`，这种缺失不会单独阻塞构建。
+
+至少需要一个 Debian keyring 可读。常规修复方式是：
+
+```bash
+sudo apt install -y --no-install-recommends debian-keyring
+```
+
+如果构建机使用非标准 keyring 路径，可以用冒号分隔列表覆盖默认候选项：
+
+```bash
+DSCVERIFY_KEYRING_PATHS=/path/to/debian-keyring.gpg:/path/to/extra.gpg make noble-build
+```
 
 ## 产物目录
 
@@ -184,3 +243,36 @@ sudo ocserv -c /etc/ocserv/ocserv.conf -t
 sudo systemctl restart ocserv
 sudo systemctl status ocserv
 ```
+
+## Troubleshooting
+
+### `dscverify failed` 且 keyring unreadable
+
+如果 `make noble-build` 在 `noble-fetch-node-undici` 或 `noble-fetch-ocserv`
+阶段出现类似输出：
+
+```text
+Keyring /usr/share/keyrings/debian-keyring.gpg unreadable
+Keyring /usr/share/keyrings/debian-maintainers.gpg unreadable
+Keyring /usr/share/keyrings/debian-nonupload.gpg unreadable
+Keyring /usr/share/keyrings/debian-tag2upload.pgp unreadable
+ERROR: dscverify failed
+```
+
+说明构建机缺少可读 Debian keyring，或脚本版本仍把缺失 keyring 当成硬错误。
+
+先安装 keyring：
+
+```bash
+sudo apt update
+sudo apt install -y --no-install-recommends debian-keyring
+```
+
+然后重新运行：
+
+```bash
+make noble-build
+```
+
+当前脚本会忽略不可读的可选候选 keyring，但不会跳过 Debian source signature
+verification。

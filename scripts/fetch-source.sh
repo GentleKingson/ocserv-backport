@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dsc.sh"
 # shellcheck source=scripts/_lock_tsv.sh
 . "${SCRIPT_DIR}/_lock_tsv.sh"
+# shellcheck source=scripts/_dscverify.sh
+. "${SCRIPT_DIR}/_dscverify.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BUILD_ROOT="${REPO_ROOT}/build"
@@ -17,13 +19,6 @@ UPSTREAM_VERSION="1.5.0"
 SOURCE_VERSION="1.5.0-1"
 LOCK_TSV="${REPO_ROOT}/source-lock/ocserv/${SOURCE_VERSION}.lock.tsv"
 TMP_ROOT=""
-
-DSCVERIFY_KEYRINGS=(
-  /usr/share/keyrings/debian-keyring.gpg
-  /usr/share/keyrings/debian-maintainers.gpg
-  /usr/share/keyrings/debian-nonupload.gpg
-  /usr/share/keyrings/debian-tag2upload.pgp
-)
 
 cleanup_fetch_tmp() {
   [[ -n "${TMP_ROOT:-}" ]] && rm -rf -- "${TMP_ROOT}"
@@ -35,17 +30,6 @@ sha256_file() {
 
 file_size() {
   wc -c < "$1" | tr -d ' '
-}
-
-dscverify_cmd() {
-  local dsc="$1"
-  local -a args=(dscverify --no-conf --no-default-keyrings)
-  local keyring
-  for keyring in "${DSCVERIFY_KEYRINGS[@]}"; do
-    args+=(--keyring "${keyring}")
-  done
-  args+=("${dsc}")
-  "${args[@]}"
 }
 
 verify_source_lock_unless_internal_skip() {
