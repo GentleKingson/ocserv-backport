@@ -40,13 +40,62 @@ sudo apt install -y --no-install-recommends \
   git ca-certificates curl gnupg \
   build-essential fakeroot devscripts dpkg-dev \
   debian-archive-keyring debian-keyring debian-maintainers \
-  sbuild schroot debootstrap lintian docker.io \
+  sbuild schroot debootstrap lintian \
   python3 python3-yaml bats shellcheck
 ```
 
 `debian-keyring` 是必需的。fetch 阶段会用 `dscverify` 验证 Debian `.dsc`
 签名；如果没有任何可读 Debian keyring，脚本会提前失败，而不会降级成跳过签名
 验证。
+
+## 安装 Docker CE
+
+`noble-smoke-basic` 会使用 Docker 运行 Ubuntu 24.04 容器。Noble 构建机推荐按
+Docker 官方 Ubuntu 安装方法安装 Docker CE，不要把 Ubuntu `docker.io` 和 Docker
+CE 的 `containerd.io` 混装。
+
+如果已经错误安装过 Ubuntu Docker 相关包，先移除可能冲突的包：
+
+```bash
+for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
+  sudo apt-get remove -y "$pkg"
+done
+```
+
+添加 Docker 官方 APT 源：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+cat <<EOF | sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt-get update
+```
+
+安装 Docker CE：
+
+```bash
+sudo apt-get install -y \
+  docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+```
+
+验证 Docker：
+
+```bash
+sudo systemctl status docker
+sudo docker run hello-world
+```
 
 ## 为什么需要 node-undici
 
@@ -276,3 +325,16 @@ make noble-build
 
 当前脚本会忽略不可读的可选候选 keyring，但不会跳过 Debian source signature
 verification。
+
+### `containerd.io : Conflicts: containerd`
+
+如果安装工具阶段出现：
+
+```text
+containerd.io : Conflicts: containerd
+E: Error, pkgProblemResolver::Resolve generated breaks
+```
+
+说明系统正在混用 Docker CE 的 `containerd.io` 和 Ubuntu 仓库的 `containerd` /
+`docker.io` 依赖。不要继续安装 `docker.io`。按本文“安装 Docker CE”章节移除冲突
+包，并从 Docker 官方 APT 源安装 Docker Engine。

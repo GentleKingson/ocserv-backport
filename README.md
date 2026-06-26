@@ -158,9 +158,13 @@ trixie builder, including a readable Debian keyring for `dscverify`:
 - schroot
 - Noble sbuild chroot for `TARGET_ARCH`
 - lintian
-- Docker
+- Docker Engine for `noble-smoke-basic`
 - bats
 - shellcheck
+
+For Noble builders, install Docker Engine from Docker's official APT repository
+as described in `docs/build-ocserv-backport-on-ubuntu24.04.md`. Do not mix the
+Ubuntu `docker.io` stack with Docker CE packages such as `containerd.io`.
 
 If `make noble-build` fails with unreadable `/usr/share/keyrings/debian-*.gpg`
 paths, install the keyring package:
