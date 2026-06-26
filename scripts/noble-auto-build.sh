@@ -118,8 +118,8 @@ print_core_install_guidance() {
   fi
 
   printf 'Install core build dependencies with:\n' >&2
-  printf '  %sapt-get update\n' "${apt_prefix}" >&2
-  printf '  %sapt-get install -y --no-install-recommends' "${apt_prefix}" >&2
+  printf '  %sapt-get -q=1 -o=Dpkg::Use-Pty=0 update\n' "${apt_prefix}" >&2
+  printf '  %sapt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends' "${apt_prefix}" >&2
   printf ' %s' "${CORE_PACKAGES[@]}" >&2
   printf '\n\n' >&2
   printf 'Or let the wrapper install them with:\n' >&2
@@ -352,8 +352,21 @@ ensure_sbuild_chroot() {
 
 provision_core_dependencies() {
   log "installing core build dependencies"
-  "${SUDO[@]}" apt-get update
-  "${SUDO[@]}" apt-get install -y --no-install-recommends "${CORE_PACKAGES[@]}"
+  apt_quiet update
+  apt_quiet install -y --no-install-recommends "${CORE_PACKAGES[@]}"
+}
+
+apt_quiet_capture() {
+  "${SUDO[@]}" apt-get -q=1 -o=Dpkg::Use-Pty=0 "$@" 2>&1
+}
+
+apt_quiet() {
+  local output
+
+  if ! output="$(apt_quiet_capture "$@")"; then
+    printf '%s\n' "${output}" >&2
+    return 1
+  fi
 }
 
 print_docker_ce_install_guidance() {
@@ -486,16 +499,12 @@ write_docker_apt_source() {
 install_docker_ce_packages() {
   local install_output
 
-  if ! install_output="$("${SUDO[@]}" apt-get install -y "${DOCKER_CE_PACKAGES[@]}" 2>&1)"; then
+  if ! install_output="$(apt_quiet_capture install -y "${DOCKER_CE_PACKAGES[@]}")"; then
     printf '%s\n' "${install_output}" >&2
     if [[ "${install_output}" == *"containerd.io : Conflicts: containerd"* ]]; then
       log "Do not mix Ubuntu docker.io/containerd with Docker CE/containerd.io"
     fi
     return 1
-  fi
-
-  if [[ -n "${install_output}" ]]; then
-    printf '%s\n' "${install_output}" >&2
   fi
 }
 
@@ -509,15 +518,15 @@ provision_docker_ce() {
   keyring_dir="$(dirname -- "${keyring_path}")"
   source_dir="$(dirname -- "${source_path}")"
 
-  "${SUDO[@]}" apt-get remove -y "${DOCKER_CONFLICT_PACKAGES[@]}"
-  "${SUDO[@]}" apt-get update
-  "${SUDO[@]}" apt-get install -y --no-install-recommends ca-certificates curl
+  apt_quiet remove -y "${DOCKER_CONFLICT_PACKAGES[@]}"
+  apt_quiet update
+  apt_quiet install -y --no-install-recommends ca-certificates curl
   "${SUDO[@]}" install -m 0755 -d "${keyring_dir}"
   "${SUDO[@]}" curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "${keyring_path}"
   "${SUDO[@]}" chmod a+r "${keyring_path}"
   "${SUDO[@]}" install -m 0755 -d "${source_dir}"
   write_docker_apt_source "${arch}" "${keyring_path}" "${source_path}"
-  "${SUDO[@]}" apt-get update
+  apt_quiet update
   install_docker_ce_packages
 }
 

@@ -47,8 +47,9 @@ scripts/noble-auto-build.sh --provision
 并移除会和 Docker CE 冲突的 Ubuntu `docker.io` / `containerd` 相关包。Docker
 必须来自 Docker 官方 APT 源；脚本会写入 `download.docker.com` 的 Noble APT
 source 并安装 `docker-ce`、`docker-ce-cli`、`containerd.io`、
-`docker-buildx-plugin` 和 `docker-compose-plugin`。如果 Docker 已安装但 daemon
-不可达，provision 模式会尝试有限修复：
+`docker-buildx-plugin` 和 `docker-compose-plugin`。宿主 apt 操作会使用
+`apt-get -q=1 -o=Dpkg::Use-Pty=0` 静默执行；成功时隐藏 apt 过程输出，失败时显示
+原始 apt 错误。如果 Docker 已安装但 daemon 不可达，provision 模式会尝试有限修复：
 
 ```bash
 sudo systemctl enable --now docker
@@ -97,13 +98,13 @@ qemu/binfmt，也不会把 amd64 主机变成自动 cross-build 环境。
 更新 apt 索引：
 
 ```bash
-sudo apt update
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update
 ```
 
 安装构建工具：
 
 ```bash
-sudo apt install -y --no-install-recommends \
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends \
   git ca-certificates curl gnupg \
   build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs \
   debian-archive-keyring debian-keyring debian-maintainers \
@@ -127,15 +128,15 @@ CE 的 `containerd.io` 混装。
 
 ```bash
 for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
-  sudo apt-get remove -y "$pkg"
+  sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 remove -y "$pkg"
 done
 ```
 
 添加 Docker 官方 APT 源：
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -148,13 +149,13 @@ Components: stable
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 
-sudo apt-get update
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update
 ```
 
 安装 Docker CE：
 
 ```bash
-sudo apt-get install -y \
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y \
   docker-ce docker-ce-cli containerd.io \
   docker-buildx-plugin docker-compose-plugin
 ```
@@ -221,7 +222,7 @@ fetch 脚本默认检查这些候选 keyring：
 至少需要一个 Debian keyring 可读。常规修复方式是：
 
 ```bash
-sudo apt install -y --no-install-recommends debian-keyring
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debian-keyring
 ```
 
 如果构建机使用非标准 keyring 路径，可以用冒号分隔列表覆盖默认候选项：
@@ -409,8 +410,8 @@ dpkg-buildpackage: error: debian/rules clean subprocess returned exit status
 安装宿主工具后重试：
 
 ```bash
-sudo apt update
-sudo apt install -y --no-install-recommends debhelper dh-nodejs
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debhelper dh-nodejs
 ```
 
 如果 apt 找不到 `dh-nodejs`，先确认 Noble 构建机启用了 Ubuntu `universe`
@@ -434,8 +435,8 @@ ERROR: dscverify failed
 先安装 keyring：
 
 ```bash
-sudo apt update
-sudo apt install -y --no-install-recommends debian-keyring
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debian-keyring
 ```
 
 然后重新运行：

@@ -67,7 +67,9 @@ it can install build dependencies, configure Docker CE from Docker's official
 APT repository, repair the Docker daemon with a limited `systemctl enable --now`
 attempt, add the current user to the `sbuild` group, and create the Noble sbuild
 chroot after an interactive `yes` confirmation. Once the foundation is ready, it
-runs `make noble-build`.
+runs `make noble-build`. Host APT operations run with
+`apt-get -q=1 -o=Dpkg::Use-Pty=0`; successful APT output is hidden, and failures
+print the original APT output.
 
 `make noble-build` is the lower-level Noble validation entry point for builders
 that are already prepared:
@@ -189,7 +191,7 @@ If `make noble-build` fails with unreadable `/usr/share/keyrings/debian-*.gpg`
 paths, install the keyring package:
 
 ```bash
-sudo apt install -y --no-install-recommends debian-keyring
+sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debian-keyring
 ```
 
 The fetch scripts ignore missing optional keyring candidates, such as

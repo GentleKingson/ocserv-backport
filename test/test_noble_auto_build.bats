@@ -280,6 +280,17 @@ SH
   cat > "${FAKEBIN}/apt-get" <<SH
 #!/usr/bin/env bash
 printf 'apt-get %s\n' "\$*" >> "${AUTO_REPO}/apt-get-calls"
+if [[ "\${1:-}" != "-q=1" || "\${2:-}" != "-o=Dpkg::Use-Pty=0" ]]; then
+  echo "missing quiet apt flags: \$*" >&2
+  exit 99
+fi
+shift 2
+echo "apt progress output should be hidden"
+if [[ -n "\${FAKE_APT_FAIL_COMMAND:-}" && "\${FAKE_APT_FAIL_COMMAND}" == "\${1:-}" ]]; then
+  echo "apt stdout before failure"
+  echo "apt stderr failure for \${1:-unknown}" >&2
+  exit 100
+fi
 case "\${1:-}" in
   remove)
     expected="remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc"
@@ -459,6 +470,9 @@ run_auto_isolated() {
   if [[ "${FAKE_APT_DOCKER_CONFLICT+x}" == x ]]; then
     env_args+=("FAKE_APT_DOCKER_CONFLICT=${FAKE_APT_DOCKER_CONFLICT}")
   fi
+  if [[ "${FAKE_APT_FAIL_COMMAND+x}" == x ]]; then
+    env_args+=("FAKE_APT_FAIL_COMMAND=${FAKE_APT_FAIL_COMMAND}")
+  fi
   if [[ "${FAKE_SYSTEMCTL_CONTAINERD_FAIL+x}" == x ]]; then
     env_args+=("FAKE_SYSTEMCTL_CONTAINERD_FAIL=${FAKE_SYSTEMCTL_CONTAINERD_FAIL}")
   fi
@@ -548,7 +562,7 @@ run_auto_isolated() {
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required command: curl"* ]]
-  [[ "${output}" == *"sudo apt-get install -y --no-install-recommends"* ]]
+  [[ "${output}" == *"sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends"* ]]
   [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
   [[ "${output}" == *"curl"* ]]
   [[ "${output}" != *"unexpected host command"* ]]
@@ -567,7 +581,7 @@ run_auto_isolated() {
 
   [ "${status}" -ne 0 ]
   grep -Fq -- "missing required command: pkgjs-pjson" <<<"${output}"
-  grep -Fq -- "sudo apt-get install -y --no-install-recommends" <<<"${output}"
+  grep -Fq -- "sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends" <<<"${output}"
   grep -Fq -- "debhelper" <<<"${output}"
   grep -Fq -- "dh-nodejs" <<<"${output}"
   grep -Fq -- "scripts/noble-auto-build.sh --provision" <<<"${output}"
@@ -588,8 +602,8 @@ run_auto_isolated() {
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required command: curl"* ]]
-  [[ "${output}" == *"apt-get update"* ]]
-  [[ "${output}" == *"apt-get install -y --no-install-recommends"* ]]
+  [[ "${output}" == *"apt-get -q=1 -o=Dpkg::Use-Pty=0 update"* ]]
+  [[ "${output}" == *"apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends"* ]]
   [[ "${output}" != *"sudo apt-get update"* ]]
   [[ "${output}" != *"sudo apt-get install"* ]]
   [[ "${output}" == *"scripts/noble-auto-build.sh --provision"* ]]
@@ -613,14 +627,31 @@ run_auto_isolated() {
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
-  grep -Fq -- "apt-get update" "${AUTO_REPO}/apt-get-calls"
-  install_call="$(grep -F -- "apt-get install" "${AUTO_REPO}/apt-get-calls")"
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/apt-get-calls"
+  install_call="$(grep -F -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install" "${AUTO_REPO}/apt-get-calls")"
   for package in git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs debian-archive-keyring debian-keyring debian-maintainers sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck; do
     [[ "${install_call}" == *" ${package}"* || "${install_call}" == *" ${package} "* ]]
   done
-  grep -Fq -- "sudo apt-get update" "${AUTO_REPO}/sudo-calls"
+  grep -Fq -- "sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/sudo-calls"
+  [[ "${output}" != *"apt progress output should be hidden"* ]]
   [[ "${output}" == *"using Debian dscverify keyring: ${keyring}"* ]]
   [ -r "${keyring}" ]
+}
+
+@test "noble-auto-build --provision prints original apt output when apt fails" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_APT_FAIL_COMMAND=update \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"apt progress output should be hidden"* ]]
+  [[ "${output}" == *"apt stdout before failure"* ]]
+  [[ "${output}" == *"apt stderr failure for update"* ]]
 }
 
 @test "noble-auto-build default mode fails when no Debian keyring is readable" {
@@ -1035,12 +1066,13 @@ run_auto_isolated() {
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
-  grep -Fq -- "apt-get remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc" "${AUTO_REPO}/apt-get-calls"
-  grep -Fq -- "apt-get install -y --no-install-recommends ca-certificates curl" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends ca-certificates curl" "${AUTO_REPO}/apt-get-calls"
   docker_install_call="$(grep -F -- "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "${AUTO_REPO}/apt-get-calls")"
-  [[ "${docker_install_call}" == *"apt-get install"* ]]
-  update_count="$(grep -Fc -- "apt-get update" "${AUTO_REPO}/apt-get-calls")"
+  [[ "${docker_install_call}" == *"apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y"* ]]
+  update_count="$(grep -Fc -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/apt-get-calls")"
   [ "${update_count}" -ge 2 ]
+  [[ "${output}" != *"apt progress output should be hidden"* ]]
   grep -Fq -- "curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o ${docker_keyring}" "${AUTO_REPO}/curl-calls"
   grep -Fq -- "chmod a+r ${docker_keyring}" "${AUTO_REPO}/chmod-calls"
   grep -Fq -- "systemctl enable --now docker" "${AUTO_REPO}/systemctl-calls"
