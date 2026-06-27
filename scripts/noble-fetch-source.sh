@@ -121,7 +121,9 @@ main() {
   done
 
   dscverify_cmd "${dsc}" || die "dscverify failed for ${META_DSC_NAME}"
-  dpkg-source --require-valid-signature --require-strong-checksums -x "${dsc}" "${staging}/${PKG_SOURCE}-${PKG_UPSTREAM_VERSION}" \
+  # The signature and payload hashes are verified above with locked hashes and
+  # dscverify keyrings; dpkg-source cannot use the CI-refreshed keyring list.
+  dpkg-source --no-check -x "${dsc}" "${staging}/${PKG_SOURCE}-${PKG_UPSTREAM_VERSION}" \
     || die "dpkg-source -x failed for ${META_DSC_NAME}"
 
   install_source_tree "${staging}/${PKG_SOURCE}-${PKG_UPSTREAM_VERSION}" "${PKG_SOURCE_TREE}"

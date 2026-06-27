@@ -106,6 +106,7 @@ SH
   cat > "${FAKEBIN}/dpkg-source" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "\$@" > "${FETCH_REPO}/dpkg-source-args"
 case "${mode}" in
   dpkg-source-fail) echo "simulated dpkg-source failure" >&2; exit 9 ;;
 esac
@@ -197,6 +198,25 @@ verify_source_lock_calls() {
   [[ "${args}" == *"--keyring"* ]]
   [[ "${args}" == *"fake-keyrings/debian-keyring.gpg"* ]]
   [[ "${args}" != *"missing-tag2upload.pgp"* ]]
+}
+
+@test "fetch unpacks with no-check after explicit dscverify validation" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  run_fetch
+  args="$(cat "${FETCH_REPO}/dpkg-source-args")"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [[ "${args}" == *"--no-check"* ]]
+  [[ "${args}" == *" -x"* || "${args}" == *$'\n-x'* ]]
+  [[ "${args}" != *"--require-valid-signature"* ]]
+}
+
+@test "noble fetch unpacks with no-check after explicit dscverify validation" {
+  grep -Fq -- 'dscverify_cmd "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
+  grep -Fq -- 'dpkg-source --no-check -x "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
+  ! grep -Fq -- "dpkg-source --require-valid-signature" "${REPO_ROOT}/scripts/noble-fetch-source.sh"
 }
 
 @test "fetch fails on dsc size mismatch before installing source tree" {
