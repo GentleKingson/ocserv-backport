@@ -28,8 +28,14 @@ install_node_undici_types_package_hook() {
   [[ -f "${rules}" ]] || die "missing packaging rules file: ${PKG_SOURCE_TREE}/${rules}"
 
   if grep -Fq -- "${marker}" "${rules}"; then
-    log "Noble node-undici rules hook already installed"
-    return 0
+    if grep -Fq -- 'readdirSync(".")' "${rules}"; then
+      log "Noble node-undici rules hook already installed"
+      return 0
+    fi
+    perl -0pi -e "
+      s/\\n?\\Q${marker}\\E\\nexecute_before_dh_auto_configure::\\n(?:\\t[^\\n]*\\n)+//g
+    " "${rules}"
+    log "Noble node-undici incomplete rules hook migrated to cover all top-level tsconfigs"
   fi
 
   # Remove any prior (incomplete) Noble undici-types hook block: both the
@@ -53,7 +59,7 @@ install_node_undici_types_package_hook() {
 execute_before_dh_auto_configure::
 	mkdir -p types
 	printf '%s\n' '{' '  "name": "undici-types",' '  "version": "${types_version}",' '  "description": "A stand-alone types package for Undici",' '  "license": "MIT",' '  "types": "index.d.ts",' '  "files": ["*.d.ts"]' '}' > types/package.json
-	node -e 'const fs=require("fs"),p="llparse-builder/tsconfig.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.compilerOptions=j.compilerOptions||{};j.compilerOptions.paths=j.compilerOptions.paths||{};if(JSON.stringify(j.compilerOptions.paths["undici-types"])===JSON.stringify(["../types"])){process.exit(0);}j.compilerOptions.paths["undici-types"]=["../types"];j.compilerOptions.paths["undici-types/*"]=["../types/*"];fs.writeFileSync(p,JSON.stringify(j,null,2)+"\\n");'
+	node -e 'const fs=require("fs");for(const d of fs.readdirSync(".")){const p=d+"/tsconfig.json";if(!fs.existsSync(p)||!fs.statSync(d).isDirectory()){continue;}const j=JSON.parse(fs.readFileSync(p,"utf8"));j.compilerOptions=j.compilerOptions||{};j.compilerOptions.paths=j.compilerOptions.paths||{};j.compilerOptions.paths["undici-types"]=["../types"];j.compilerOptions.paths["undici-types/*"]=["../types/*"];fs.writeFileSync(p,JSON.stringify(j,null,2)+"\\n");}'
 EOF
   log "Noble node-undici rules hook installed"
 }

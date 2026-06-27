@@ -168,11 +168,13 @@ ${package} (${debian_version}) ${distribution}; urgency=medium
  -- Debian Maintainer <maintainer@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
 EOF
 
-  # node-undici carries llparse-builder/tsconfig.json upstream; the Noble
-  # configure hook injects a paths mapping into it, so seed it for tests.
+  # node-undici carries llparse component tsconfigs upstream; the Noble
+  # configure hook injects paths mappings into each one that compiles TS.
   if [[ "${package}" == "node-undici" ]]; then
-    mkdir -p "${source_tree}/llparse-builder"
-    cat > "${source_tree}/llparse-builder/tsconfig.json" <<'JSON'
+    local component
+    for component in fastify-busboy llhttp llparse llparse-builder llparse-frontend; do
+      mkdir -p "${source_tree}/${component}"
+      cat > "${source_tree}/${component}/tsconfig.json" <<'JSON'
 {
   "compilerOptions": {
     "strict": true,
@@ -189,6 +191,7 @@ EOF
   ]
 }
 JSON
+    done
   fi
 }
 
@@ -337,6 +340,7 @@ SH
   grep -Fq -- "before dh-nodejs configure" "${rules_file}"
   # tsconfig paths injection recipe present.
   grep -Fq -- 'paths["undici-types"]=["../types"]' "${rules_file}"
+  grep -Fq -- 'readdirSync(".")' "${rules_file}"
   grep -Fq -- "types/package.json" "${rules_file}"
   grep -Fq -- '"name": "undici-types"' "${rules_file}"
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
@@ -352,8 +356,10 @@ SH
   # paths injected with the expected mapping; no baseUrl; no marker field.
   # One CommonJS node -e line emits four pipe-separated facts, asserted in one line:
   # undici-types mapping | undici-types/* mapping | baseUrl absent | marker field absent.
-  run bash -c "cd '${source_tree}' && node -e 'var j=require(\"./llparse-builder/tsconfig.json\");var p=j.compilerOptions.paths;process.stdout.write(JSON.stringify(p[\"undici-types\"])+\"|\"+JSON.stringify(p[\"undici-types/*\"])+\"|\"+(j.compilerOptions.baseUrl===undefined)+\"|\"+(j._nobleUndiciTypesPaths===undefined)+\"\n\")'"
-  [ "${output}" = '["../types"]|["../types/*"]|true|true' ]
+  for component in fastify-busboy llhttp llparse llparse-builder llparse-frontend; do
+    run bash -c "cd '${source_tree}' && node -e 'var c=process.argv[1];var j=require(\"./\"+c+\"/tsconfig.json\");var p=j.compilerOptions.paths;process.stdout.write(JSON.stringify(p[\"undici-types\"])+\"|\"+JSON.stringify(p[\"undici-types/*\"])+\"|\"+(j.compilerOptions.baseUrl===undefined)+\"|\"+(j._nobleUndiciTypesPaths===undefined)+\"\n\")' '${component}'"
+    [ "${output}" = '["../types"]|["../types/*"]|true|true' ]
+  done
 }
 
 @test "noble-rewrap-node-undici migrates legacy build hook to configure hook" {
@@ -392,6 +398,39 @@ LEGACY
   grep -Fq -- "types/package.json" "${rules_file}"
   grep -Fq -- '"name": "undici-types"' "${rules_file}"
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
+}
+
+@test "noble-rewrap-node-undici upgrades builder-only tsconfig hook to cover llparse components" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
+
+  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  # Seed the first tsconfig-paths hook variant: it had the final marker, but
+  # only injected llparse-builder/tsconfig.json.
+  cat >> "${rules_file}" <<'LEGACY'
+
+# Noble backport: generate undici-types metadata and TypeScript paths before dh-nodejs configure.
+execute_before_dh_auto_configure::
+	mkdir -p types
+	printf '%s\n' '{' '  "name": "undici-types",' '  "version": "7.3.0",' '  "description": "A stand-alone types package for Undici",' '  "license": "MIT",' '  "types": "index.d.ts",' '  "files": ["*.d.ts"]' '}' > types/package.json
+	node -e 'const fs=require("fs"),p="llparse-builder/tsconfig.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.compilerOptions=j.compilerOptions||{};j.compilerOptions.paths=j.compilerOptions.paths||{};if(JSON.stringify(j.compilerOptions.paths["undici-types"])===JSON.stringify(["../types"])){process.exit(0);}j.compilerOptions.paths["undici-types"]=["../types"];j.compilerOptions.paths["undici-types/*"]=["../types/*"];fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n");'
+LEGACY
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
+
+  [ "${status}" -eq 0 ]
+  [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
+  grep -Fq -- 'readdirSync(".")' "${rules_file}"
+  ! grep -Fq -- 'p="llparse-builder/tsconfig.json"' "${rules_file}"
+
+  source_tree="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
+  run bash -c "cd '${source_tree}' && make -f debian/rules execute_before_dh_auto_configure"
+  [ "${status}" -eq 0 ]
+  for component in fastify-busboy llhttp llparse llparse-builder llparse-frontend; do
+    run bash -c "cd '${source_tree}' && node -e 'var c=process.argv[1];var j=require(\"./\"+c+\"/tsconfig.json\");var p=j.compilerOptions.paths;process.stdout.write(JSON.stringify(p[\"undici-types\"])+\"|\"+JSON.stringify(p[\"undici-types/*\"])+\"\n\")' '${component}'"
+    [ "${output}" = '["../types"]|["../types/*"]' ]
+  done
 }
 
 @test "noble-rewrap-node-undici migrates configure-only hook to tsconfig-paths hook" {
