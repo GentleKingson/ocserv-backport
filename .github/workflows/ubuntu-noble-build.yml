@@ -1,0 +1,75 @@
+---
+name: ubuntu-noble-build
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-noble-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      TARGET_ARCH: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/local/.ghcup \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL || true
+          docker system prune -af || true
+          df -h
+
+      - name: Build and test Ubuntu Noble packages
+        run: |
+          set -euo pipefail
+          printf 'yes\n' | sudo --preserve-env=TARGET_ARCH \
+            ./scripts/noble-auto-build.sh --provision
+
+      - name: Upload Ubuntu Noble artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-noble-build-amd64
+          if-no-files-found: error
+          path: |
+            build/noble/amd64/source/node-undici/*.dsc
+            build/noble/amd64/source/node-undici/*.debian.tar.*
+            build/noble/amd64/source/node-undici/*.orig.tar.*
+            build/noble/amd64/source/node-undici/*_source.changes
+            build/noble/amd64/source/node-undici/*_source.buildinfo
+            build/noble/amd64/source/ocserv/*.dsc
+            build/noble/amd64/source/ocserv/*.debian.tar.*
+            build/noble/amd64/source/ocserv/*.orig.tar.*
+            build/noble/amd64/source/ocserv/*_source.changes
+            build/noble/amd64/source/ocserv/*_source.buildinfo
+            build/noble/amd64/binary/node-undici/*.deb
+            build/noble/amd64/binary/node-undici/*.changes
+            build/noble/amd64/binary/node-undici/*.buildinfo
+            build/noble/amd64/binary/ocserv/*.deb
+            build/noble/amd64/binary/ocserv/*.changes
+            build/noble/amd64/binary/ocserv/*.buildinfo
+            build/noble/amd64/repo/**
+
+      - name: Upload Ubuntu Noble build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-noble-build-logs-amd64
+          if-no-files-found: warn
+          path: |
+            build/noble/**/*.build
+            build/noble/**/*.buildlog
+            build/noble/**/*.log
+            /tmp/noble-libllhttp-repo.*.log
