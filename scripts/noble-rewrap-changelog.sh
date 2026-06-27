@@ -40,7 +40,7 @@ install_node_undici_types_package_hook() {
   legacy_markers_re='\Q# Noble backport: generate undici-types package metadata during build.\E|\Q# Noble backport: generate undici-types package metadata before dh-nodejs links components.\E'
   if grep -Eq -- "${legacy_markers_re}" "${rules}"; then
     perl -0pi -e "
-      s/\\n?(?:${legacy_markers_re})\\nexecute_before_dh_auto_(?:build|configure)::\\n(?:\\t[^\\n]*\\n)+//
+      s/\\n?(?:${legacy_markers_re})\\nexecute_before_dh_auto_(?:build|configure)::\\n(?:\\t[^\\n]*\\n)+//g
     " "${rules}"
     log "Noble node-undici legacy hook block migrated to tsconfig-paths hook"
   fi
