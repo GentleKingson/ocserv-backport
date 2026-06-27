@@ -64,6 +64,38 @@ EOF
   log "Noble node-undici rules hook installed"
 }
 
+control_build_depends_has() {
+  local control="$1" dep="$2"
+  awk '
+    /^Build-Depends:/ { in_field = 1; print; next }
+    in_field && /^[[:space:]]/ { print; next }
+    in_field { exit }
+  ' "${control}" | grep -Eq -- "(^|[[:space:],])${dep}([[:space:],(]|$)"
+}
+
+ensure_ocserv_noble_build_deps() {
+  local control="debian/control"
+
+  [[ "${PKG_SOURCE}" == "ocserv" ]] || return 0
+  [[ -f "${control}" ]] || die "missing packaging control file: ${PKG_SOURCE_TREE}/${control}"
+
+  if control_build_depends_has "${control}" "libssl-dev"; then
+    log "Noble ocserv libssl-dev build dependency already present"
+    return 0
+  fi
+  control_build_depends_has "${control}" "libcjose-dev" \
+    || die "ocserv Build-Depends is missing libcjose-dev anchor"
+
+  perl -0pi -e '
+    s{(^Build-Depends:[^\n]*(?:\n[ \t].*)*?\blibcjose-dev\b(?:\s*(?:\([^)]*\)|\[[^\]]*\]))?\s*,)}
+     {$1 . "\n               libssl-dev,"}em
+      or die "failed to add libssl-dev after libcjose-dev\n";
+  ' "${control}"
+  control_build_depends_has "${control}" "libssl-dev" \
+    || die "failed to add libssl-dev to ocserv Build-Depends"
+  log "Noble ocserv libssl-dev build dependency installed"
+}
+
 rewrite_same_version_changelog_distribution() {
   PKG_SOURCE="${PKG_SOURCE}" \
   PKG_DEBIAN_VERSION="${PKG_DEBIAN_VERSION}" \
@@ -90,6 +122,7 @@ if [[ "${PKG_NOBLE_VERSION}" == "${PKG_DEBIAN_VERSION}" ]]; then
     die "changelog already rewrapped to ${PKG_NOBLE_VERSION} for ${TARGET_DISTRIBUTION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
   fi
   install_node_undici_types_package_hook
+  ensure_ocserv_noble_build_deps
   rewrite_same_version_changelog_distribution
 else
   if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then
@@ -98,6 +131,7 @@ else
   [[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
     || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
   install_node_undici_types_package_hook
+  ensure_ocserv_noble_build_deps
   dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
       --force-bad-version \
       -v "${PKG_NOBLE_VERSION}" \

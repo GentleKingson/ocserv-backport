@@ -168,6 +168,31 @@ ${package} (${debian_version}) ${distribution}; urgency=medium
  -- Debian Maintainer <maintainer@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
 EOF
 
+  if [[ "${package}" == "ocserv" ]]; then
+    cat > "${source_tree}/debian/control" <<'EOF'
+Source: ocserv
+Build-Depends: debhelper-compat (= 13),
+               libcjose-dev,
+               meson
+
+Package: ocserv
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: test package
+EOF
+  else
+    cat > "${source_tree}/debian/control" <<'EOF'
+Source: node-undici
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-nodejs
+
+Package: node-undici
+Architecture: all
+Depends: ${misc:Depends}
+Description: test package
+EOF
+  fi
+
   # node-undici carries llparse component tsconfigs upstream; the Noble
   # configure hook injects paths mappings into each one that compiles TS.
   if [[ "${package}" == "node-undici" ]]; then
@@ -558,6 +583,19 @@ LEGACY
   rules_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/rules"
   ! grep -Fq -- "execute_before_dh_auto_configure::" "${rules_file}"
   ! grep -Fq -- "undici-types" "${rules_file}"
+}
+
+@test "noble-rewrap-ocserv adds explicit libssl build dependency" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
+
+  [ "${status}" -eq 0 ]
+  control_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/control"
+  grep -Fq -- "libcjose-dev," "${control_file}"
+  grep -Fq -- "libssl-dev," "${control_file}"
 }
 
 @test "noble source package fails before deleting artifacts when node-undici pkgjs-pjson is missing" {
