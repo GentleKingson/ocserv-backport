@@ -38,7 +38,9 @@ install_node_undici_types_package_hook() {
   # the legacy marker comment, the build/configure target line, and all
   # following tab-indented recipe lines.
   legacy_markers_re='\Q# Noble backport: generate undici-types package metadata during build.\E|\Q# Noble backport: generate undici-types package metadata before dh-nodejs links components.\E'
-  if grep -Eq -- "${legacy_markers_re}" "${rules}"; then
+  # Use fixed-string grep per marker: grep -E does not understand Perl's \Q...\E.
+  if grep -Fq -- "generate undici-types package metadata during build" "${rules}" \
+    || grep -Fq -- "generate undici-types package metadata before dh-nodejs links components" "${rules}"; then
     perl -0pi -e "
       s/\\n?(?:${legacy_markers_re})\\nexecute_before_dh_auto_(?:build|configure)::\\n(?:\\t[^\\n]*\\n)+//g
     " "${rules}"
