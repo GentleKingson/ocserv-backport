@@ -27,6 +27,29 @@ setup() {
   ! grep -R -Fq -- "actions/upload-artifact@v4" .github/workflows
 }
 
+@test "YAML files checked by CI stay within yamllint line length" {
+  local output
+
+  output="$(
+    python3 - <<'PY'
+from pathlib import Path
+
+for root in (Path(".github"), Path("source-lock")):
+    for yaml_file in sorted(root.rglob("*")):
+        if yaml_file.suffix not in {".yml", ".yaml"}:
+            continue
+        for line_number, line in enumerate(yaml_file.read_text().splitlines(), 1):
+            if len(line) > 80:
+                print(f"{yaml_file}:{line_number}:{len(line)}:{line}")
+PY
+  )"
+
+  [ -z "${output}" ] || {
+    printf '%s\n' "${output}" >&2
+    return 1
+  }
+}
+
 @test "manual Ubuntu Noble build workflow delegates Debian keyring refresh to script" {
   workflow=".github/workflows/ubuntu-noble-build.yml"
 
