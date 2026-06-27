@@ -228,13 +228,17 @@ TARGET_ARCH=amd64
 `node-undici` 的 Noble 默认版本固定为 Debian 原版本
 `7.3.0+dfsg1+~cs24.12.11-1`。本仓库在 rewrap 阶段会把顶层 changelog
 distribution 改为 `noble`，并修改 `debian/rules`，让 binary build 的
-`dh_auto_configure` 前生成 `types/package.json`。因为 dh-nodejs 在
-`dh_auto_configure` 阶段扫描 `debian/nodejs/additional_components` 并链接
-`node_modules/undici-types`，这一步早于 `dh_auto_build`，所以必须在 configure
-阶段之前就把 `types/package.json` 准备好。rewrap 脚本会自动迁移旧版本的
-`execute_before_dh_auto_build::` hook。这是同版本、不同源码内容的本地
-重打包策略，只适用于本仓库的私有 Noble 构建流水线，不适合发布到会和 Debian
-官方源混用的通用仓库。
+`dh_auto_configure` 前生成 `types/package.json` 并向
+`llparse-builder/tsconfig.json` 注入 `paths` 映射。生成 `types/package.json`
+只是 dh-nodejs 链接 `node_modules/undici-types` 的前置条件；真正消除
+`TS2307` 的是 tsconfig `paths` 注入：tsc 默认会把 `@types/node` 符号链接解析到
+真实路径 `/usr/share/nodejs/...`，再从真实路径上溯找 `undici-types`，而 Noble
+的系统旧版 `node-undici` 没有把 `undici-types` 装到那里，所以构建树里的
+`node_modules/undici-types` 链接对 tsc 不可见。`paths` 按 tsconfig 文件位置
+解析、不走真实路径上溯，因此能把 `import("undici-types")` 重定向到源码树内的
+`types/` 目录。rewrap 脚本会自动迁移旧版本（build-hook 和 configure-only）的
+hook。这是同版本、不同源码内容的本地重打包策略，只适用于本仓库的私有 Noble
+构建流水线，不适合发布到会和 Debian 官方源混用的通用仓库。
 
 ## 源码签名验证 keyring
 
@@ -509,12 +513,17 @@ E: Build failure (dpkg-buildpackage died)
 
 说明正在构建的 `node-undici` Noble source package 没有包含本仓库的 Noble 专用
 `debian/rules` build hook。Ubuntu Noble chroot 内的 `@types/node` 会导入
-`undici-types`，但 Noble 仓库自带的旧 `node-undici 5.26.3` 不提供这个模块。
-当前 rewrap 阶段会修改 `debian/rules`，让 binary build 在 `dh_auto_configure`
-前生成 `types/package.json`，因为 dh-nodejs 就是在 `dh_auto_configure` 阶段
-创建 `node_modules/undici-types` 链接；放在 `dh_auto_build` 前会因为时序错误
-仍然报 TS2307。rewrap 脚本会自动迁移旧版本的 `execute_before_dh_auto_build::`
-hook，因此即使源码树里残留旧 hook 也会被修正。
+`undici-types`，但 Noble 系统旧版 `node-undici`（基于 undici 6.x）没有把
+独立的 `undici-types` 装到 `/usr/share/nodejs/undici-types/`，而 Debian
+trixie 的新版（基于 undici 7.x）装了。tsc 默认会把 `@types/node` 符号链接解析
+到真实路径 `/usr/share/nodejs/@types/node/...` 再上溯，所以 Noble 缺这个系统
+目录时，构建树里的 `node_modules/undici-types` 链接对 tsc 不可见，即使已正确
+建立也会报 TS2307。当前 rewrap 阶段会修改 `debian/rules`，让 binary build 在
+`dh_auto_configure` 前生成 `types/package.json`，并向
+`llparse-builder/tsconfig.json` 注入 `paths: {"undici-types": ["../types"]}`，
+让 tsc 按 tsconfig 文件位置解析、绕过真实路径上溯。rewrap 脚本会自动迁移旧版本
+（build-hook 和 configure-only）的 hook，因此即使源码树里残留旧 hook 也会被
+修正。
 
 确认本地脚本和 source tree 是最新状态后，重新从 fetch/rewrap 阶段开始：
 
