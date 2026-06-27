@@ -1,0 +1,34 @@
+---
+schema_version: 1
+source: node-undici
+debian_version: "7.3.0+dfsg1+~cs24.12.11-1"
+pool_path: "main/n/node-undici"
+dsc:
+  name: node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc
+  size: 4706
+  sha256: "b0b6b5419b74313a2e45d0c3a035f0508373be57bc01285ef93bb7149db1a3ae"
+artifacts:
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-binary-search.tar.xz
+    size: 2772
+    sha256: "4c722d476f84b280160bfc428aa36e2806f9837902a43cda7caaa401c2a52f54"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-fastify-busboy.tar.xz
+    size: 39820
+    sha256: "d3e5c5dfc8aba040287b99e267ecdbea45a822f04f2cb3837e4662deeb32c2c6"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-llhttp.tar.xz
+    size: 5900028
+    sha256: "9bd346147fa1f7ac096360620189b30284a5537bfbdf8db9da40ed12fe3fe42a"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-llparse-builder.tar.xz
+    size: 27872
+    sha256: "48fc4ad3744179216d30f36e22a4e72bd11b6f47165f1bd22144436ba535b8f3"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-llparse-frontend.tar.xz
+    size: 28840
+    sha256: "30e1c7809fc5b31bf63e8f3b6eaa8ff0f08910fa131294d46a3f33c849fd7f0e"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig-llparse.tar.xz
+    size: 34392
+    sha256: "ca5062636558b8171ef7309fa829179258d2fb04914ade2ba663ce42970fe32a"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11.orig.tar.xz
+    size: 1773980
+    sha256: "be8ad414aa10f1ef097000a5d9c2d3a04bedcfcd18cf38b363bf16c00828325b"
+  - name: node-undici_7.3.0+dfsg1+~cs24.12.11-1.debian.tar.xz
+    size: 214960
+    sha256: "26547ee0207810368054b4063f2aa1ef00e6800a9170198e0b796540fb2453be"

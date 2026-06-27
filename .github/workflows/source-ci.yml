@@ -23,7 +23,7 @@ jobs:
             ca-certificates \
             git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install source package dependencies
         run: |
@@ -50,7 +50,7 @@ jobs:
         run: make source-ci
 
       - name: Upload source package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ocserv-source-package
           if-no-files-found: error

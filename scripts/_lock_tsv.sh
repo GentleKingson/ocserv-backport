@@ -36,6 +36,7 @@ _tsv_check_pool_path() {
 
 read_lock_tsv() {
   local file="$1" expect_ver="$2"
+  local expect_source="${3:-ocserv}"
   [[ -f "${file}" ]] || _tsv_die "file not found: ${file}"
   grep -q $'\r' "${file}" && _tsv_die "CRLF present"
 
@@ -67,10 +68,11 @@ read_lock_tsv() {
         META_DSC_NAME="${f4}"
         META_DSC_SIZE="${f5}"
         META_DSC_SHA256="${f6}"
+        [[ "${expect_source}" =~ ${RE_TSV_SOURCE} ]] || _tsv_die "bad expected source"
         [[ "${META_SOURCE}" =~ ${RE_TSV_SOURCE} ]] || _tsv_die "bad source"
-        [[ "${META_SOURCE}" == "ocserv" ]] || _tsv_die "META source != ocserv"
+        [[ "${META_SOURCE}" == "${expect_source}" ]] \
+          || _tsv_die "META source '${META_SOURCE}' != expected '${expect_source}'"
         [[ "${META_DEBIAN_VERSION}" =~ ${RE_TSV_VERSION} ]] || _tsv_die "bad debian_version"
-        [[ "${META_DEBIAN_VERSION}" == "1.5.0-1" ]] || _tsv_die "META version must be 1.5.0-1"
         [[ "${META_DEBIAN_VERSION}" == "${expect_ver}" ]] \
           || _tsv_die "expect_version '${expect_ver}' != META debian_version '${META_DEBIAN_VERSION}'"
         _tsv_check_pool_path "${META_POOL_PATH}" || _tsv_die "bad pool_path: ${META_POOL_PATH}"

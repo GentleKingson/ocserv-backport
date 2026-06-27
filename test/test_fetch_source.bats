@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _dsc.sh _lock_tsv.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
+  for file in _common.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }
@@ -68,6 +68,8 @@ make_success_fixtures() {
 install_fake_fetch_commands() {
   local mode="${1:-success}"
   FAKEBIN="$(mktemp -d)"
+  mkdir -p "${FETCH_REPO}/fake-keyrings"
+  printf 'fake keyring\n' > "${FETCH_REPO}/fake-keyrings/debian-keyring.gpg"
   cat > "${FAKEBIN}/curl" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
@@ -94,6 +96,8 @@ esac
 SH
   cat > "${FAKEBIN}/dscverify" <<SH
 #!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "${FETCH_REPO}/dscverify-args"
 case "${mode}" in
   dscverify-fail) echo "simulated dscverify failure" >&2; exit 8 ;;
   *) exit 0 ;;
@@ -102,6 +106,7 @@ SH
   cat > "${FAKEBIN}/dpkg-source" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "\$@" > "${FETCH_REPO}/dpkg-source-args"
 case "${mode}" in
   dpkg-source-fail) echo "simulated dpkg-source failure" >&2; exit 9 ;;
 esac
@@ -124,12 +129,12 @@ SH
 }
 
 run_fetch() {
-  run bash -c "cd '${FETCH_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+  run bash -c "cd '${FETCH_REPO}' && DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
 }
 
 run_fetch_with_skip_var() {
   local skip_value="$1"
-  run bash -c "cd '${FETCH_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK='${skip_value}' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+  run bash -c "cd '${FETCH_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK='${skip_value}' DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
 }
 
 verify_source_lock_calls() {
@@ -179,6 +184,39 @@ verify_source_lock_calls() {
   [ "${status}" -eq 0 ]
   [ "$(printf '%s\n' "${urls}" | sed -n '1p')" = "https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.dsc" ]
   [ "$(printf '%s\n' "${urls}" | sed -n '2p')" = "https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0.orig.tar.xz" ]
+}
+
+@test "fetch passes only readable configured keyrings to dscverify" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  run_fetch
+  args="$(cat "${FETCH_REPO}/dscverify-args")"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [[ "${args}" == *"--no-default-keyrings"* ]]
+  [[ "${args}" == *"--keyring"* ]]
+  [[ "${args}" == *"fake-keyrings/debian-keyring.gpg"* ]]
+  [[ "${args}" != *"missing-tag2upload.pgp"* ]]
+}
+
+@test "fetch unpacks with no-check after explicit dscverify validation" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands success
+  run_fetch
+  args="$(cat "${FETCH_REPO}/dpkg-source-args")"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [[ "${args}" == *"--no-check"* ]]
+  [[ "${args}" == *" -x"* || "${args}" == *$'\n-x'* ]]
+  [[ "${args}" != *"--require-valid-signature"* ]]
+}
+
+@test "noble fetch unpacks with no-check after explicit dscverify validation" {
+  grep -Fq -- 'dscverify_cmd "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
+  grep -Fq -- 'dpkg-source --no-check -x "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
+  ! grep -Fq -- "dpkg-source --require-valid-signature" "${REPO_ROOT}/scripts/noble-fetch-source.sh"
 }
 
 @test "fetch fails on dsc size mismatch before installing source tree" {

@@ -25,6 +25,15 @@ cleanup_tsv() {
   [[ "${output}" == *"SRC=ocserv VER=1.5.0-1 POOL=main/o/ocserv DSC=ocserv_1.5.0-1.dsc COUNT=3"* ]]
 }
 
+@test "read_lock_tsv: explicit source allows node-undici multi-artifact locks" {
+  node_tsv=$'META\tnode-undici\t7.3.0+dfsg1+~cs24.12.11-1\tmain/n/node-undici\tnode-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc\t1234\t0000000000000000000000000000000000000000000000000000000000000000\nARTIFACT\tnode-undici_7.3.0+dfsg1.orig.tar.xz\t111\t1111111111111111111111111111111111111111111111111111111111111111\nARTIFACT\tnode-undici_7.3.0+dfsg1+~cs24.12.11.orig-types-node-undici.tar.xz\t222\t2222222222222222222222222222222222222222222222222222222222222222\nARTIFACT\tnode-undici_7.3.0+dfsg1+~cs24.12.11-1.debian.tar.xz\t333\t3333333333333333333333333333333333333333333333333333333333333333'
+  with_tsv "${node_tsv}"
+  call_tsv "read_lock_tsv '${TSV_FILE}' 7.3.0+dfsg1+~cs24.12.11-1 node-undici; echo SRC=\$META_SOURCE VER=\$META_DEBIAN_VERSION POOL=\$META_POOL_PATH DSC=\$META_DSC_NAME COUNT=\${#ARTIFACT_NAME[@]}"
+  cleanup_tsv
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"SRC=node-undici VER=7.3.0+dfsg1+~cs24.12.11-1 POOL=main/n/node-undici DSC=node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc COUNT=3"* ]]
+}
+
 @test "read_lock_tsv: rejects CRLF" {
   TSV_FILE="$(mktemp)"
   printf '%s\r\n' "${VALID_TSV}" > "${TSV_FILE}"
