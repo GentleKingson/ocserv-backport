@@ -21,6 +21,31 @@ dscverify_candidate_keyrings() {
   printf '%s\n' "${DSCVERIFY_DEFAULT_KEYRINGS[@]}"
 }
 
+dscverify_with_temp_gnupghome() {
+  local gpg_home status
+
+  gpg_home="$(mktemp -d)"
+  chmod 700 "${gpg_home}"
+  if GNUPGHOME="${gpg_home}" "$@"; then
+    rm -rf -- "${gpg_home}"
+    return 0
+  else
+    status=$?
+  fi
+
+  rm -rf -- "${gpg_home}"
+  return "${status}"
+}
+
+dscverify_keyring_contains_key() {
+  local keyring="$1"
+  local key="$2"
+
+  dscverify_with_temp_gnupghome \
+    gpg --batch --no-default-keyring --keyring "${keyring}" --list-keys "${key}" \
+    >/dev/null 2>&1
+}
+
 dscverify_cmd() {
   local dsc="$1"
   local -a args=(dscverify --no-conf --no-default-keyrings)
@@ -41,5 +66,5 @@ dscverify_cmd() {
   fi
 
   args+=("${dsc}")
-  "${args[@]}"
+  dscverify_with_temp_gnupghome "${args[@]}"
 }

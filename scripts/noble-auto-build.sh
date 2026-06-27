@@ -33,9 +33,11 @@ DOCKER_CE_PACKAGES=(
   docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 )
 
+NOBLE_DSCVERIFY_REQUIRED_KEY="C6AE83D21C677043DA3DAC97F8643574713C9BAE"
 SBUILD_CHROOT_COMPONENTS="${SBUILD_CHROOT_COMPONENTS:-main,universe}"
 SBUILD_CHROOT_INCLUDE="eatmydata,ccache,gnupg,ca-certificates"
 NOBLE_AUTO_BUILD_CHROOT_BASE="${NOBLE_AUTO_BUILD_CHROOT_BASE:-/srv/chroot}"
+NOBLE_AUTO_BUILD_KEYRING_IMAGE="${NOBLE_AUTO_BUILD_KEYRING_IMAGE:-debian:sid}"
 
 usage() {
   cat <<'EOF'
@@ -148,13 +150,16 @@ check_core_dependencies() {
 }
 
 check_debian_dscverify_keyrings() {
-  local keyring readable_count=0
+  local keyring readable_count=0 required_key_found=0
 
   while IFS= read -r keyring; do
     [[ -n "${keyring}" ]] || continue
     if [[ -r "${keyring}" ]]; then
       log "using Debian dscverify keyring: ${keyring}"
       readable_count=$((readable_count + 1))
+      if dscverify_keyring_contains_key "${keyring}" "${NOBLE_DSCVERIFY_REQUIRED_KEY}"; then
+        required_key_found=1
+      fi
     fi
   done < <(dscverify_candidate_keyrings)
 
@@ -163,6 +168,82 @@ check_debian_dscverify_keyrings() {
     log "Install them with: sudo apt-get install -y --no-install-recommends debian-keyring debian-maintainers"
     return 1
   fi
+
+  if [[ "${required_key_found}" -ne 1 ]]; then
+    log "required Debian source signing key not found in dscverify keyrings: ${NOBLE_DSCVERIFY_REQUIRED_KEY}"
+    log "Run scripts/noble-auto-build.sh --provision without DSCVERIFY_KEYRING_PATHS to refresh keyrings automatically."
+    return 1
+  fi
+}
+
+debian_dscverify_keyring_root() {
+  printf '%s\n' "${NOBLE_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${REPO_ROOT}/build/noble/${TARGET_ARCH}/debian-keyrings}"
+}
+
+refresh_debian_dscverify_keyrings() {
+  local keyring_root keyring_path host_uid host_gid
+  local -a keyrings
+
+  keyring_root="$(debian_dscverify_keyring_root)"
+  host_uid="$(id -u)"
+  host_gid="$(id -g)"
+  log "refreshing Debian dscverify keyrings from ${NOBLE_AUTO_BUILD_KEYRING_IMAGE}"
+  rm -rf -- "${keyring_root}" || return 1
+  mkdir -p "${keyring_root}" || return 1
+
+  "${DOCKER_COMMAND[@]}" run --rm \
+    -v "${keyring_root}:/out" \
+    -e "HOST_UID=${host_uid}" \
+    -e "HOST_GID=${host_gid}" \
+    "${NOBLE_AUTO_BUILD_KEYRING_IMAGE}" \
+    bash -euxc '
+      workdir="$(mktemp -d)"
+      cd "${workdir}"
+      apt-get update
+      apt-get download \
+        debian-archive-keyring \
+        debian-keyring
+      mkdir -p /out/root
+      for deb in ./*.deb; do
+        dpkg-deb -x "${deb}" /out/root
+      done
+      chown -R "${HOST_UID}:${HOST_GID}" /out/root
+    ' || return 1
+
+  while IFS= read -r keyring_path; do
+    [[ -r "${keyring_path}" ]] || continue
+    keyrings+=("${keyring_path}")
+  done < <(
+    find "${keyring_root}/root/usr/share/keyrings" \
+      -maxdepth 1 \
+      -type f \
+      \( -name 'debian-*.gpg' -o -name 'debian-*.pgp' \) \
+      -print \
+      | sort
+  )
+
+  if [[ "${#keyrings[@]}" -eq 0 ]]; then
+    log "no Debian keyrings extracted from ${NOBLE_AUTO_BUILD_KEYRING_IMAGE}"
+    return 1
+  fi
+
+  DSCVERIFY_KEYRING_PATHS=""
+  for keyring_path in "${keyrings[@]}"; do
+    if [[ -z "${DSCVERIFY_KEYRING_PATHS}" ]]; then
+      DSCVERIFY_KEYRING_PATHS="${keyring_path}"
+    else
+      DSCVERIFY_KEYRING_PATHS="${DSCVERIFY_KEYRING_PATHS}:${keyring_path}"
+    fi
+  done
+  export DSCVERIFY_KEYRING_PATHS
+}
+
+ensure_debian_dscverify_keyrings() {
+  if [[ -z "${DSCVERIFY_KEYRING_PATHS:-}" ]]; then
+    refresh_debian_dscverify_keyrings || return 1
+  fi
+
+  check_debian_dscverify_keyrings
 }
 
 current_user_in_sbuild_group() {
@@ -649,9 +730,6 @@ if [[ "${PROVISION}" -eq 1 ]]; then
 fi
 
 check_core_dependencies || die "missing core build dependencies"
-check_debian_dscverify_keyrings || die "missing readable Debian dscverify keyring"
-ensure_sbuild_group || die "sbuild group membership is not active"
-ensure_sbuild_chroot || die "sbuild chroot is unavailable"
 
 if [[ "${PROVISION}" -eq 1 ]]; then
   provision_docker_ce
@@ -659,6 +737,10 @@ if [[ "${PROVISION}" -eq 1 ]]; then
 else
   check_docker_default || die "Docker CE is unavailable"
 fi
+
+ensure_debian_dscverify_keyrings || die "Debian dscverify keyrings are unavailable"
+ensure_sbuild_group || die "sbuild group membership is not active"
+ensure_sbuild_chroot || die "sbuild chroot is unavailable"
 
 cd -- "${REPO_ROOT}"
 

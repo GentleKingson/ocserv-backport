@@ -31,63 +31,11 @@ jobs:
           docker system prune -af || true
           df -h
 
-      - name: Refresh Debian source verification keyrings
-        run: |
-          set -euo pipefail
-          keyring_root="${RUNNER_TEMP}/debian-keyrings"
-          rm -rf "${keyring_root}"
-          mkdir -p "${keyring_root}"
-          docker run --rm -v "${keyring_root}:/out" debian:sid \
-            bash -euxc '
-              workdir="$(mktemp -d)"
-              cd "${workdir}"
-              apt-get update
-              apt-get download \
-                debian-archive-keyring \
-                debian-keyring
-              mkdir -p /out/root
-              for deb in ./*.deb; do
-                dpkg-deb -x "${deb}" /out/root
-              done
-            '
-          mapfile -t keyrings < <(
-            find "${keyring_root}/root/usr/share/keyrings" \
-              -maxdepth 1 \
-              -type f \
-              \( -name 'debian-*.gpg' -o -name 'debian-*.pgp' \) \
-              -readable \
-              -print \
-              | sort
-          )
-          if [[ "${#keyrings[@]}" -eq 0 ]]; then
-            echo "No Debian keyrings extracted from debian:sid" >&2
-            exit 1
-          fi
-          required_key="C6AE83D21C677043DA3DAC97F8643574713C9BAE"
-          key_found=0
-          for keyring in "${keyrings[@]}"; do
-            if gpg --batch --no-default-keyring --keyring "${keyring}" \
-              --list-keys "${required_key}" >/dev/null 2>&1; then
-              key_found=1
-              break
-            fi
-          done
-          if [[ "${key_found}" -ne 1 ]]; then
-            printf 'Required Debian source signing key not found: %s\n' \
-              "${required_key}" >&2
-            exit 1
-          fi
-          {
-            printf 'DSCVERIFY_KEYRING_PATHS='
-            (IFS=:; printf '%s' "${keyrings[*]}")
-            printf '\n'
-          } >> "${GITHUB_ENV}"
-
       - name: Build and test Ubuntu Noble packages
         run: |
           set -euo pipefail
           printf 'yes\n' \
-            | sudo --preserve-env=TARGET_ARCH,DSCVERIFY_KEYRING_PATHS \
+            | sudo --preserve-env=TARGET_ARCH \
               ./scripts/noble-auto-build.sh --provision
 
       - name: Upload Ubuntu Noble artifacts

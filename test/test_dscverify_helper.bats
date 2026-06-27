@@ -16,6 +16,10 @@ install_fake_dscverify() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "\$@" > "${TMP_ROOT}/dscverify-args"
+printf '%s\n' "\${GNUPGHOME:-}" > "${TMP_ROOT}/dscverify-gnupghome"
+if [[ -n "\${DSCVERIFY_FAKE_STATUS:-}" ]]; then
+  exit "\${DSCVERIFY_FAKE_STATUS}"
+fi
 SH
   chmod +x "${FAKEBIN}/dscverify"
 }
@@ -43,6 +47,9 @@ call_dscverify_helper() {
   [ "${lines[5]}" = "${keyring_two}" ]
   [ "${lines[6]}" = "${dsc}" ]
   [ "${#lines[@]}" -eq 7 ]
+  gpg_home="$(cat "${TMP_ROOT}/dscverify-gnupghome")"
+  [ -n "${gpg_home}" ]
+  [ ! -d "${gpg_home}" ]
 }
 
 @test "dscverify_cmd fails early with install hint when no keyrings are readable" {
@@ -56,6 +63,20 @@ call_dscverify_helper() {
   [[ "${output}" == *"no readable Debian dscverify keyrings"* ]]
   [[ "${output}" == *"sudo apt install -y --no-install-recommends debian-keyring"* ]]
   [ ! -e "${TMP_ROOT}/dscverify-args" ]
+}
+
+@test "dscverify_cmd propagates dscverify failures" {
+  install_fake_dscverify
+  keyring="${TMP_ROOT}/debian-keyring.gpg"
+  dsc="${TMP_ROOT}/source.dsc"
+  touch "${keyring}" "${dsc}"
+
+  call_dscverify_helper "export DSCVERIFY_FAKE_STATUS=8; PATH='${FAKEBIN}':\"\$PATH\" DSCVERIFY_KEYRING_PATHS='${keyring}' dscverify_cmd '${dsc}'"
+
+  [ "${status}" -eq 8 ]
+  gpg_home="$(cat "${TMP_ROOT}/dscverify-gnupghome")"
+  [ -n "${gpg_home}" ]
+  [ ! -d "${gpg_home}" ]
 }
 
 @test "dscverify_cmd allows DSCVERIFY_KEYRING_PATHS to override default candidates" {

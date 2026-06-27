@@ -128,9 +128,10 @@ Source CI uploads source package artifacts only. It does not run `binary`,
 
 Manual Ubuntu Noble build workflow runs on a GitHub-hosted `ubuntu-24.04`
 runner. It frees runner disk space, provisions the Noble builder with
-`scripts/noble-auto-build.sh --provision`, runs the full Noble binary build,
-`lintian`, and Docker smoke validation, then uploads the generated source,
-binary, and local repository artifacts.
+`scripts/noble-auto-build.sh --provision`, refreshes Debian source verification
+keyrings from `debian:sid`, runs the full Noble binary build, `lintian`, and
+Docker smoke validation, then uploads the generated source, binary, and local
+repository artifacts.
 This workflow does not publish packages, deploy hosts, or read repository secrets.
 
 ## Local Targets
@@ -188,7 +189,9 @@ and does not enable automatic cross-builds. The expected chroot name is
 `noble-${TARGET_ARCH}`, for example `noble-amd64`.
 
 The Noble builder needs the same Debian source verification tooling as the
-trixie builder, including a readable Debian keyring for `dscverify`:
+trixie builder. `scripts/noble-auto-build.sh --provision` refreshes Debian
+source verification keyrings from `debian:sid` automatically before the Noble
+build, then passes those keyrings to `dscverify`:
 
 - Python 3 with PyYAML
 - curl
@@ -207,8 +210,9 @@ For Noble builders, install Docker Engine from Docker's official APT repository
 as described in `docs/build-ocserv-backport-on-ubuntu24.04.md`. Do not mix the
 Ubuntu `docker.io` stack with Docker CE packages such as `containerd.io`.
 
-If `make noble-build` fails with unreadable `/usr/share/keyrings/debian-*.gpg`
-paths, install the keyring package:
+If you run lower-level targets directly and `make noble-build` fails with
+unreadable `/usr/share/keyrings/debian-*.gpg` paths, install the keyring
+package:
 
 ```bash
 sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debian-keyring
@@ -216,8 +220,10 @@ sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends debian-k
 
 The fetch scripts ignore missing optional keyring candidates, such as
 `debian-tag2upload.pgp` on Ubuntu 24.04, but at least one Debian keyring must be
-readable. Set `DSCVERIFY_KEYRING_PATHS` to a colon-separated list only when a
-builder uses non-standard keyring paths.
+readable. Set `DSCVERIFY_KEYRING_PATHS` to a colon-separated list only for
+advanced offline or custom-keyring builders; when it is set,
+`scripts/noble-auto-build.sh --provision` treats it as an explicit override and
+does not refresh keyrings automatically.
 
 ## Repository Layout
 

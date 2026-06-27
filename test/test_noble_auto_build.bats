@@ -32,6 +32,16 @@ install_minimal_valid_fakebin() {
   ln -s /usr/bin/basename "${FAKEBIN}/basename"
   ln -s /usr/bin/dirname "${FAKEBIN}/dirname"
   ln -s /bin/date "${FAKEBIN}/date"
+  ln -s /usr/bin/find "${FAKEBIN}/find"
+  ln -s /bin/mkdir "${FAKEBIN}/mkdir"
+  ln -s /usr/bin/mktemp "${FAKEBIN}/mktemp"
+  ln -s /bin/rm "${FAKEBIN}/rm"
+  ln -s /usr/bin/sort "${FAKEBIN}/sort"
+  cat > "${FAKEBIN}/chmod" <<'SH'
+#!/usr/bin/env bash
+/bin/chmod "$@"
+SH
+  /bin/chmod +x "${FAKEBIN}/chmod"
   for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source dh pkgjs-pjson sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
     cat > "${FAKEBIN}/${cmd}" <<'SH'
 #!/usr/bin/env bash
@@ -463,11 +473,57 @@ SH
   chmod +x "${FAKEBIN}/docker"
 }
 
+install_fake_docker_keyring_refresh() {
+  cat > "${FAKEBIN}/docker" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker %s\n' "\$*" >> "${AUTO_REPO}/docker-calls"
+case "\${1:-}" in
+  info)
+    exit 0
+    ;;
+  run)
+    mount=""
+    while [[ "\$#" -gt 0 ]]; do
+      case "\$1" in
+        -v)
+          mount="\$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    out_dir="\${mount%:/out}"
+    if [[ -z "\${out_dir}" || "\${out_dir}" == "\${mount}" ]]; then
+      echo "missing keyring output mount: \$*" >&2
+      exit 99
+    fi
+    mkdir -p "\${out_dir}/root/usr/share/keyrings"
+    : > "\${out_dir}/root/usr/share/keyrings/debian-archive-keyring.gpg"
+    : > "\${out_dir}/root/usr/share/keyrings/debian-keyring.pgp"
+    exit 0
+    ;;
+  pull)
+    echo "unexpected docker pull: \$*" >&2
+    exit 99
+    ;;
+  *)
+    echo "unexpected docker command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/docker"
+}
+
 install_fake_successful_make() {
   cat > "${FAKEBIN}/make" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'make %s NOBLE_DOCKER_CMD=%s\n' "\$*" "\${NOBLE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+printf '%s\n' "\${DSCVERIFY_KEYRING_PATHS:-}" > "${AUTO_REPO}/make-dscverify-keyrings"
 if [[ "\$*" != "noble-build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
@@ -690,6 +746,54 @@ run_auto_isolated() {
   [[ "${output}" != *"apt progress output should be hidden"* ]]
   [[ "${output}" == *"using Debian dscverify keyring: ${keyring}"* ]]
   [ -r "${keyring}" ]
+}
+
+@test "noble-auto-build --provision refreshes Debian dscverify keyrings when unset" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_keyring_refresh
+  install_fake_successful_make
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"refreshing Debian dscverify keyrings from debian:sid"* ]]
+  keyring_root="${AUTO_REPO}/build/noble/amd64/debian-keyrings"
+  grep -Fq -- "docker run --rm" "${AUTO_REPO}/docker-calls"
+  grep -Fq -- "-v ${keyring_root}:/out" "${AUTO_REPO}/docker-calls"
+  grep -Fq -- "-e HOST_UID=" "${AUTO_REPO}/docker-calls"
+  grep -Fq -- "-e HOST_GID=" "${AUTO_REPO}/docker-calls"
+  grep -Fq -- "debian:sid" "${AUTO_REPO}/docker-calls"
+  [[ "$(cat "${AUTO_REPO}/make-dscverify-keyrings")" == *"${keyring_root}/root/usr/share/keyrings/debian-keyring.pgp"* ]]
+  [[ "${output}" == *"using Debian dscverify keyring: ${keyring_root}/root/usr/share/keyrings/debian-keyring.pgp"* ]]
+}
+
+@test "noble-auto-build keeps explicit dscverify keyring override" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/custom-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${AUTO_REPO}/make-dscverify-keyrings")" = "${keyring}" ]
+  if grep -Eq -- "docker run .*debian:sid" "${AUTO_REPO}/docker-calls"; then
+    false
+  fi
 }
 
 @test "noble-auto-build --provision prints original apt output when apt fails" {
@@ -992,8 +1096,13 @@ run_auto_isolated() {
   install_fake_docker_info_sequence 0
   install_fake_successful_make
   keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
 
-  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated --provision
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
 
   [ "${status}" -ne 0 ]
   grep -Fxq -- "schroot -c noble-amd64 -u root -- true" "${AUTO_REPO}/schroot-calls"
@@ -1096,11 +1205,15 @@ run_auto_isolated() {
   install_fake_docker_info_sequence 0
   install_fake_missing_chroot
   keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
   chroot_base="${AUTO_REPO}/srv/chroot"
   mkdir -p "${chroot_base}/noble-amd64"
   : > "${keyring}"
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
     NOBLE_AUTO_BUILD_CHROOT_BASE="${chroot_base}" \
     run_auto_isolated --provision
 

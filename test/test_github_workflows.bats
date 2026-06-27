@@ -14,7 +14,7 @@ setup() {
   grep -Fq -- "runs-on: ubuntu-24.04" "${workflow}"
   grep -Fq -- "timeout-minutes: 240" "${workflow}"
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
-  grep -Fq -- "sudo --preserve-env=TARGET_ARCH,DSCVERIFY_KEYRING_PATHS \\" "${workflow}"
+  grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
   grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-amd64" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-logs-amd64" "${workflow}"
@@ -27,15 +27,13 @@ setup() {
   ! grep -R -Fq -- "actions/upload-artifact@v4" .github/workflows
 }
 
-@test "manual Ubuntu Noble build workflow uses refreshed Debian keyrings" {
+@test "manual Ubuntu Noble build workflow delegates Debian keyring refresh to script" {
   workflow=".github/workflows/ubuntu-noble-build.yml"
 
-  grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
-  grep -Fq -- "debian:sid" "${workflow}"
-  grep -Fq -- "C6AE83D21C677043DA3DAC97F8643574713C9BAE" "${workflow}"
-  grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" "${workflow}"
-  grep -Fq -- "GITHUB_ENV" "${workflow}"
-  ! grep -Fq -- "debian-maintainers" "${workflow}"
+  ! grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
+  ! grep -Fq -- "debian:sid" "${workflow}"
+  ! grep -Fq -- "DSCVERIFY_KEYRING_PATHS" "${workflow}"
+  ! grep -Fq -- "GITHUB_ENV" "${workflow}"
 }
 
 @test "manual Ubuntu Noble build workflow sanitizes failure logs before upload" {
