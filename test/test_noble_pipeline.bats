@@ -394,6 +394,73 @@ LEGACY
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
 }
 
+@test "noble-rewrap-node-undici migrates configure-only hook to tsconfig-paths hook" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
+
+  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  # Seed the configure-only block produced by commit ddec814 (no tsconfig paths).
+  cat >> "${rules_file}" <<'LEGACY'
+
+# Noble backport: generate undici-types package metadata before dh-nodejs links components.
+execute_before_dh_auto_configure::
+	mkdir -p types
+	printf '%s\n' \
+		'{' \
+		'  "name": "undici-types",' \
+		'  "version": "7.3.0",' \
+		'  "description": "A stand-alone types package for Undici",' \
+		'  "license": "MIT",' \
+		'  "types": "index.d.ts",' \
+		'  "files": ["*.d.ts"]' \
+		'}' > types/package.json
+LEGACY
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${rules_file}" ]
+  # Configure-only legacy marker must be gone, replaced by the complete hook.
+  ! grep -Fq -- "before dh-nodejs links components" "${rules_file}"
+  [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
+  grep -Fq -- 'paths["undici-types"]=["../types"]' "${rules_file}"
+}
+
+@test "noble-rewrap-node-undici migrates both legacy hook blocks at once" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
+
+  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  # Seed BOTH legacy blocks (a tree rewrapped at dcb7443 then again at ddec814).
+  cat >> "${rules_file}" <<'LEGACY'
+
+# Noble backport: generate undici-types package metadata during build.
+execute_before_dh_auto_build::
+	mkdir -p types
+	printf '%s\n' '{' '  "name": "undici-types",' '}' > types/package.json
+
+# Noble backport: generate undici-types package metadata before dh-nodejs links components.
+execute_before_dh_auto_configure::
+	mkdir -p types
+	printf '%s\n' '{' '  "name": "undici-types",' '}' > types/package.json
+LEGACY
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${rules_file}" ]
+  # Both legacy blocks must be gone.
+  ! grep -Fq -- "during build" "${rules_file}"
+  ! grep -Fq -- "before dh-nodejs links components" "${rules_file}"
+  ! grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
+  # Exactly one complete new hook, no duplicate configure target.
+  [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
+  [ "$(grep -Fc -- "execute_before_dh_auto_configure::" "${rules_file}")" = "1" ]
+  grep -Fq -- 'paths["undici-types"]=["../types"]' "${rules_file}"
+}
+
 @test "noble-rewrap-node-undici same-version path rewrites distribution only" {
   setup_noble_repo
   install_fake_rewrap_commands
