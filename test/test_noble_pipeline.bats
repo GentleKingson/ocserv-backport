@@ -150,7 +150,14 @@ create_noble_rewrap_source_tree() {
   local debian_version="$3"
   local source_tree="${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${upstream_version}"
 
-  mkdir -p "${source_tree}/debian/patches"
+  mkdir -p "${source_tree}/debian"
+  cat > "${source_tree}/debian/rules" <<'EOF'
+#!/usr/bin/make -f
+
+%:
+	dh $@
+EOF
+  chmod +x "${source_tree}/debian/rules"
   cat > "${source_tree}/debian/changelog" <<EOF
 ${package} (${debian_version}) unstable; urgency=medium
 
@@ -158,7 +165,6 @@ ${package} (${debian_version}) unstable; urgency=medium
 
  -- Debian Maintainer <maintainer@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
 EOF
-  : > "${source_tree}/debian/patches/series"
 }
 
 install_fake_rewrap_commands() {
@@ -283,7 +289,7 @@ SH
   [ "$(cat "${NOBLE_REPO}/noble-auto-build-target-arch")" = "arm64" ]
 }
 
-@test "noble-rewrap-node-undici installs Noble undici-types overlay once" {
+@test "noble-rewrap-node-undici installs build-time undici-types packaging hook once" {
   setup_noble_repo
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
@@ -291,18 +297,18 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
 
   [ "${status}" -eq 0 ]
-  patch_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/patches/add-undici-types-package-json.patch"
-  series_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/patches/series"
-  [ -f "${patch_file}" ]
-  grep -Fq -- '"name": "undici-types"' "${patch_file}"
-  grep -Fxq -- "add-undici-types-package-json.patch" "${series_file}"
-  [ "$(grep -Fx -- "add-undici-types-package-json.patch" "${series_file}" | wc -l | tr -d ' ')" = "1" ]
+  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  [ -f "${rules_file}" ]
+  grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
+  grep -Fq -- "types/package.json" "${rules_file}"
+  grep -Fq -- '"name": "undici-types"' "${rules_file}"
+  grep -Fq -- '"version": "7.3.0"' "${rules_file}"
 
   PATH="${FAKEBIN}:${PATH}" bash "${NOBLE_REPO}/scripts/noble-rewrap-changelog.sh" node-undici >/tmp/rewrap-again.out 2>&1 || true
-  [ "$(grep -Fx -- "add-undici-types-package-json.patch" "${series_file}" | wc -l | tr -d ' ')" = "1" ]
+  [ "$(grep -Fc -- "execute_before_dh_auto_build::" "${rules_file}")" = "1" ]
 }
 
-@test "noble-rewrap-ocserv does not install node-undici overlay" {
+@test "noble-rewrap-ocserv does not install node-undici rules hook" {
   setup_noble_repo
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1"
@@ -310,13 +316,9 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
 
   [ "${status}" -eq 0 ]
-  patch_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/patches/add-undici-types-package-json.patch"
-  series_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/patches/series"
-  [ ! -e "${patch_file}" ]
-  if grep -Fq -- "add-undici-types-package-json.patch" "${series_file}"; then
-    cat "${series_file}" >&2
-    return 1
-  fi
+  rules_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/rules"
+  ! grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
+  ! grep -Fq -- "undici-types" "${rules_file}"
 }
 
 @test "noble source package fails before deleting artifacts when node-undici pkgjs-pjson is missing" {

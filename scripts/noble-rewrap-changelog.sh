@@ -17,35 +17,40 @@ MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 [[ -d "${PKG_SOURCE_TREE}" ]] || die "missing source tree: ${PKG_SOURCE_TREE}"
 cd "${PKG_SOURCE_TREE}"
 
-install_noble_patch_overlays() {
-  local overlay_dir patch patch_name series
-  local -a patches
+install_node_undici_types_package_hook() {
+  local marker rules types_version
 
   [[ "${PKG_SOURCE}" == "node-undici" ]] || return 0
 
-  overlay_dir="${REPO_ROOT}/packaging/noble/${PKG_SOURCE}/patches"
-  [[ -d "${overlay_dir}" ]] || die "missing Noble patch overlay directory: ${overlay_dir}"
+  rules="debian/rules"
+  types_version="${PKG_UPSTREAM_VERSION%%+*}"
+  marker="# Noble backport: generate undici-types package metadata during build."
+  [[ -f "${rules}" ]] || die "missing packaging rules file: ${PKG_SOURCE_TREE}/${rules}"
 
-  shopt -s nullglob
-  patches=("${overlay_dir}"/*.patch)
-  shopt -u nullglob
-  [[ "${#patches[@]}" -gt 0 ]] || die "no Noble patch overlays found in ${overlay_dir}"
+  if grep -Fq -- "${marker}" "${rules}"; then
+    log "Noble node-undici rules hook already installed"
+    return 0
+  fi
 
-  mkdir -p debian/patches
-  series="debian/patches/series"
-  touch "${series}"
+  cat >> "${rules}" <<EOF
 
-  for patch in "${patches[@]}"; do
-    patch_name="${patch##*/}"
-    cp -- "${patch}" "debian/patches/${patch_name}"
-    if ! grep -Fxq -- "${patch_name}" "${series}"; then
-      printf '%s\n' "${patch_name}" >> "${series}"
-    fi
-    log "Noble patch overlay: ${patch_name}"
-  done
+# Noble backport: generate undici-types package metadata during build.
+execute_before_dh_auto_build::
+	mkdir -p types
+	printf '%s\n' \
+		'{' \
+		'  "name": "undici-types",' \
+		'  "version": "${types_version}",' \
+		'  "description": "A stand-alone types package for Undici",' \
+		'  "license": "MIT",' \
+		'  "types": "index.d.ts",' \
+		'  "files": ["*.d.ts"]' \
+		'}' > types/package.json
+EOF
+  log "Noble node-undici rules hook installed"
 }
 
-install_noble_patch_overlays
+install_node_undici_types_package_hook
 
 current_version="$(dpkg-parsechangelog -SVersion)"
 if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then

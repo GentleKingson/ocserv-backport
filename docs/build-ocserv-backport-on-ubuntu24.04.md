@@ -224,8 +224,9 @@ TARGET_ARCH=amd64
 
 不要把 `~ubuntu24.04.*` 写入 `source-lock` 路径。
 
-`node-undici` 的 Noble 版本使用 `.2`，因为本仓库在 rewrap 阶段会加入一个
-Noble 专用 quilt patch，为 `types/` 补充 `undici-types` 的 `package.json`。
+`node-undici` 的 Noble 版本使用 `.2`，因为本仓库在 rewrap 阶段会修改
+`debian/rules`，让 binary build 的 `dh_auto_build` 前生成
+`types/package.json`。
 这不改变 Debian source-lock；锁定的 Debian 源包版本仍是
 `7.3.0+dfsg1+~cs24.12.11-1`。
 
@@ -501,11 +502,10 @@ E: Build failure (dpkg-buildpackage died)
 ```
 
 说明正在构建的 `node-undici` Noble source package 没有包含本仓库的 Noble 专用
-overlay patch。Ubuntu Noble chroot 内的 `@types/node` 会导入 `undici-types`，
-但 Noble 仓库自带的旧 `node-undici 5.26.3` 不提供这个模块。当前 rewrap 阶段会把
-`packaging/noble/node-undici/patches/add-undici-types-package-json.patch` 复制进
-`debian/patches/`，让 dh-nodejs 在 build-time 创建 `node_modules/undici-types`
-链接。
+`debian/rules` build hook。Ubuntu Noble chroot 内的 `@types/node` 会导入
+`undici-types`，但 Noble 仓库自带的旧 `node-undici 5.26.3` 不提供这个模块。
+当前 rewrap 阶段会修改 `debian/rules`，让 binary build 在 `dh_auto_build` 前
+生成 `types/package.json`，再由 dh-nodejs 创建 `node_modules/undici-types` 链接。
 
 确认本地脚本和 source tree 是最新状态后，重新从 fetch/rewrap 阶段开始：
 
