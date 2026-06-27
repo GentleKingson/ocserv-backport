@@ -191,6 +191,9 @@ refresh_debian_dscverify_keyrings() {
   rm -rf -- "${keyring_root}" || return 1
   mkdir -p "${keyring_root}" || return 1
 
+  # The script passed to bash -c must expand HOST_UID/HOST_GID inside the
+  # Debian container, not in the host shell.
+  # shellcheck disable=SC2016
   "${DOCKER_COMMAND[@]}" run --rm \
     -v "${keyring_root}:/out" \
     -e "HOST_UID=${host_uid}" \
