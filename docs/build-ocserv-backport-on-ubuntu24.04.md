@@ -228,7 +228,11 @@ TARGET_ARCH=amd64
 `node-undici` 的 Noble 默认版本固定为 Debian 原版本
 `7.3.0+dfsg1+~cs24.12.11-1`。本仓库在 rewrap 阶段会把顶层 changelog
 distribution 改为 `noble`，并修改 `debian/rules`，让 binary build 的
-`dh_auto_build` 前生成 `types/package.json`。这是同版本、不同源码内容的本地
+`dh_auto_configure` 前生成 `types/package.json`。因为 dh-nodejs 在
+`dh_auto_configure` 阶段扫描 `debian/nodejs/additional_components` 并链接
+`node_modules/undici-types`，这一步早于 `dh_auto_build`，所以必须在 configure
+阶段之前就把 `types/package.json` 准备好。rewrap 脚本会自动迁移旧版本的
+`execute_before_dh_auto_build::` hook。这是同版本、不同源码内容的本地
 重打包策略，只适用于本仓库的私有 Noble 构建流水线，不适合发布到会和 Debian
 官方源混用的通用仓库。
 
@@ -506,8 +510,11 @@ E: Build failure (dpkg-buildpackage died)
 说明正在构建的 `node-undici` Noble source package 没有包含本仓库的 Noble 专用
 `debian/rules` build hook。Ubuntu Noble chroot 内的 `@types/node` 会导入
 `undici-types`，但 Noble 仓库自带的旧 `node-undici 5.26.3` 不提供这个模块。
-当前 rewrap 阶段会修改 `debian/rules`，让 binary build 在 `dh_auto_build` 前
-生成 `types/package.json`，再由 dh-nodejs 创建 `node_modules/undici-types` 链接。
+当前 rewrap 阶段会修改 `debian/rules`，让 binary build 在 `dh_auto_configure`
+前生成 `types/package.json`，因为 dh-nodejs 就是在 `dh_auto_configure` 阶段
+创建 `node_modules/undici-types` 链接；放在 `dh_auto_build` 前会因为时序错误
+仍然报 TS2307。rewrap 脚本会自动迁移旧版本的 `execute_before_dh_auto_build::`
+hook，因此即使源码树里残留旧 hook 也会被修正。
 
 确认本地脚本和 source tree 是最新状态后，重新从 fetch/rewrap 阶段开始：
 
