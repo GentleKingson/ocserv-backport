@@ -700,6 +700,13 @@ SH
   [ ! -e "${NOBLE_REPO}/docker-calls" ]
 }
 
+@test "noble-smoke-basic matches version output without pipefail-sensitive pipeline" {
+  grep -Fq -- 'version_output="$(ocserv --version 2>&1 || true)"' "${REPO_ROOT}/scripts/noble-smoke-test.sh"
+  grep -Fq -- 'printf' "${REPO_ROOT}/scripts/noble-smoke-test.sh"
+  grep -Fq -- '${version_output}' "${REPO_ROOT}/scripts/noble-smoke-test.sh"
+  ! grep -Fq -- 'ocserv --version | grep -F "1.5.0"' "${REPO_ROOT}/scripts/noble-smoke-test.sh"
+}
+
 install_fake_dpkg_scanpackages() {
   cat > "${FAKEBIN}/dpkg-scanpackages" <<SH
 #!/usr/bin/env bash

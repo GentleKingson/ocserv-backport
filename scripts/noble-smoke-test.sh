@@ -58,7 +58,9 @@ log "noble-smoke-basic: container install and package assertions"
   test "${installed_arch}" = "${expected_arch}"
 
   test -x /usr/sbin/ocserv
-  ocserv --version | grep -F "1.5.0"
+  version_output="$(ocserv --version 2>&1 || true)"
+  printf "%s\n" "${version_output}"
+  printf "%s\n" "${version_output}" | grep -F "1.5.0"
 
   set +e
   ocserv -c /etc/ocserv/ocserv.conf -t >/tmp/ocserv-config-test 2>&1
