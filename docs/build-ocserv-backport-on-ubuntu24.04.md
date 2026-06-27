@@ -512,9 +512,10 @@ E: Build failure (dpkg-buildpackage died)
 ```
 
 说明正在构建的 `node-undici` Noble source package 没有包含本仓库的 Noble 专用
-`debian/rules` build hook。Ubuntu Noble chroot 内的 `@types/node` 会导入
-`undici-types`，但 Noble 系统旧版 `node-undici`（基于 undici 6.x）没有把
-独立的 `undici-types` 装到 `/usr/share/nodejs/undici-types/`，而 Debian
+`debian/rules` configure hook（在 `dh_auto_configure` 前生成
+`types/package.json` 并注入 tsconfig `paths`）。Ubuntu Noble chroot 内的
+`@types/node` 会导入 `undici-types`，但 Noble 系统旧版 `node-undici`（基于
+undici 6.x）没有把独立的 `undici-types` 装到 `/usr/share/nodejs/undici-types/`，而 Debian
 trixie 的新版（基于 undici 7.x）装了。tsc 默认会把 `@types/node` 符号链接解析
 到真实路径 `/usr/share/nodejs/@types/node/...` 再上溯，所以 Noble 缺这个系统
 目录时，构建树里的 `node_modules/undici-types` 链接对 tsc 不可见，即使已正确
