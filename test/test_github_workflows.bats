@@ -18,7 +18,13 @@ setup() {
   grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-amd64" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-logs-amd64" "${workflow}"
-  grep -Fq -- "actions/upload-artifact@v4" "${workflow}"
+  grep -Fq -- "actions/checkout@v6" "${workflow}"
+  grep -Fq -- "actions/upload-artifact@v6" "${workflow}"
+}
+
+@test "GitHub workflows use Node 24 action majors" {
+  ! grep -R -Fq -- "actions/checkout@v4" .github/workflows
+  ! grep -R -Fq -- "actions/upload-artifact@v4" .github/workflows
 }
 
 @test "manual Ubuntu Noble build workflow uses refreshed Debian keyrings" {

@@ -15,7 +15,7 @@ jobs:
       TARGET_ARCH: amd64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Free runner disk space
         run: |
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload Ubuntu Noble artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ubuntu-noble-build-amd64
           if-no-files-found: error
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload Ubuntu Noble build logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ubuntu-noble-build-logs-amd64
           if-no-files-found: warn
