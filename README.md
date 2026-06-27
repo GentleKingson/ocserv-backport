@@ -63,6 +63,13 @@ verify-lock -> fetch -> rewrap -> src-pkg
 Source CI uploads source package artifacts only. It does not run `binary`,
 `lint`, or `smoke-basic`, and it does not upload `.deb` files.
 
+Manual Ubuntu Noble build workflow runs on a GitHub-hosted `ubuntu-24.04`
+runner. It frees runner disk space, provisions the Noble builder with
+`scripts/noble-auto-build.sh --provision`, runs the full Noble binary build,
+`lintian`, and Docker smoke validation, then uploads the generated source,
+binary, and local repository artifacts.
+This workflow does not publish packages, deploy hosts, or read repository secrets.
+
 ## Local Targets
 
 ```bash
@@ -105,6 +112,7 @@ For the full `make build` path on a trixie amd64 builder:
 | `test/` | Bats tests for parser, lock projection, fetch, smoke, build entrypoints, and source CI behavior |
 | `.github/workflows/ci.yml` | GitHub-hosted static checks, unit tests, and stubbed entrypoint tests |
 | `.github/workflows/source-ci.yml` | Manual and scheduled source-package CI in `debian:trixie` |
+| `.github/workflows/ubuntu-noble-build.yml` | Manual Ubuntu Noble build workflow on GitHub-hosted `ubuntu-24.04` |
 | `Makefile` | Local entry points |
 
 This repository intentionally excludes package publishing, repository hosting,

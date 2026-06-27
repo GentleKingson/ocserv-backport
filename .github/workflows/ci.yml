@@ -9,8 +9,7 @@ name: ci
       - 'source-lock/**'
       - 'Makefile'
       - 'README.md'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/source-ci.yml'
+      - '.github/workflows/**'
   pull_request:
     paths:
       - 'scripts/**'
@@ -18,8 +17,7 @@ name: ci
       - 'source-lock/**'
       - 'Makefile'
       - 'README.md'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/source-ci.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
