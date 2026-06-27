@@ -18,13 +18,14 @@ MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 cd "${PKG_SOURCE_TREE}"
 
 install_node_undici_types_package_hook() {
-  local marker rules types_version
+  local rules types_version marker legacy_marker
 
   [[ "${PKG_SOURCE}" == "node-undici" ]] || return 0
 
   rules="debian/rules"
   types_version="${PKG_UPSTREAM_VERSION%%+*}"
-  marker="# Noble backport: generate undici-types package metadata during build."
+  marker="# Noble backport: generate undici-types package metadata before dh-nodejs links components."
+  legacy_marker="# Noble backport: generate undici-types package metadata during build."
   [[ -f "${rules}" ]] || die "missing packaging rules file: ${PKG_SOURCE_TREE}/${rules}"
 
   if grep -Fq -- "${marker}" "${rules}"; then
@@ -32,10 +33,17 @@ install_node_undici_types_package_hook() {
     return 0
   fi
 
+  if grep -Fq -- "${legacy_marker}" "${rules}"; then
+    perl -0pi -e '
+      s/\n?\Q# Noble backport: generate undici-types package metadata during build.\E\nexecute_before_dh_auto_build::\n(?:\t[^\n]*\n)+//
+    ' "${rules}"
+    log "Noble node-undici legacy build hook migrated to configure hook"
+  fi
+
   cat >> "${rules}" <<EOF
 
-# Noble backport: generate undici-types package metadata during build.
-execute_before_dh_auto_build::
+# Noble backport: generate undici-types package metadata before dh-nodejs links components.
+execute_before_dh_auto_configure::
 	mkdir -p types
 	printf '%s\n' \
 		'{' \
