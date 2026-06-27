@@ -44,8 +44,7 @@ jobs:
               apt-get update
               apt-get download \
                 debian-archive-keyring \
-                debian-keyring \
-                debian-maintainers
+                debian-keyring
               mkdir -p /out/root
               for deb in ./*.deb; do
                 dpkg-deb -x "${deb}" /out/root

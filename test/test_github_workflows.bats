@@ -28,6 +28,7 @@ setup() {
   grep -Fq -- "debian:trixie" "${workflow}"
   grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" "${workflow}"
   grep -Fq -- "GITHUB_ENV" "${workflow}"
+  ! grep -Fq -- "debian-maintainers" "${workflow}"
 }
 
 @test "manual Ubuntu Noble build workflow sanitizes failure logs before upload" {
