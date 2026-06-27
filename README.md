@@ -15,9 +15,11 @@ packages, and then builds `ocserv 1.5.0` in a Noble sbuild chroot using that
 local repository.
 
 The Noble `node-undici` backport version defaults to
-`7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2`. It is still fetched from the locked
-Debian source version `7.3.0+dfsg1+~cs24.12.11-1`; the Ubuntu suffix only names
-the local Noble source/binary rebuild.
+`7.3.0+dfsg1+~cs24.12.11-1`, matching the locked Debian source version. The
+Noble pipeline still rewrites the top changelog distribution to `noble` and
+injects local packaging changes, so this same-version rebuild is intended for
+the private local Noble build flow rather than a public repository mixed with
+Debian's official packages.
 
 The source identity is pinned. The build procedure is repeatable. This repository
 does not claim bit-for-bit reproducible builds because trixie build dependencies

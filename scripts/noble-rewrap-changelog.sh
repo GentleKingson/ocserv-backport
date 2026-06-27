@@ -50,22 +50,45 @@ EOF
   log "Noble node-undici rules hook installed"
 }
 
-install_node_undici_types_package_hook
+rewrite_same_version_changelog_distribution() {
+  PKG_SOURCE="${PKG_SOURCE}" \
+  PKG_DEBIAN_VERSION="${PKG_DEBIAN_VERSION}" \
+  TARGET_DISTRIBUTION="${TARGET_DISTRIBUTION}" \
+    perl -0pi -e '
+      my $src = $ENV{"PKG_SOURCE"};
+      my $ver = $ENV{"PKG_DEBIAN_VERSION"};
+      my $dist = $ENV{"TARGET_DISTRIBUTION"};
+      s/\A(\Q$src\E \(\Q$ver\E\) )\S+(; urgency=.*?\n)/${1}$dist$2/
+        or die "failed to rewrite top changelog distribution\n";
+    ' debian/changelog
+}
 
 current_version="$(dpkg-parsechangelog -SVersion)"
-if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then
-  die "changelog already rewrapped to ${PKG_NOBLE_VERSION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
-fi
-[[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
-  || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
+current_distribution="$(dpkg-parsechangelog -SDistribution)"
 
 export DEBEMAIL="${MAINTAINER_EMAIL}"
 export DEBFULLNAME="${MAINTAINER_NAME}"
 
-dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
-    --force-bad-version \
-    -v "${PKG_NOBLE_VERSION}" \
-    "Backport ${PKG_SOURCE} ${PKG_DEBIAN_VERSION} for Ubuntu 24.04 Noble."
+if [[ "${PKG_NOBLE_VERSION}" == "${PKG_DEBIAN_VERSION}" ]]; then
+  [[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
+    || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
+  if [[ "${current_distribution}" == "${TARGET_DISTRIBUTION}" ]]; then
+    die "changelog already rewrapped to ${PKG_NOBLE_VERSION} for ${TARGET_DISTRIBUTION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
+  fi
+  install_node_undici_types_package_hook
+  rewrite_same_version_changelog_distribution
+else
+  if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then
+    die "changelog already rewrapped to ${PKG_NOBLE_VERSION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
+  fi
+  [[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
+    || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
+  install_node_undici_types_package_hook
+  dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
+      --force-bad-version \
+      -v "${PKG_NOBLE_VERSION}" \
+      "Backport ${PKG_SOURCE} ${PKG_DEBIAN_VERSION} for Ubuntu 24.04 Noble."
+fi
 
 new_version="$(dpkg-parsechangelog -SVersion)"
 new_distribution="$(dpkg-parsechangelog -SDistribution)"

@@ -210,7 +210,7 @@ Noble 脚本把 Debian 源包版本和 Ubuntu backport 版本分开：
 
 ```text
 NODE_UNDICI_DEBIAN_VERSION=7.3.0+dfsg1+~cs24.12.11-1
-NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2
+NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1
 
 OCSERV_DEBIAN_VERSION=1.5.0-1
 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1
@@ -221,14 +221,16 @@ TARGET_ARCH=amd64
 
 `*_DEBIAN_VERSION` 只用于 `source-lock/` 和 Debian pool 下载。
 `*_NOBLE_VERSION` 只用于 `debian/changelog` 和最终 Noble 构建产物。
+默认情况下，`NODE_UNDICI_NOBLE_VERSION` 等于 `NODE_UNDICI_DEBIAN_VERSION`。
 
 不要把 `~ubuntu24.04.*` 写入 `source-lock` 路径。
 
-`node-undici` 的 Noble 版本使用 `.2`，因为本仓库在 rewrap 阶段会修改
-`debian/rules`，让 binary build 的 `dh_auto_build` 前生成
-`types/package.json`。
-这不改变 Debian source-lock；锁定的 Debian 源包版本仍是
-`7.3.0+dfsg1+~cs24.12.11-1`。
+`node-undici` 的 Noble 默认版本固定为 Debian 原版本
+`7.3.0+dfsg1+~cs24.12.11-1`。本仓库在 rewrap 阶段会把顶层 changelog
+distribution 改为 `noble`，并修改 `debian/rules`，让 binary build 的
+`dh_auto_build` 前生成 `types/package.json`。这是同版本、不同源码内容的本地
+重打包策略，只适用于本仓库的私有 Noble 构建流水线，不适合发布到会和 Debian
+官方源混用的通用仓库。
 
 ## 源码签名验证 keyring
 
@@ -519,7 +521,7 @@ make noble-binary-node-undici
 生成的 node-undici Noble 版本应为：
 
 ```text
-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2
+7.3.0+dfsg1+~cs24.12.11-1
 ```
 
 ### `pkgjs-pjson: not found` 或 `dh: No such file or directory`
