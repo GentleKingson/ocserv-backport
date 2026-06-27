@@ -167,6 +167,29 @@ ${package} (${debian_version}) ${distribution}; urgency=medium
 
  -- Debian Maintainer <maintainer@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
 EOF
+
+  # node-undici carries llparse-builder/tsconfig.json upstream; the Noble
+  # configure hook injects a paths mapping into it, so seed it for tests.
+  if [[ "${package}" == "node-undici" ]]; then
+    mkdir -p "${source_tree}/llparse-builder"
+    cat > "${source_tree}/llparse-builder/tsconfig.json" <<'JSON'
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2017",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./lib",
+    "declaration": true,
+    "pretty": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}
+JSON
+  fi
 }
 
 install_fake_rewrap_commands() {
@@ -300,7 +323,7 @@ SH
   [ "$(cat "${NOBLE_REPO}/noble-auto-build-target-arch")" = "arm64" ]
 }
 
-@test "noble-rewrap-node-undici installs build-time undici-types packaging hook once" {
+@test "noble-rewrap-node-undici installs undici-types tsconfig paths injection hook once" {
   setup_noble_repo
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
@@ -310,13 +333,27 @@ SH
   [ "${status}" -eq 0 ]
   rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   [ -f "${rules_file}" ]
-  grep -Fq -- "execute_before_dh_auto_configure::" "${rules_file}"
+  # New marker present exactly once (idempotency across rewrap runs).
+  grep -Fq -- "before dh-nodejs configure" "${rules_file}"
+  # tsconfig paths injection recipe present.
+  grep -Fq -- 'paths["undici-types"]=["../types"]' "${rules_file}"
   grep -Fq -- "types/package.json" "${rules_file}"
   grep -Fq -- '"name": "undici-types"' "${rules_file}"
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
 
+  # Rewrap is idempotent: second run does not duplicate the hook block.
   PATH="${FAKEBIN}:${PATH}" bash "${NOBLE_REPO}/scripts/noble-rewrap-changelog.sh" node-undici >/tmp/rewrap-again.out 2>&1 || true
-  [ "$(grep -Fc -- "execute_before_dh_auto_configure::" "${rules_file}")" = "1" ]
+  [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
+
+  # Simulate the binary-build configure hook on the rewrapped source tree.
+  source_tree="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
+  run bash -c "cd '${source_tree}' && make -f debian/rules execute_before_dh_auto_configure"
+  [ "${status}" -eq 0 ]
+  # paths injected with the expected mapping; no baseUrl; no marker field.
+  # One CommonJS node -e line emits four pipe-separated facts, asserted in one line:
+  # undici-types mapping | undici-types/* mapping | baseUrl absent | marker field absent.
+  run bash -c "cd '${source_tree}' && node -e 'var j=require(\"./llparse-builder/tsconfig.json\");var p=j.compilerOptions.paths;process.stdout.write(JSON.stringify(p[\"undici-types\"])+\"|\"+JSON.stringify(p[\"undici-types/*\"])+\"|\"+(j.compilerOptions.baseUrl===undefined)+\"|\"+(j._nobleUndiciTypesPaths===undefined)+\"\n\")'"
+  [ "${output}" = '["../types"]|["../types/*"]|true|true' ]
 }
 
 @test "noble-rewrap-node-undici migrates legacy build hook to configure hook" {
@@ -349,8 +386,10 @@ LEGACY
   # Legacy build hook must be gone.
   ! grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
   ! grep -Fq -- "during build" "${rules_file}"
-  # Configure hook must be present exactly once.
-  [ "$(grep -Fc -- "execute_before_dh_auto_configure::" "${rules_file}")" = "1" ]
+  # New complete hook present exactly once.
+  [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
+  grep -Fq -- 'paths["undici-types"]=["../types"]' "${rules_file}"
+  grep -Fq -- "types/package.json" "${rules_file}"
   grep -Fq -- '"name": "undici-types"' "${rules_file}"
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
 }
