@@ -14,11 +14,30 @@ setup() {
   grep -Fq -- "runs-on: ubuntu-24.04" "${workflow}"
   grep -Fq -- "timeout-minutes: 240" "${workflow}"
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
-  grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
+  grep -Fq -- "sudo --preserve-env=TARGET_ARCH,DSCVERIFY_KEYRING_PATHS \\" "${workflow}"
   grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-amd64" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-logs-amd64" "${workflow}"
   grep -Fq -- "actions/upload-artifact@v4" "${workflow}"
+}
+
+@test "manual Ubuntu Noble build workflow uses refreshed Debian keyrings" {
+  workflow=".github/workflows/ubuntu-noble-build.yml"
+
+  grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
+  grep -Fq -- "debian:trixie" "${workflow}"
+  grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" "${workflow}"
+  grep -Fq -- "GITHUB_ENV" "${workflow}"
+}
+
+@test "manual Ubuntu Noble build workflow sanitizes failure logs before upload" {
+  workflow=".github/workflows/ubuntu-noble-build.yml"
+
+  grep -Fq -- "Prepare Ubuntu Noble build logs" "${workflow}"
+  grep -Fq -- "noble-upload-logs" "${workflow}"
+  grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
+  grep -Fq -- "build/noble-upload-logs/**" "${workflow}"
+  ! grep -Fq -- "build/noble/**/*.build" "${workflow}"
 }
 
 @test "primary CI watches every GitHub workflow file" {

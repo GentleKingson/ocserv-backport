@@ -31,11 +31,51 @@ jobs:
           docker system prune -af || true
           df -h
 
+      - name: Refresh Debian source verification keyrings
+        run: |
+          set -euo pipefail
+          keyring_root="${RUNNER_TEMP}/debian-keyrings"
+          rm -rf "${keyring_root}"
+          mkdir -p "${keyring_root}"
+          docker run --rm -v "${keyring_root}:/out" debian:trixie \
+            bash -euxc '
+              workdir="$(mktemp -d)"
+              cd "${workdir}"
+              apt-get update
+              apt-get download \
+                debian-archive-keyring \
+                debian-keyring \
+                debian-maintainers
+              mkdir -p /out/root
+              for deb in ./*.deb; do
+                dpkg-deb -x "${deb}" /out/root
+              done
+            '
+          mapfile -t keyrings < <(
+            find "${keyring_root}/root/usr/share/keyrings" \
+              -maxdepth 1 \
+              -type f \
+              \( -name 'debian-*.gpg' -o -name 'debian-*.pgp' \) \
+              -readable \
+              -print \
+              | sort
+          )
+          if [[ "${#keyrings[@]}" -eq 0 ]]; then
+            echo "No Debian keyrings extracted from debian:trixie" >&2
+            exit 1
+          fi
+          {
+            printf 'DSCVERIFY_KEYRING_PATHS='
+            (IFS=:; printf '%s' "${keyrings[*]}")
+            printf '\n'
+          } >> "${GITHUB_ENV}"
+
       - name: Build and test Ubuntu Noble packages
         run: |
           set -euo pipefail
-          printf 'yes\n' | sudo --preserve-env=TARGET_ARCH \
-            ./scripts/noble-auto-build.sh --provision
+          printf 'yes\n' \
+            | sudo --preserve-env=TARGET_ARCH,DSCVERIFY_KEYRING_PATHS \
+              ./scripts/noble-auto-build.sh --provision
 
       - name: Upload Ubuntu Noble artifacts
         if: success()
@@ -62,14 +102,41 @@ jobs:
             build/noble/amd64/binary/ocserv/*.buildinfo
             build/noble/amd64/repo/**
 
+      - name: Prepare Ubuntu Noble build logs
+        if: failure()
+        run: |
+          set -euo pipefail
+          upload_dir="build/noble-upload-logs"
+          rm -rf "${upload_dir}"
+          mkdir -p "${upload_dir}"
+          while IFS= read -r -d '' log_path; do
+            rel="${log_path#./}"
+            safe_name="${rel//:/_}"
+            mkdir -p "${upload_dir}/$(dirname -- "${safe_name}")"
+            cp -- "${log_path}" "${upload_dir}/${safe_name}"
+          done < <(
+            find build/noble \
+              -type f \
+              \( -name '*.build' -o -name '*.buildlog' -o -name '*.log' \) \
+              -print0 2>/dev/null || true
+          )
+          while IFS= read -r -d '' log_path; do
+            safe_name="tmp/$(basename -- "${log_path}")"
+            safe_name="${safe_name//:/_}"
+            mkdir -p "${upload_dir}/$(dirname -- "${safe_name}")"
+            cp -- "${log_path}" "${upload_dir}/${safe_name}"
+          done < <(
+            find /tmp \
+              -maxdepth 1 \
+              -type f \
+              -name 'noble-libllhttp-repo.*.log' \
+              -print0 2>/dev/null || true
+          )
+
       - name: Upload Ubuntu Noble build logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ubuntu-noble-build-logs-amd64
           if-no-files-found: warn
-          path: |
-            build/noble/**/*.build
-            build/noble/**/*.buildlog
-            build/noble/**/*.log
-            /tmp/noble-libllhttp-repo.*.log
+          path: build/noble-upload-logs/**
