@@ -180,6 +180,9 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: test package
 EOF
+    cat > "${source_tree}/debian/ocserv.sysusers" <<'EOF'
+u! ocserv - "OpenConnect VPN server" /run/ocserv
+EOF
   else
     cat > "${source_tree}/debian/control" <<'EOF'
 Source: node-undici
@@ -596,6 +599,19 @@ LEGACY
   control_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/control"
   grep -Fq -- "libcjose-dev," "${control_file}"
   grep -Fq -- "libssl-dev," "${control_file}"
+}
+
+@test "noble-rewrap-ocserv downgrades sysusers strict user syntax for Noble" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
+
+  [ "${status}" -eq 0 ]
+  sysusers_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/ocserv.sysusers"
+  grep -Fq -- 'u ocserv - "OpenConnect VPN server" /run/ocserv' "${sysusers_file}"
+  ! grep -Fq -- "u!" "${sysusers_file}"
 }
 
 @test "noble source package fails before deleting artifacts when node-undici pkgjs-pjson is missing" {

@@ -96,6 +96,26 @@ ensure_ocserv_noble_build_deps() {
   log "Noble ocserv libssl-dev build dependency installed"
 }
 
+ensure_ocserv_noble_sysusers_syntax() {
+  local file changed=0
+  local -a sysusers_files=()
+
+  [[ "${PKG_SOURCE}" == "ocserv" ]] || return 0
+
+  shopt -s nullglob
+  sysusers_files=(debian/*.sysusers debian/*.sysusers.in)
+  shopt -u nullglob
+
+  for file in "${sysusers_files[@]}"; do
+    if grep -Eq -- '^u![[:space:]]+' "${file}"; then
+      perl -0pi -e 's/^u!([ \t]+)/u$1/gm' "${file}"
+      changed=1
+    fi
+  done
+
+  [[ "${changed}" -ne 1 ]] || log "Noble ocserv sysusers syntax adjusted"
+}
+
 rewrite_same_version_changelog_distribution() {
   PKG_SOURCE="${PKG_SOURCE}" \
   PKG_DEBIAN_VERSION="${PKG_DEBIAN_VERSION}" \
@@ -123,6 +143,7 @@ if [[ "${PKG_NOBLE_VERSION}" == "${PKG_DEBIAN_VERSION}" ]]; then
   fi
   install_node_undici_types_package_hook
   ensure_ocserv_noble_build_deps
+  ensure_ocserv_noble_sysusers_syntax
   rewrite_same_version_changelog_distribution
 else
   if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then
@@ -132,6 +153,7 @@ else
     || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
   install_node_undici_types_package_hook
   ensure_ocserv_noble_build_deps
+  ensure_ocserv_noble_sysusers_syntax
   dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
       --force-bad-version \
       -v "${PKG_NOBLE_VERSION}" \
