@@ -37,7 +37,7 @@ jobs:
           keyring_root="${RUNNER_TEMP}/debian-keyrings"
           rm -rf "${keyring_root}"
           mkdir -p "${keyring_root}"
-          docker run --rm -v "${keyring_root}:/out" debian:trixie \
+          docker run --rm -v "${keyring_root}:/out" debian:sid \
             bash -euxc '
               workdir="$(mktemp -d)"
               cd "${workdir}"
@@ -60,7 +60,21 @@ jobs:
               | sort
           )
           if [[ "${#keyrings[@]}" -eq 0 ]]; then
-            echo "No Debian keyrings extracted from debian:trixie" >&2
+            echo "No Debian keyrings extracted from debian:sid" >&2
+            exit 1
+          fi
+          required_key="C6AE83D21C677043DA3DAC97F8643574713C9BAE"
+          key_found=0
+          for keyring in "${keyrings[@]}"; do
+            if gpg --batch --no-default-keyring --keyring "${keyring}" \
+              --list-keys "${required_key}" >/dev/null 2>&1; then
+              key_found=1
+              break
+            fi
+          done
+          if [[ "${key_found}" -ne 1 ]]; then
+            printf 'Required Debian source signing key not found: %s\n' \
+              "${required_key}" >&2
             exit 1
           fi
           {
@@ -105,7 +119,7 @@ jobs:
         if: failure()
         run: |
           set -euo pipefail
-          upload_dir="build/noble-upload-logs"
+          upload_dir="${RUNNER_TEMP}/noble-upload-logs"
           rm -rf "${upload_dir}"
           mkdir -p "${upload_dir}"
           while IFS= read -r -d '' log_path; do
@@ -138,4 +152,4 @@ jobs:
         with:
           name: ubuntu-noble-build-logs-amd64
           if-no-files-found: warn
-          path: build/noble-upload-logs/**
+          path: ${{ runner.temp }}/noble-upload-logs/**

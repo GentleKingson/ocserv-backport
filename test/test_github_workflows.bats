@@ -25,7 +25,8 @@ setup() {
   workflow=".github/workflows/ubuntu-noble-build.yml"
 
   grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
-  grep -Fq -- "debian:trixie" "${workflow}"
+  grep -Fq -- "debian:sid" "${workflow}"
+  grep -Fq -- "C6AE83D21C677043DA3DAC97F8643574713C9BAE" "${workflow}"
   grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" "${workflow}"
   grep -Fq -- "GITHUB_ENV" "${workflow}"
   ! grep -Fq -- "debian-maintainers" "${workflow}"
@@ -35,9 +36,10 @@ setup() {
   workflow=".github/workflows/ubuntu-noble-build.yml"
 
   grep -Fq -- "Prepare Ubuntu Noble build logs" "${workflow}"
+  grep -Fq -- 'upload_dir="${RUNNER_TEMP}/noble-upload-logs"' "${workflow}"
   grep -Fq -- "noble-upload-logs" "${workflow}"
   grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
-  grep -Fq -- "build/noble-upload-logs/**" "${workflow}"
+  grep -Fq -- '${{ runner.temp }}/noble-upload-logs/**' "${workflow}"
   ! grep -Fq -- "build/noble/**/*.build" "${workflow}"
 }
 
