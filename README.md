@@ -14,6 +14,11 @@ pipeline. It first backports Debian `node-undici` to produce `libllhttp9.2` and
 packages, and then builds `ocserv 1.5.0` in a Noble sbuild chroot using that
 local repository.
 
+The Noble `node-undici` backport version defaults to
+`7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2`. It is still fetched from the locked
+Debian source version `7.3.0+dfsg1+~cs24.12.11-1`; the Ubuntu suffix only names
+the local Noble source/binary rebuild.
+
 The source identity is pinned. The build procedure is repeatable. This repository
 does not claim bit-for-bit reproducible builds because trixie build dependencies
 and container images are not timestamp- or digest-pinned here.
@@ -180,6 +185,7 @@ trixie builder, including a readable Debian keyring for `dscverify`:
 - curl
 - debian-keyring and devscripts
 - dpkg-dev
+- debhelper and dh-nodejs for Noble source-package clean steps
 - sbuild
 - schroot
 - Noble sbuild chroot for `TARGET_ARCH`

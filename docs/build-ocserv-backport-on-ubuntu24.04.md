@@ -210,7 +210,7 @@ Noble 脚本把 Debian 源包版本和 Ubuntu backport 版本分开：
 
 ```text
 NODE_UNDICI_DEBIAN_VERSION=7.3.0+dfsg1+~cs24.12.11-1
-NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1
+NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2
 
 OCSERV_DEBIAN_VERSION=1.5.0-1
 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1
@@ -222,7 +222,12 @@ TARGET_ARCH=amd64
 `*_DEBIAN_VERSION` 只用于 `source-lock/` 和 Debian pool 下载。
 `*_NOBLE_VERSION` 只用于 `debian/changelog` 和最终 Noble 构建产物。
 
-不要把 `~ubuntu24.04.1` 写入 `source-lock` 路径。
+不要把 `~ubuntu24.04.*` 写入 `source-lock` 路径。
+
+`node-undici` 的 Noble 版本使用 `.2`，因为本仓库在 rewrap 阶段会加入一个
+Noble 专用 quilt patch，为 `types/` 补充 `undici-types` 的 `package.json`。
+这不改变 Debian source-lock；锁定的 Debian 源包版本仍是
+`7.3.0+dfsg1+~cs24.12.11-1`。
 
 ## 源码签名验证 keyring
 
@@ -348,7 +353,9 @@ deb [trusted=yes] http://127.0.0.1:<port>/ ./
 Noble binary 阶段仍会显示外层阶段和产物日志；静默的只是成功路径中的 `sbuild`
 内部输出。若 `sbuild` 失败，脚本会完整打印原始 stdout/stderr。两个 Noble binary
 阶段都会显式使用 `--chroot=noble-${TARGET_ARCH}`，避免 sbuild 按默认规则误选
-其他同发行版/架构 chroot。
+其他同发行版/架构 chroot。失败时脚本还会查找 `--build-dir` 中最新的
+`*.build` / `*.buildlog` / `*.log`，打印日志路径和尾部内容，避免只看到
+`E: Build failure (dpkg-buildpackage died)`。
 
 ## 生产边界
 
@@ -482,6 +489,38 @@ scripts/noble-auto-build.sh --provision
 
 如果配置位于 `/etc/schroot/schroot.conf`，不要删除整个文件；只手工编辑并移除
 `[noble-amd64]` 这一段，然后重新运行 provision。
+
+### `Cannot find module 'undici-types'`
+
+如果 `make noble-build` 在 `noble-binary-node-undici` 阶段出现：
+
+```text
+error TS2307: Cannot find module 'undici-types' or its corresponding type declarations.
+dh_auto_build: error: cd ./llparse-builder
+E: Build failure (dpkg-buildpackage died)
+```
+
+说明正在构建的 `node-undici` Noble source package 没有包含本仓库的 Noble 专用
+overlay patch。Ubuntu Noble chroot 内的 `@types/node` 会导入 `undici-types`，
+但 Noble 仓库自带的旧 `node-undici 5.26.3` 不提供这个模块。当前 rewrap 阶段会把
+`packaging/noble/node-undici/patches/add-undici-types-package-json.patch` 复制进
+`debian/patches/`，让 dh-nodejs 在 build-time 创建 `node_modules/undici-types`
+链接。
+
+确认本地脚本和 source tree 是最新状态后，重新从 fetch/rewrap 阶段开始：
+
+```bash
+make noble-fetch-node-undici
+make noble-rewrap-node-undici
+make noble-src-pkg-node-undici
+make noble-binary-node-undici
+```
+
+生成的 node-undici Noble 版本应为：
+
+```text
+7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2
+```
 
 ### `pkgjs-pjson: not found` 或 `dh: No such file or directory`
 

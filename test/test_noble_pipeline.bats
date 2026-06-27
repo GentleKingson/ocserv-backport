@@ -26,10 +26,14 @@ setup_noble_repo() {
   if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
   fi
+  if [[ -d "${REPO_ROOT}/packaging" ]]; then
+    cp -R "${REPO_ROOT}/packaging" "${NOBLE_REPO}/packaging"
+  fi
   cp "${REPO_ROOT}/Makefile" "${NOBLE_REPO}/Makefile"
   local script
   for script in \
     noble-build.sh \
+    noble-rewrap-changelog.sh \
     noble-build-repo.sh \
     noble-build-source-package.sh \
     noble-build-binary-node-undici.sh \
@@ -93,8 +97,8 @@ set -euo pipefail
 printf 'dpkg-buildpackage %s\n' "\$*" >> "${NOBLE_REPO}/dpkg-buildpackage-calls"
 case "\${PWD}" in
   */source/node-undici/node-undici-*)
-    dsc="\${PWD%/*}/node-undici_\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}.dsc"
-    printf 'Source: node-undici\nVersion: %s\n' "\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}" > "\${dsc}"
+    dsc="\${PWD%/*}/node-undici_\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2}.dsc"
+    printf 'Source: node-undici\nVersion: %s\n' "\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2}" > "\${dsc}"
     ;;
   */source/ocserv/ocserv-*)
     dsc="\${PWD%/*}/ocserv_\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}.dsc"
@@ -140,6 +144,91 @@ create_noble_source_tree() {
   mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${version}"
 }
 
+create_noble_rewrap_source_tree() {
+  local package="$1"
+  local upstream_version="$2"
+  local debian_version="$3"
+  local source_tree="${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${upstream_version}"
+
+  mkdir -p "${source_tree}/debian/patches"
+  cat > "${source_tree}/debian/changelog" <<EOF
+${package} (${debian_version}) unstable; urgency=medium
+
+  * Debian source.
+
+ -- Debian Maintainer <maintainer@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
+EOF
+  : > "${source_tree}/debian/patches/series"
+}
+
+install_fake_rewrap_commands() {
+  ln -s /bin/bash "${FAKEBIN}/bash"
+  ln -s "$(command -v dirname)" "${FAKEBIN}/dirname"
+  ln -s "$(command -v date)" "${FAKEBIN}/date"
+
+  cat > "${FAKEBIN}/dpkg-parsechangelog" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+field=""
+case "${1:-}" in
+  -S*) field="${1#-S}" ;;
+  *) echo "unexpected dpkg-parsechangelog command: $*" >&2; exit 99 ;;
+esac
+first_line="$(head -n1 debian/changelog)"
+case "${field}" in
+  Version)
+    printf '%s\n' "${first_line#*(}" | sed 's/).*//'
+    ;;
+  Distribution)
+    printf '%s\n' "${first_line#*) }" | awk '{gsub(/;/, "", $1); print $1}'
+    ;;
+  *)
+    echo "unexpected dpkg-parsechangelog field: ${field}" >&2
+    exit 99
+    ;;
+esac
+SH
+
+  cat > "${FAKEBIN}/dch" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+distribution=""
+version=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --distribution)
+      distribution="$2"
+      shift 2
+      ;;
+    -v)
+      version="$2"
+      shift 2
+      ;;
+    --force-distribution|--force-bad-version)
+      shift
+      ;;
+    *)
+      message="$1"
+      shift
+      ;;
+  esac
+done
+source_name="$(head -n1 debian/changelog | sed 's/ .*//')"
+old_changelog="$(cat debian/changelog)"
+cat > debian/changelog <<EOF
+${source_name} (${version}) ${distribution}; urgency=medium
+
+  * ${message}
+
+ -- Test Maintainer <test@example.invalid>  Thu, 01 Jan 1970 00:00:00 +0000
+
+${old_changelog}
+EOF
+SH
+
+  chmod +x "${FAKEBIN}/dpkg-parsechangelog" "${FAKEBIN}/dch"
+}
+
 @test "noble-build executes the twelve Noble stages in order" {
   setup_noble_repo
   install_fake_make
@@ -155,7 +244,7 @@ create_noble_source_tree() {
   run_noble_build_direct
   [ "${status}" -eq 0 ]
   vars="$(unique_make_env_rows)"
-  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tamd64' ]
+  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tamd64' ]
 }
 
 @test "noble-build preserves TARGET_ARCH override without cross-build setup" {
@@ -164,7 +253,7 @@ create_noble_source_tree() {
   run_noble_build_direct_with_arch arm64
   [ "${status}" -eq 0 ]
   vars="$(unique_make_env_rows)"
-  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
+  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
   [[ ! -e "${NOBLE_REPO}/cross-build-requested" ]]
 }
 
@@ -194,11 +283,47 @@ SH
   [ "$(cat "${NOBLE_REPO}/noble-auto-build-target-arch")" = "arm64" ]
 }
 
+@test "noble-rewrap-node-undici installs Noble undici-types overlay once" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
+
+  [ "${status}" -eq 0 ]
+  patch_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/patches/add-undici-types-package-json.patch"
+  series_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/patches/series"
+  [ -f "${patch_file}" ]
+  grep -Fq -- '"name": "undici-types"' "${patch_file}"
+  grep -Fxq -- "add-undici-types-package-json.patch" "${series_file}"
+  [ "$(grep -Fx -- "add-undici-types-package-json.patch" "${series_file}" | wc -l | tr -d ' ')" = "1" ]
+
+  PATH="${FAKEBIN}:${PATH}" bash "${NOBLE_REPO}/scripts/noble-rewrap-changelog.sh" node-undici >/tmp/rewrap-again.out 2>&1 || true
+  [ "$(grep -Fx -- "add-undici-types-package-json.patch" "${series_file}" | wc -l | tr -d ' ')" = "1" ]
+}
+
+@test "noble-rewrap-ocserv does not install node-undici overlay" {
+  setup_noble_repo
+  install_fake_rewrap_commands
+  create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
+
+  [ "${status}" -eq 0 ]
+  patch_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/patches/add-undici-types-package-json.patch"
+  series_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/patches/series"
+  [ ! -e "${patch_file}" ]
+  if grep -Fq -- "add-undici-types-package-json.patch" "${series_file}"; then
+    cat "${series_file}" >&2
+    return 1
+  fi
+}
+
 @test "noble source package fails before deleting artifacts when node-undici pkgjs-pjson is missing" {
   setup_noble_repo
   install_fake_source_package_commands 1 0
   create_noble_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11"
-  old_artifact="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.old"
+  old_artifact="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2.old"
   : > "${old_artifact}"
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh node-undici"
@@ -232,7 +357,7 @@ SH
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "dpkg-buildpackage -S -d -us -uc" "${NOBLE_REPO}/dpkg-buildpackage-calls"
-  [ -f "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc" ]
+  [ -f "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2.dsc" ]
 }
 
 install_fake_smoke_tools() {
@@ -287,11 +412,11 @@ set -euo pipefail
 printf '%s\n' "dpkg-scanpackages \$*" >> "${NOBLE_REPO}/scanpackages-calls"
 printf '%s\n' \
   "Package: libllhttp9.2" \
-  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1" \
+  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2" \
   "Architecture: all" \
   "" \
   "Package: libllhttp-dev" \
-  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1" \
+  "Version: 7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2" \
   "Architecture: all"
 SH
   chmod +x "${FAKEBIN}/dpkg-scanpackages"
@@ -403,7 +528,7 @@ done
 mkdir -p "\${build_dir}"
 case "\${*: -1}" in
   *node-undici_*.dsc)
-    version="\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1}"
+    version="\${NODE_UNDICI_NOBLE_VERSION:-7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2}"
     touch "\${build_dir}/libllhttp9.2_\${version}_\${arch}.deb"
     touch "\${build_dir}/libllhttp-dev_\${version}_\${arch}.deb"
     touch "\${build_dir}/node-undici_\${version}_\${arch}.changes"
@@ -424,9 +549,35 @@ SH
   chmod +x "${FAKEBIN}/sbuild"
 }
 
+install_fake_failing_sbuild_with_build_log() {
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "${NOBLE_REPO}/sbuild-args"
+build_dir=""
+prev=""
+for arg in "\$@"; do
+  if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi
+  case "\${arg}" in
+    --build-dir=*) build_dir="\${arg#--build-dir=}" ;;
+  esac
+  prev="\${arg}"
+done
+mkdir -p "\${build_dir}"
+printf '%s\n' \
+  "dh_auto_build --buildsystem=nodejs" \
+  "error TS2307: Cannot find module 'undici-types' or its corresponding type declarations." \
+  "dpkg-buildpackage: error: debian/rules binary subprocess returned exit status 2" \
+  > "\${build_dir}/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2_amd64.build"
+printf '%s\n' "E: Build failure (dpkg-buildpackage died)" >&2
+exit 42
+SH
+  chmod +x "${FAKEBIN}/sbuild"
+}
+
 create_node_undici_dsc() {
   mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/node-undici"
-  touch "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2.dsc"
 }
 
 create_ocserv_dsc_and_repo() {
@@ -469,8 +620,8 @@ assert_sbuild_common_args() {
     return 1
   fi
   assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args"
-  grep -Fq -- "node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1.dsc" "${NOBLE_REPO}/sbuild-args"
-  [ -f "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1_amd64.deb" ]
+  grep -Fq -- "node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2.dsc" "${NOBLE_REPO}/sbuild-args"
+  [ -f "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2_amd64.deb" ]
 }
 
 @test "noble-binary-node-undici prints original sbuild output on failure" {
@@ -484,6 +635,20 @@ assert_sbuild_common_args() {
   [[ "${output}" == *"Installing build dependencies"* ]]
   [[ "${output}" == *"Reading package lists..."* ]]
   [[ "${output}" == *"Building dependency tree..."* ]]
+}
+
+@test "noble-binary-node-undici prints latest build log tail on sbuild failure" {
+  setup_noble_repo
+  install_fake_failing_sbuild_with_build_log
+  create_node_undici_dsc
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-node-undici.sh"
+
+  [ "${status}" -eq 42 ]
+  [[ "${output}" == *"E: Build failure (dpkg-buildpackage died)"* ]]
+  [[ "${output}" == *"latest sbuild build log:"* ]]
+  [[ "${output}" == *"node-undici_7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.2_amd64.build"* ]]
+  [[ "${output}" == *"Cannot find module 'undici-types'"* ]]
 }
 
 @test "noble-binary-ocserv hides successful sbuild dependency output and preserves extra repo args" {
