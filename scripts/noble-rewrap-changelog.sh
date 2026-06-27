@@ -18,14 +18,13 @@ MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 cd "${PKG_SOURCE_TREE}"
 
 install_node_undici_types_package_hook() {
-  local rules types_version marker legacy_marker
+  local rules types_version marker legacy_markers_re
 
   [[ "${PKG_SOURCE}" == "node-undici" ]] || return 0
 
   rules="debian/rules"
   types_version="${PKG_UPSTREAM_VERSION%%+*}"
-  marker="# Noble backport: generate undici-types package metadata before dh-nodejs links components."
-  legacy_marker="# Noble backport: generate undici-types package metadata during build."
+  marker="# Noble backport: generate undici-types metadata and TypeScript paths before dh-nodejs configure."
   [[ -f "${rules}" ]] || die "missing packaging rules file: ${PKG_SOURCE_TREE}/${rules}"
 
   if grep -Fq -- "${marker}" "${rules}"; then
@@ -33,27 +32,26 @@ install_node_undici_types_package_hook() {
     return 0
   fi
 
-  if grep -Fq -- "${legacy_marker}" "${rules}"; then
-    perl -0pi -e '
-      s/\n?\Q# Noble backport: generate undici-types package metadata during build.\E\nexecute_before_dh_auto_build::\n(?:\t[^\n]*\n)+//
-    ' "${rules}"
-    log "Noble node-undici legacy build hook migrated to configure hook"
+  # Remove any prior (incomplete) Noble undici-types hook block: both the
+  # earliest "during build" build-hook variant and the configure-only variant
+  # that only generated types/package.json. Match: optional leading newline,
+  # the legacy marker comment, the build/configure target line, and all
+  # following tab-indented recipe lines.
+  legacy_markers_re='\Q# Noble backport: generate undici-types package metadata during build.\E|\Q# Noble backport: generate undici-types package metadata before dh-nodejs links components.\E'
+  if grep -Eq -- "${legacy_markers_re}" "${rules}"; then
+    perl -0pi -e "
+      s/\\n?(?:${legacy_markers_re})\\nexecute_before_dh_auto_(?:build|configure)::\\n(?:\\t[^\\n]*\\n)+//
+    " "${rules}"
+    log "Noble node-undici legacy hook block migrated to tsconfig-paths hook"
   fi
 
   cat >> "${rules}" <<EOF
 
-# Noble backport: generate undici-types package metadata before dh-nodejs links components.
+# Noble backport: generate undici-types metadata and TypeScript paths before dh-nodejs configure.
 execute_before_dh_auto_configure::
 	mkdir -p types
-	printf '%s\n' \
-		'{' \
-		'  "name": "undici-types",' \
-		'  "version": "${types_version}",' \
-		'  "description": "A stand-alone types package for Undici",' \
-		'  "license": "MIT",' \
-		'  "types": "index.d.ts",' \
-		'  "files": ["*.d.ts"]' \
-		'}' > types/package.json
+	printf '%s\n' '{' '  "name": "undici-types",' '  "version": "${types_version}",' '  "description": "A stand-alone types package for Undici",' '  "license": "MIT",' '  "types": "index.d.ts",' '  "files": ["*.d.ts"]' '}' > types/package.json
+	node -e 'const fs=require("fs"),p="llparse-builder/tsconfig.json";const j=JSON.parse(fs.readFileSync(p,"utf8"));j.compilerOptions=j.compilerOptions||{};j.compilerOptions.paths=j.compilerOptions.paths||{};if(JSON.stringify(j.compilerOptions.paths["undici-types"])===JSON.stringify(["../types"])){process.exit(0);}j.compilerOptions.paths["undici-types"]=["../types"];j.compilerOptions.paths["undici-types/*"]=["../types/*"];fs.writeFileSync(p,JSON.stringify(j,null,2)+"\\n");'
 EOF
   log "Noble node-undici rules hook installed"
 }
