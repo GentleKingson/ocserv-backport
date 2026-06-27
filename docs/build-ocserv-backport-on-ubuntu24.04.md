@@ -97,7 +97,14 @@ Noble binary 阶段会显式传入：
 
 因此 `schroot -l` / `sbuild --list-chroots` 至少需要能看到 `noble-amd64` 或
 `chroot:noble-amd64` 这类可直接用于构建 session 的条目。只有
-`source:noble-amd64` 不会被视为可用构建 chroot。
+`source:noble-amd64` 不会被视为可用构建 chroot。自动包装脚本还会实际运行空
+session 验证：
+
+```bash
+schroot -c noble-amd64 -u root -- true
+```
+
+只有注册名存在且 session 能创建成功时，才会继续运行 `make noble-build`。
 
 `TARGET_ARCH` 默认是 `amd64`。使用 `TARGET_ARCH=arm64` 时，自动包装脚本只会选择
 ports mirror，并创建或检查 `noble-arm64` sbuild chroot；它不会配置
@@ -416,14 +423,17 @@ scripts/noble-auto-build.sh --provision
 E: Error creating chroot session: skipping node-undici
 ```
 
-通常说明 Noble sbuild chroot 名称或注册状态不符合本仓库约定。Noble binary 阶段
-会显式使用 `--chroot=noble-${TARGET_ARCH}`，例如 `--chroot=noble-amd64`。
+通常说明 Noble sbuild chroot 名称、注册状态或实际目录不符合本仓库约定。
+Noble binary 阶段会显式使用 `--chroot=noble-${TARGET_ARCH}`，例如
+`--chroot=noble-amd64`。当前 `scripts/noble-auto-build.sh` 会在构建前实际运行
+空 session 验证，因此可以提前发现 stale schroot 注册。
 
 检查当前注册的 chroot：
 
 ```bash
 schroot -l
 sbuild --list-chroots
+schroot -c noble-amd64 -u root -- true
 ```
 
 确认输出中存在：
@@ -441,6 +451,37 @@ chroot:noble-amd64
 如果只看到 `source:noble-amd64`，它不是可直接用于 binary build 的 session。
 重新运行 `scripts/noble-auto-build.sh --provision` 创建/检查目标 chroot，或按本文
 创建命令手工准备 `noble-${TARGET_ARCH}`。
+
+如果 `schroot -l` 能看到 `chroot:noble-amd64`，但 session 验证失败并提示：
+
+```text
+Directory /srv/chroot/noble-amd64 does not exist
+```
+
+说明 `/etc/schroot` 中仍有 stale 注册，但实际 chroot 目录已经不存在。先定位注册
+配置和目录状态：
+
+```bash
+sudo grep -R "^\[noble-amd64\]" -n /etc/schroot/chroot.d /etc/schroot/schroot.conf || true
+sudo ls -ld /srv/chroot/noble-amd64 || true
+schroot -i -c noble-amd64
+```
+
+如果配置位于 `/etc/schroot/chroot.d/...`，并确认它是坏的 stale 注册，可以删除
+该配置文件并重建 chroot：
+
+```bash
+cfg="$(sudo grep -Rl '^\[noble-amd64\]' /etc/schroot/chroot.d 2>/dev/null | head -n1)"
+if [ -n "$cfg" ]; then
+  sudo rm -f "$cfg"
+fi
+
+sudo rm -rf /srv/chroot/noble-amd64
+scripts/noble-auto-build.sh --provision
+```
+
+如果配置位于 `/etc/schroot/schroot.conf`，不要删除整个文件；只手工编辑并移除
+`[noble-amd64]` 这一段，然后重新运行 provision。
 
 ### `pkgjs-pjson: not found` 或 `dh: No such file or directory`
 

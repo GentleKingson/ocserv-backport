@@ -84,6 +84,13 @@ case "\${1:-}" in
     echo "chroot:noble-\${TARGET_ARCH:-amd64}"
     exit 0
     ;;
+  -c)
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+      exit 0
+    fi
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
   *)
     echo "unexpected schroot command: \$*" >&2
     exit 99
@@ -189,6 +196,46 @@ SH
   chmod +x "${FAKEBIN}/schroot" "${FAKEBIN}/sbuild" "${FAKEBIN}/sbuild-createchroot"
 }
 
+install_fake_stale_registered_chroot() {
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+case "\${1:-}" in
+  -l|--list)
+    echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+    exit 0
+    ;;
+  -c)
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+      echo "E: 10mount: error: Directory '/srv/chroot/noble-\${TARGET_ARCH:-amd64}' does not exist" >&2
+      exit 1
+    fi
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+  *)
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+case "\${1:-}" in
+  --list-chroots)
+    echo "noble-\${TARGET_ARCH:-amd64}"
+    exit 0
+    ;;
+  *)
+    echo "unexpected sbuild command: \$*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/schroot" "${FAKEBIN}/sbuild"
+}
+
 install_fake_source_chroot() {
   cat > "${FAKEBIN}/schroot" <<SH
 #!/usr/bin/env bash
@@ -239,6 +286,13 @@ case "\${1:-}" in
       echo "chroot:noble-\${TARGET_ARCH:-amd64}"
     fi
     exit 0
+    ;;
+  -c)
+    if [[ -f "${AUTO_REPO}/chroot-created" && "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+      exit 0
+    fi
+    echo "unexpected schroot command: \$*" >&2
+    exit 99
     ;;
   *)
     echo "unexpected schroot command: \$*" >&2
@@ -904,6 +958,53 @@ run_auto_isolated() {
   grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
   grep -Fxq -- "sbuild --list-chroots" "${AUTO_REPO}/sbuild-calls"
   [[ "${output}" != *"Missing sbuild chroot"* ]]
+}
+
+@test "noble-auto-build rejects registered but unusable chroot in default mode" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_stale_registered_chroot
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "schroot -l" "${AUTO_REPO}/schroot-calls"
+  grep -Fxq -- "schroot -c noble-amd64 -u root -- true" "${AUTO_REPO}/schroot-calls"
+  grep -Fq -- "sbuild chroot is registered but unusable: noble-amd64" <<<"${output}"
+  grep -Fq -- "sudo ls -ld /srv/chroot/noble-amd64" <<<"${output}"
+  grep -Fq -- "schroot -i -c noble-amd64" <<<"${output}"
+  grep -Fq -- "remove the stale schroot config" <<<"${output}"
+  grep -Fq -- "recreate the chroot" <<<"${output}"
+  grep -Fq -- "Directory '/srv/chroot/noble-amd64' does not exist" <<<"${output}"
+  [ ! -e "${AUTO_REPO}/make-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+}
+
+@test "noble-auto-build --provision rejects unusable chroot without recreating it" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_stale_registered_chroot
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  grep -Fxq -- "schroot -c noble-amd64 -u root -- true" "${AUTO_REPO}/schroot-calls"
+  grep -Fq -- "sbuild chroot is registered but unusable: noble-amd64" <<<"${output}"
+  grep -Fq -- "sudo ls -ld /srv/chroot/noble-amd64" <<<"${output}"
+  grep -Fq -- "schroot -i -c noble-amd64" <<<"${output}"
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  [ ! -e "${AUTO_REPO}/make-calls" ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 }
 
 @test "noble-auto-build --provision creates chroot only after literal yes" {

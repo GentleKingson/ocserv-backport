@@ -253,6 +253,28 @@ print_existing_sbuild_chroot_path_guidance() {
   printf '  scripts/noble-auto-build.sh --provision\n' >&2
 }
 
+print_unusable_sbuild_chroot_guidance() {
+  local target="$1"
+  local session_output="$2"
+  local chroot_path
+  local sudo_prefix=""
+
+  chroot_path="$(sbuild_chroot_path)"
+  if [[ "${#SUDO[@]}" -gt 0 ]]; then
+    sudo_prefix="${SUDO[*]} "
+  fi
+
+  log "sbuild chroot is registered but unusable: ${target}"
+  if [[ -n "${session_output}" ]]; then
+    printf '%s\n' "${session_output}" >&2
+  fi
+  printf 'Check the registered chroot and backing directory:\n' >&2
+  printf '  %sls -ld %s\n' "${sudo_prefix}" "${chroot_path}" >&2
+  printf '  schroot -i -c %s\n' "${target}" >&2
+  printf 'If the target directory is missing, remove the stale schroot config and recreate the chroot.\n' >&2
+  printf 'Do not remove /etc/schroot/schroot.conf wholesale; edit only the [%s] stanza if it is defined there.\n' "${target}" >&2
+}
+
 chroot_listing_contains_target() {
   local target="$1"
   local listing="$2"
@@ -269,7 +291,7 @@ chroot_listing_contains_target() {
   return 1
 }
 
-sbuild_chroot_exists() {
+sbuild_chroot_is_registered() {
   local target="$1"
   local listing
   local found=1
@@ -287,6 +309,20 @@ sbuild_chroot_exists() {
   fi
 
   return "${found}"
+}
+
+sbuild_chroot_session_works() {
+  local target="$1"
+
+  SBUILD_CHROOT_SESSION_OUTPUT=""
+  if SBUILD_CHROOT_SESSION_OUTPUT="$(
+    cd /
+    schroot -c "${target}" -u root -- true 2>&1
+  )"; then
+    return 0
+  fi
+
+  return 1
 }
 
 print_missing_sbuild_chroot_guidance() {
@@ -321,8 +357,13 @@ provision_sbuild_chroot() {
 
   "${SUDO[@]}" sbuild-createchroot "${sbuild_createchroot_args[@]}"
 
-  if ! sbuild_chroot_exists "${target}"; then
+  if ! sbuild_chroot_is_registered "${target}"; then
     log "sbuild chroot ${target} is still not visible after creation"
+    return 1
+  fi
+
+  if ! sbuild_chroot_session_works "${target}"; then
+    print_unusable_sbuild_chroot_guidance "${target}" "${SBUILD_CHROOT_SESSION_OUTPUT}"
     return 1
   fi
 }
@@ -331,8 +372,13 @@ ensure_sbuild_chroot() {
   local chroot_path target
 
   target="$(sbuild_chroot_name)"
-  if sbuild_chroot_exists "${target}"; then
-    return 0
+  if sbuild_chroot_is_registered "${target}"; then
+    if sbuild_chroot_session_works "${target}"; then
+      return 0
+    fi
+
+    print_unusable_sbuild_chroot_guidance "${target}" "${SBUILD_CHROOT_SESSION_OUTPUT}"
+    return 1
   fi
 
   chroot_path="$(sbuild_chroot_path)"

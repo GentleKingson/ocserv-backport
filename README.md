@@ -71,7 +71,9 @@ runs `make noble-build`. Host APT operations run with
 `apt-get -q=1 -o=Dpkg::Use-Pty=0`; successful APT output is hidden, and failures
 print the original APT output. Noble binary `sbuild` stages also hide successful
 internal chroot output and print the original `sbuild` output on failure. Those
-binary stages explicitly use `--chroot=noble-${TARGET_ARCH}`.
+binary stages explicitly use `--chroot=noble-${TARGET_ARCH}`. The wrapper
+verifies that this registered schroot can create an empty session before it runs
+`make noble-build`, not only that the name appears in `schroot -l`.
 
 `make noble-build` is the lower-level Noble validation entry point for builders
 that are already prepared:
