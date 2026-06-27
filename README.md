@@ -127,7 +127,8 @@ Source CI uploads source package artifacts only. It does not run `binary`,
 `lint`, or `smoke-basic`, and it does not upload `.deb` files.
 
 Manual Ubuntu Noble build workflow runs on a GitHub-hosted `ubuntu-24.04`
-runner. It frees runner disk space, provisions the Noble builder with
+runner. It checks runner disk space and frees unused hosted runner payloads
+when needed, provisions the Noble builder with
 `scripts/noble-auto-build.sh --provision`, refreshes Debian source verification
 keyrings from `debian:sid`, runs the full Noble binary build, `lintian`, and
 Docker smoke validation, then uploads the generated source, binary, and local

@@ -17,19 +17,53 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Free runner disk space
+      - name: Ensure enough runner disk space
         run: |
           set -euo pipefail
-          df -h
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /usr/local/share/boost \
-            /usr/local/.ghcup \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL || true
-          docker system prune -af || true
-          df -h
+
+          min_free_gib=8
+          min_free_kb=$((min_free_gib * 1024 * 1024))
+
+          echo "== Disk before cleanup =="
+          df -h / "$GITHUB_WORKSPACE" /tmp
+
+          avail_kb="$(df --output=avail / | tail -n1 | tr -d '[:space:]')"
+
+          if ! [[ "${avail_kb}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Unable to determine free disk space on /."
+            exit 1
+          fi
+
+          if (( avail_kb < min_free_kb )); then
+            echo "Free disk is below ${min_free_gib} GiB; cleaning unused hosted runner payloads."
+
+            sudo rm -rf \
+              /usr/share/dotnet \
+              /usr/local/lib/android \
+              /usr/local/share/boost \
+              /usr/local/.ghcup \
+              /opt/ghc \
+              /opt/hostedtoolcache/CodeQL || true
+
+            docker system prune -af || true
+          else
+            echo "Free disk is already >= ${min_free_gib} GiB; skipping cleanup."
+          fi
+
+          echo "== Disk after cleanup check =="
+          df -h / "$GITHUB_WORKSPACE" /tmp
+
+          avail_kb="$(df --output=avail / | tail -n1 | tr -d '[:space:]')"
+
+          if ! [[ "${avail_kb}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Unable to determine free disk space on / after cleanup."
+            exit 1
+          fi
+
+          if (( avail_kb < min_free_kb )); then
+            echo "::error::Insufficient free disk on / after cleanup; need at least ${min_free_gib} GiB."
+            exit 1
+          fi
 
       - name: Build and test Ubuntu Noble packages
         run: |

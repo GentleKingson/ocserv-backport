@@ -36,6 +36,27 @@ setup() {
   ! grep -Fq -- "GITHUB_ENV" "${workflow}"
 }
 
+@test "manual Ubuntu Noble build workflow conditionally frees runner disk space" {
+  workflow=".github/workflows/ubuntu-noble-build.yml"
+
+  grep -Fq -- "Ensure enough runner disk space" "${workflow}"
+  ! grep -Fq -- "Free runner disk space" "${workflow}"
+  grep -Fq -- "min_free_gib=8" "${workflow}"
+  grep -Fq -- 'df -h / "$GITHUB_WORKSPACE" /tmp' "${workflow}"
+  grep -Fq -- "df --output=avail /" "${workflow}"
+  grep -Fq -- 'tr -d '"'"'[:space:]'"'"'' "${workflow}"
+  grep -Fq -- '[[ "${avail_kb}" =~ ^[0-9]+$ ]]' "${workflow}"
+  grep -Fq -- "if (( avail_kb < min_free_kb )); then" "${workflow}"
+  grep -Fq -- "::error::Insufficient free disk" "${workflow}"
+  grep -Fq -- "/usr/share/dotnet" "${workflow}"
+  grep -Fq -- "/usr/local/lib/android" "${workflow}"
+  grep -Fq -- "/usr/local/share/boost" "${workflow}"
+  grep -Fq -- "/usr/local/.ghcup" "${workflow}"
+  grep -Fq -- "/opt/ghc" "${workflow}"
+  grep -Fq -- "/opt/hostedtoolcache/CodeQL" "${workflow}"
+  grep -Fq -- "docker system prune -af || true" "${workflow}"
+}
+
 @test "manual Ubuntu Noble build workflow sanitizes failure logs before upload" {
   workflow=".github/workflows/ubuntu-noble-build.yml"
 
