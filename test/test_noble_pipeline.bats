@@ -310,13 +310,13 @@ SH
   [ "${status}" -eq 0 ]
   rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   [ -f "${rules_file}" ]
-  grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
+  grep -Fq -- "execute_before_dh_auto_configure::" "${rules_file}"
   grep -Fq -- "types/package.json" "${rules_file}"
   grep -Fq -- '"name": "undici-types"' "${rules_file}"
   grep -Fq -- '"version": "7.3.0"' "${rules_file}"
 
   PATH="${FAKEBIN}:${PATH}" bash "${NOBLE_REPO}/scripts/noble-rewrap-changelog.sh" node-undici >/tmp/rewrap-again.out 2>&1 || true
-  [ "$(grep -Fc -- "execute_before_dh_auto_build::" "${rules_file}")" = "1" ]
+  [ "$(grep -Fc -- "execute_before_dh_auto_configure::" "${rules_file}")" = "1" ]
 }
 
 @test "noble-rewrap-node-undici same-version path rewrites distribution only" {
@@ -375,7 +375,7 @@ SH
 
   [ "${status}" -eq 0 ]
   rules_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/rules"
-  ! grep -Fq -- "execute_before_dh_auto_build::" "${rules_file}"
+  ! grep -Fq -- "execute_before_dh_auto_configure::" "${rules_file}"
   ! grep -Fq -- "undici-types" "${rules_file}"
 }
 
