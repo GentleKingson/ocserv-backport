@@ -572,6 +572,8 @@ run_auto_isolated() {
   keyring_root="${AUTO_REPO}/build/debian/amd64/debian-keyrings"
   grep -Fq -- "docker run --rm" "${AUTO_REPO}/docker-calls"
   grep -Fq -- "-v ${keyring_root}:/out" "${AUTO_REPO}/docker-calls"
+  grep -Fq -- "apt-get download debian-archive-keyring debian-keyring" "${AUTO_REPO}/docker-calls"
+  ! grep -Fq -- "debian-maintainers" "${AUTO_REPO}/docker-calls"
   [[ "$(cat "${AUTO_REPO}/make-dscverify-keyrings")" == *"${keyring_root}/root/usr/share/keyrings/debian-keyring.gpg"* ]]
 }
 
