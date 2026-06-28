@@ -22,16 +22,30 @@ teardown() {
   [[ -n "${FAKEBIN:-}" ]] && rm -rf "${FAKEBIN}"
 }
 
-@test "lint-package runs lintian without profile by default" {
+@test "lint-package suppresses trixie distribution tag by default" {
   run bash -c "cd '${LINT_REPO}' && PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "lintian --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
+  grep -Fxq -- "lintian --suppress-tags bad-distribution-in-changes-file --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
 }
 
 @test "lint-package passes explicit lintian profile" {
   run bash -c "cd '${LINT_REPO}' && LINTIAN_PROFILE=debian PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "lintian --profile debian --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
+  grep -Fxq -- "lintian --profile debian --suppress-tags bad-distribution-in-changes-file --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
+}
+
+@test "lint-package allows suppress tag override" {
+  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS=custom-tag PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "lintian --suppress-tags custom-tag --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
+}
+
+@test "lint-package allows suppress tags to be disabled" {
+  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS= PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "lintian --fail-on error build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" "${LINT_REPO}/lintian-calls"
 }
