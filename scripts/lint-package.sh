@@ -8,6 +8,13 @@ BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
 CHANGES="build/binary/ocserv_${BACKPORT_VERSION}_amd64.changes"
 [[ -f "${CHANGES}" ]] || die "missing .changes: ${CHANGES} (run 'make binary' first)"
 
-log "lintian ${CHANGES}"
-lintian --fail-on error "${CHANGES}" || die "lintian reported errors"
+if [[ -n "${LINTIAN_PROFILE:-}" ]]; then
+  log "lintian --profile ${LINTIAN_PROFILE} --fail-on error ${CHANGES}"
+  lintian --profile "${LINTIAN_PROFILE}" --fail-on error "${CHANGES}" \
+    || die "lintian reported errors"
+else
+  log "lintian --fail-on error ${CHANGES}"
+  lintian --fail-on error "${CHANGES}" || die "lintian reported errors"
+fi
+
 log "lintian: no errors"

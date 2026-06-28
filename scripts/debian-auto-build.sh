@@ -571,10 +571,20 @@ ensure_sbuild_chroot() {
 
 run_debian_build() {
   local docker_cmd
+  local lintian_profile="${LINTIAN_PROFILE:-}"
 
   docker_cmd="$(docker_command_for_make)"
-  log "running make build with DEBIAN_DOCKER_CMD=${docker_cmd}"
-  DEBIAN_DOCKER_CMD="${docker_cmd}" make build
+  if [[ -z "${lintian_profile}" && "${HOST_ID}" == "ubuntu" ]]; then
+    lintian_profile="debian"
+  fi
+
+  if [[ -n "${lintian_profile}" ]]; then
+    log "running make build with DEBIAN_DOCKER_CMD=${docker_cmd} LINTIAN_PROFILE=${lintian_profile}"
+    DEBIAN_DOCKER_CMD="${docker_cmd}" LINTIAN_PROFILE="${lintian_profile}" make build
+  else
+    log "running make build with DEBIAN_DOCKER_CMD=${docker_cmd}"
+    DEBIAN_DOCKER_CMD="${docker_cmd}" make build
+  fi
 }
 
 print_debian_artifacts() {

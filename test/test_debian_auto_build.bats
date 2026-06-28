@@ -402,6 +402,7 @@ install_fake_successful_make() {
 set -euo pipefail
 printf 'make %s DEBIAN_DOCKER_CMD=%s\n' "\$*" "\${DEBIAN_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
 printf '%s\n' "\${DSCVERIFY_KEYRING_PATHS:-}" > "${AUTO_REPO}/make-dscverify-keyrings"
+printf '%s\n' "\${LINTIAN_PROFILE:-}" > "${AUTO_REPO}/make-lintian-profile"
 if [[ "\$*" != "build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
@@ -421,6 +422,7 @@ install_fake_make_without_artifacts() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'make %s DEBIAN_DOCKER_CMD=%s\n' "\$*" "\${DEBIAN_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+printf '%s\n' "\${LINTIAN_PROFILE:-}" > "${AUTO_REPO}/make-lintian-profile"
 if [[ "\$*" != "build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
@@ -638,10 +640,26 @@ run_auto_isolated() {
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "" ]
   [[ "${output}" == *"${AUTO_REPO}/build/source/ocserv_1.5.0-1~bpo13+0local1.dsc"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.deb"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.buildinfo"* ]]
+}
+
+@test "debian-auto-build uses Debian lintian profile on Ubuntu Noble host" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "debian" ]
 }
 
 @test "debian-auto-build fails after successful make when expected artifacts are missing" {
