@@ -9,10 +9,18 @@ permissions:
 
 jobs:
   ubuntu-noble-build:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     env:
-      TARGET_ARCH: amd64
+      TARGET_ARCH: ${{ matrix.arch }}
 
     steps:
       - uses: actions/checkout@v6
@@ -140,7 +148,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: ubuntu-noble-build-amd64
+          name: ubuntu-noble-build-${{ matrix.arch }}
           if-no-files-found: error
           path: ${{ runner.temp }}/ubuntu-noble-artifacts/**
 
@@ -179,6 +187,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: ubuntu-noble-build-logs-amd64
+          name: ubuntu-noble-build-logs-${{ matrix.arch }}
           if-no-files-found: warn
           path: ${{ runner.temp }}/noble-upload-logs/**

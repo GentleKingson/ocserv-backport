@@ -23,6 +23,7 @@ make noble-build
 - 构建机能访问 Debian mirror、Ubuntu mirror、Docker 官方 APT 源和 GitHub。
 - 构建机可以使用 `sbuild`、`schroot`、`lintian` 和 Docker。
 - 默认目标架构是 `amd64`；需要其他架构时显式设置 `TARGET_ARCH`。
+- `arm64` 构建推荐在原生 arm64 Ubuntu 24.04 主机或 runner 上执行。
 
 ## 推荐流程
 
@@ -49,6 +50,16 @@ keyring、配置 Docker CE，并在确认后创建 `noble-${TARGET_ARCH}` sbuild
 newgrp sbuild
 scripts/noble-auto-build.sh --provision
 ```
+
+原生 arm64 主机或 GitHub Actions arm64 runner 上可以直接使用：
+
+```bash
+TARGET_ARCH=arm64 scripts/noble-auto-build.sh --provision
+```
+
+不支持在 amd64 主机上通过 QEMU/binfmt 自动完成 arm64 cross-build。此流程
+只承诺 native target build：宿主、sbuild chroot、Docker smoke test 和
+`TARGET_ARCH` 应保持同一架构。
 
 ## 手动准备
 
@@ -104,6 +115,19 @@ sudo sbuild-createchroot \
   http://archive.ubuntu.com/ubuntu
 ```
 
+创建 `arm64` sbuild chroot 时使用 Ubuntu ports mirror：
+
+```bash
+sudo sbuild-createchroot \
+  --arch=arm64 \
+  --chroot-suffix= \
+  --components=main,universe \
+  --include=eatmydata,ccache,gnupg,ca-certificates \
+  noble \
+  /srv/chroot/noble-arm64 \
+  http://ports.ubuntu.com/ubuntu-ports
+```
+
 普通用户需要加入 `sbuild` 组：
 
 ```bash
@@ -151,7 +175,8 @@ TARGET_ARCH=arm64 make noble-build
 ```
 
 `TARGET_ARCH=arm64` 只会调整路径、repo、产物匹配和 sbuild 的 `--arch` 参数。
-调用方必须已经准备好可用的 arm64 Noble sbuild/schroot 环境。
+调用方必须已经准备好可用的 arm64 Noble sbuild/schroot 环境，并推荐在
+原生 arm64 主机上运行。
 
 需要分阶段运行时，按下面顺序执行：
 
@@ -181,6 +206,19 @@ build/ubuntu/noble/${TARGET_ARCH}/binary/node-undici/
 build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
 build/ubuntu/noble/${TARGET_ARCH}/repo/
 ```
+
+## GitHub Actions
+
+手动 workflow `.github/workflows/ubuntu-noble-build.yml` 使用架构矩阵：
+
+```text
+amd64 -> ubuntu-24.04
+arm64 -> ubuntu-24.04-arm
+```
+
+两个 job 都运行完整 Noble binary build、lintian 和 Docker smoke validation。
+成功时 artifact 名称分别是 `ubuntu-noble-build-amd64` 和
+`ubuntu-noble-build-arm64`。失败日志 artifact 也按架构区分。
 
 最终 `ocserv` 包位于：
 
