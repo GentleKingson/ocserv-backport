@@ -36,7 +36,7 @@ sudo apt install -y --no-install-recommends \
   git ca-certificates curl gnupg \
   build-essential fakeroot devscripts dpkg-dev \
   debian-archive-keyring debian-keyring debian-maintainers \
-  sbuild schroot debootstrap lintian docker.io \
+  sbuild schroot debootstrap lintian libdistro-info-perl docker.io \
   python3 python3-yaml bats shellcheck
 ```
 

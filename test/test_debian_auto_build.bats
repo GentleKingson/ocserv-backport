@@ -552,8 +552,11 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/apt-get-calls"
   install_call="$(grep -F -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install" "${AUTO_REPO}/apt-get-calls")"
-  for package in git curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper debian-keyring sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck make; do
-    [[ "${install_call}" == *" ${package}"* || "${install_call}" == *" ${package} "* ]]
+  for package in git curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper debian-keyring sbuild schroot debootstrap lintian libdistro-info-perl python3 python3-yaml bats shellcheck make; do
+    if [[ "${install_call}" != *" ${package}"* && "${install_call}" != *" ${package} "* ]]; then
+      echo "missing expected core package in provision install call: ${package}" >&2
+      return 1
+    fi
   done
   [[ "${output}" != *"apt progress output should be hidden"* ]]
 }
