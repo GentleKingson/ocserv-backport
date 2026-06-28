@@ -296,7 +296,7 @@ refresh_debian_dscverify_keyrings() {
       workdir="$(mktemp -d)"
       cd "${workdir}"
       apt-get update
-      apt-get download debian-keyring debian-maintainers
+      apt-get download debian-archive-keyring debian-keyring
       mkdir -p /out/root
       for deb in ./*.deb; do
         dpkg-deb -x "${deb}" /out/root
