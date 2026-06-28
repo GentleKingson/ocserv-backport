@@ -119,6 +119,24 @@ load_target_paths() {
   . "${SCRIPT_DIR}/_target_paths.sh"
 }
 
+warn_if_non_native_target_arch() {
+  local host_arch=""
+
+  if ! command -v dpkg >/dev/null 2>&1; then
+    log "host architecture unavailable: dpkg not found"
+    return 0
+  fi
+
+  if ! host_arch="$(dpkg --print-architecture 2>/dev/null)"; then
+    log "host architecture unavailable: dpkg --print-architecture failed"
+    return 0
+  fi
+
+  if [[ -n "${host_arch}" && "${host_arch}" != "${TARGET_ARCH}" ]]; then
+    log "warning: host architecture ${host_arch} differs from TARGET_ARCH=${TARGET_ARCH}; native build is recommended for Noble smoke validation"
+  fi
+}
+
 print_core_install_guidance() {
   local apt_prefix=""
 
@@ -716,6 +734,7 @@ validate_noble_host
 NOBLE_AUTO_BUILD_MIRROR="${NOBLE_AUTO_BUILD_MIRROR:-$(select_noble_mirror)}"
 export NOBLE_AUTO_BUILD_MIRROR
 load_target_paths
+warn_if_non_native_target_arch
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()

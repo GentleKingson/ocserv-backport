@@ -11,9 +11,16 @@ setup() {
   [ -f "${workflow}" ]
 
   grep -Fq -- "workflow_dispatch:" "${workflow}"
-  grep -Fq -- "runs-on: ubuntu-24.04" "${workflow}"
+  grep -Fq -- "strategy:" "${workflow}"
+  grep -Fq -- "fail-fast: false" "${workflow}"
+  grep -Fq -- "matrix:" "${workflow}"
+  grep -Fq -- "arch: amd64" "${workflow}"
+  grep -Fq -- "runner: ubuntu-24.04" "${workflow}"
+  grep -Fq -- "arch: arm64" "${workflow}"
+  grep -Fq -- "runner: ubuntu-24.04-arm" "${workflow}"
+  grep -Fq -- 'runs-on: ${{ matrix.runner }}' "${workflow}"
   grep -Fq -- "timeout-minutes: 240" "${workflow}"
-  grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
+  grep -Fq -- 'TARGET_ARCH: ${{ matrix.arch }}' "${workflow}"
   grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
   grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
   grep -Fq -- "Stage Ubuntu Noble artifacts" "${workflow}"
@@ -28,8 +35,8 @@ setup() {
   ! grep -Fq -- 'cp -a "${target_root}/source"' "${workflow}"
   ! grep -Fq -- 'cp -a "${target_root}/binary"' "${workflow}"
   grep -Fq -- '${{ runner.temp }}/ubuntu-noble-artifacts/**' "${workflow}"
-  grep -Fq -- "ubuntu-noble-build-amd64" "${workflow}"
-  grep -Fq -- "ubuntu-noble-build-logs-amd64" "${workflow}"
+  grep -Fq -- 'ubuntu-noble-build-${{ matrix.arch }}' "${workflow}"
+  grep -Fq -- 'ubuntu-noble-build-logs-${{ matrix.arch }}' "${workflow}"
   grep -Fq -- "actions/checkout@v6" "${workflow}"
   grep -Fq -- "actions/upload-artifact@v6" "${workflow}"
 }
@@ -175,6 +182,8 @@ PY
 @test "README documents the manual Ubuntu Noble build workflow" {
   grep -Fq -- ".github/workflows/ubuntu-noble-build.yml" README.md
   grep -Fq -- "Manual Ubuntu Noble build workflow" README.md
+  grep -Fq -- "amd64 and arm64" README.md
+  grep -Fq -- "ubuntu-24.04-arm" README.md
   grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
 }
 

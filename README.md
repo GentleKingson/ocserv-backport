@@ -56,9 +56,11 @@ build, lintian, and Docker smoke validation, then uploads generated artifacts.
 It does not publish packages, deploy hosts, or read repository secrets.
 
 The Manual Ubuntu Noble build workflow is
-`.github/workflows/ubuntu-noble-build.yml`. It provisions a GitHub-hosted
-`ubuntu-24.04` runner, runs the Noble binary build, lintian, and Docker smoke
-validation, then uploads generated artifacts. It does not publish packages, deploy hosts, or read repository secrets.
+`.github/workflows/ubuntu-noble-build.yml`. It builds amd64 and arm64 in a
+matrix: amd64 runs on `ubuntu-24.04`, and arm64 runs on the native
+`ubuntu-24.04-arm` runner. It runs the Noble binary build, lintian, and Docker
+smoke validation, then uploads generated artifacts. It does not publish
+packages, deploy hosts, or read repository secrets.
 
 ## Detailed Guides
 

@@ -701,6 +701,50 @@ SH
   [ ! -e "${NOBLE_REPO}/docker-calls" ]
 }
 
+@test "noble-smoke-basic logs host dpkg architecture before container smoke" {
+  setup_noble_repo
+  install_fake_smoke_tools
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) printf '%s\n' "amd64" ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "noble-smoke-basic: host dpkg architecture: amd64" <<<"${output}"
+}
+
+@test "noble-smoke-basic logs unavailable when host architecture lookup fails" {
+  setup_noble_repo
+  install_fake_smoke_tools
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) exit 17 ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "noble-smoke-basic: host dpkg architecture: unavailable" <<<"${output}"
+}
+
 @test "noble-smoke-basic matches version output without pipefail-sensitive pipeline" {
   grep -Fq -- 'version_output="$(ocserv --version 2>&1 || true)"' "${REPO_ROOT}/scripts/noble-smoke-test.sh"
   grep -Fq -- 'printf' "${REPO_ROOT}/scripts/noble-smoke-test.sh"

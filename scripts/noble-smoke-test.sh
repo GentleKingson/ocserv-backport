@@ -35,6 +35,12 @@ depends="$(dpkg-deb -f "${DEB}" Depends)"
 [[ "${arch}" == "${TARGET_ARCH}" ]] || die "deb Architecture ${arch} != ${TARGET_ARCH}"
 [[ "${depends}" == *"libllhttp9.2"* ]] || die "ocserv Depends does not include libllhttp9.2: ${depends}"
 
+host_arch="unavailable"
+if command -v dpkg >/dev/null 2>&1; then
+  host_arch="$(dpkg --print-architecture 2>/dev/null || printf 'unavailable')"
+fi
+log "noble-smoke-basic: host dpkg architecture: ${host_arch}"
+
 binary_dir="$(cd -- "${PKG_BINARY_DIR}" && pwd)"
 repo_dir="$(cd -- "${NOBLE_REPO_DIR}" && pwd)"
 deb_name="$(basename "${DEB}")"

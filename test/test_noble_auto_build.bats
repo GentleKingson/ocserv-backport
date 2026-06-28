@@ -1241,7 +1241,33 @@ run_auto_isolated() {
     run_auto_isolated
 
   [ "${status}" -ne 0 ]
+  [[ "${output}" == *"host architecture amd64 differs from TARGET_ARCH=arm64"* ]]
+  [[ "${output}" == *"native build is recommended"* ]]
   grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports" <<<"${output}"
+}
+
+@test "noble-auto-build architecture diagnostic tolerates dpkg failure" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) exit 17 ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"host architecture unavailable"* ]]
+  [[ "${output}" == *"dpkg --print-architecture failed"* ]]
+  grep -Fq -- "Missing sbuild chroot: noble-amd64" <<<"${output}"
 }
 
 @test "noble-auto-build default mode rejects missing Docker CE package even when daemon works" {
