@@ -17,7 +17,7 @@ teardown_smoke_repo() {
 }
 
 write_deb() {
-  local path="${SMOKE_REPO}/build/binary/${1:-ocserv_1.5.0-1~bpo13+0local1_amd64.deb}"
+  local path="${SMOKE_REPO}/build/binary/${1:-ocserv_1.5.0-1~debian13.1_amd64.deb}"
   printf 'fake deb\n' > "${path}"
 }
 
@@ -27,7 +27,7 @@ install_fake_dpkg_deb() {
 field="$3"
 case "$field" in
   Package) echo ocserv ;;
-  Version) echo 1.5.0-1~bpo13+0local1 ;;
+  Version) echo 1.5.0-1~debian13.1 ;;
   Architecture) echo amd64 ;;
   *) exit 2 ;;
 esac
@@ -101,8 +101,8 @@ run_smoke() {
   args="$(cat "${SMOKE_REPO}/docker-args")"
   teardown_smoke_repo
   [ "${status}" -eq 0 ]
-  [[ "${args}" == *"ocserv_1.5.0-1~bpo13+0local1_amd64.deb"* ]]
-  [[ "${args}" == *"1.5.0-1~bpo13+0local1"* ]]
+  [[ "${args}" == *"ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
+  [[ "${args}" == *"1.5.0-1~debian13.1"* ]]
   [[ "${args}" == *"amd64"* ]]
 }
 

@@ -6,7 +6,7 @@
 仓库默认生成的本地版本号是：
 
 ```text
-1.5.0-1~bpo13+0local1
+1.5.0-1~debian13.1
 ```
 
 需要修改版本号时，使用 `OCSERV_VERSION` 环境变量覆盖。
@@ -164,13 +164,13 @@ verify-lock -> fetch -> rewrap -> src-pkg -> binary -> lint -> smoke-basic
 默认版本号是：
 
 ```text
-1.5.0-1~bpo13+0local1
+1.5.0-1~debian13.1
 ```
 
 使用环境变量覆盖版本号：
 
 ```bash
-OCSERV_VERSION=1.5.0-1~bpo13+0local2 make build
+OCSERV_VERSION=1.5.0-1~debian13.2 make build
 ```
 
 ## 查看产物

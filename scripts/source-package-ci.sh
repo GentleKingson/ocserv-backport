@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 cd -- "${REPO_ROOT}"
 
-OCSERV_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
+OCSERV_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 export OCSERV_VERSION
 
 fail() {
