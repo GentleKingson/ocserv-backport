@@ -179,16 +179,16 @@ PY
   ! grep -Fq -- "'.github/workflows/source-ci.yml'" .github/workflows/ci.yml
 }
 
-@test "README documents the manual Ubuntu Noble build workflow" {
+@test "README documents the manual Ubuntu 24.04 build workflow" {
   grep -Fq -- ".github/workflows/ubuntu-noble-build.yml" README.md
-  grep -Fq -- "Manual Ubuntu Noble build workflow" README.md
+  grep -Fq -- "Manual Ubuntu 24.04 build workflow" README.md
   grep -Fq -- "amd64 and arm64" README.md
   grep -Fq -- "ubuntu-24.04-arm" README.md
   grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
 }
 
-@test "README documents the manual Debian Trixie build workflow" {
+@test "README documents the manual Debian 13 build workflow" {
   grep -Fq -- ".github/workflows/debian-trixie-build.yml" README.md
-  grep -Fq -- "Manual Debian Trixie build workflow" README.md
+  grep -Fq -- "Manual Debian 13 build workflow" README.md
   grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
 }
