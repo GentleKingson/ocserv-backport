@@ -173,7 +173,7 @@ assert_status() {
   run_build_direct
   assert_status 0
   versions="$(make_versions)"
-  [ "${versions}" = "1.5.0-1~bpo13+0local1" ]
+  [ "${versions}" = "1.5.0-1~debian13.1" ]
 }
 
 @test "make build exports the default local backport version" {
@@ -182,7 +182,7 @@ assert_status() {
   run_make_build
   assert_status 0
   versions="$(make_versions)"
-  [ "${versions}" = "1.5.0-1~bpo13+0local1" ]
+  [ "${versions}" = "1.5.0-1~debian13.1" ]
 }
 
 @test "make build preserves an OCSERV_VERSION override" {

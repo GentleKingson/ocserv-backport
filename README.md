@@ -21,7 +21,7 @@ for local validation only.
 | `make test` | Run the Bats test suite |
 
 The Debian path builds the default local version
-`1.5.0-1~bpo13+0local1`. Override it with `OCSERV_VERSION` when needed.
+`1.5.0-1~debian13.1`. Override it with `OCSERV_VERSION` when needed.
 
 The Noble path builds `ocserv` through a two-stage local flow: first rebuild the
 locked Debian `node-undici` source to provide local `libllhttp` packages, then

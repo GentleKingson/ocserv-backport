@@ -409,10 +409,10 @@ if [[ "\$*" != "build" ]]; then
 fi
 /bin/mkdir -p "${AUTO_REPO}/build/source" "${AUTO_REPO}/build/binary"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/source/ocserv_1.5.0-1~bpo13+0local1.dsc" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.deb" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.buildinfo"
+  "${AUTO_REPO}/build/source/ocserv_1.5.0-1~debian13.1.dsc" \
+  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.deb" \
+  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" \
+  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -641,10 +641,10 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "" ]
-  [[ "${output}" == *"${AUTO_REPO}/build/source/ocserv_1.5.0-1~bpo13+0local1.dsc"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.changes"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~bpo13+0local1_amd64.buildinfo"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
 }
 
 @test "debian-auto-build uses Debian lintian profile on Ubuntu Noble host" {
