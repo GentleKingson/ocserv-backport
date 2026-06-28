@@ -53,6 +53,10 @@ smoke-basic: ## Install and inspect the local .deb in a trixie container
 build: ## Run the full local backport validation pipeline
 	scripts/build.sh
 
+.PHONY: debian-auto-build
+debian-auto-build: ## Run the Debian trixie host auto-build pipeline
+	scripts/debian-auto-build.sh
+
 .PHONY: source-ci
 source-ci: ## Run the real source-package CI pipeline
 	scripts/source-package-ci.sh

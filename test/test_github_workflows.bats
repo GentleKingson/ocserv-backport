@@ -27,6 +27,23 @@ setup() {
   ! grep -R -Fq -- "actions/upload-artifact@v4" .github/workflows
 }
 
+@test "manual Debian Trixie build workflow matches documented contract" {
+  workflow=".github/workflows/debian-trixie-build.yml"
+
+  [ -f "${workflow}" ]
+
+  grep -Fq -- "workflow_dispatch:" "${workflow}"
+  grep -Fq -- "runs-on: ubuntu-24.04" "${workflow}"
+  grep -Fq -- "timeout-minutes: 240" "${workflow}"
+  grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
+  grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
+  grep -Fq -- "./scripts/debian-auto-build.sh --provision" "${workflow}"
+  grep -Fq -- "debian-trixie-build-amd64" "${workflow}"
+  grep -Fq -- "debian-trixie-build-logs-amd64" "${workflow}"
+  grep -Fq -- "actions/checkout@v6" "${workflow}"
+  grep -Fq -- "actions/upload-artifact@v6" "${workflow}"
+}
+
 @test "YAML files checked by CI stay within yamllint line length" {
   local output
 
@@ -91,6 +108,27 @@ PY
   ! grep -Fq -- "build/noble/**/*.build" "${workflow}"
 }
 
+@test "manual Debian Trixie build workflow conditionally frees runner disk space" {
+  workflow=".github/workflows/debian-trixie-build.yml"
+
+  grep -Fq -- "Ensure enough runner disk space" "${workflow}"
+  grep -Fq -- "min_free_gib=8" "${workflow}"
+  grep -Fq -- 'df -h / "$GITHUB_WORKSPACE" /tmp' "${workflow}"
+  grep -Fq -- "df --output=avail /" "${workflow}"
+  grep -Fq -- "docker system prune -af || true" "${workflow}"
+  grep -Fq -- "::error::Insufficient free disk" "${workflow}"
+}
+
+@test "manual Debian Trixie build workflow sanitizes failure logs before upload" {
+  workflow=".github/workflows/debian-trixie-build.yml"
+
+  grep -Fq -- "Prepare Debian Trixie build logs" "${workflow}"
+  grep -Fq -- 'upload_dir="${RUNNER_TEMP}/debian-trixie-upload-logs"' "${workflow}"
+  grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
+  grep -Fq -- '${{ runner.temp }}/debian-trixie-upload-logs/**' "${workflow}"
+  ! grep -Fq -- "build/**/*.build" "${workflow}"
+}
+
 @test "primary CI watches every GitHub workflow file" {
   grep -Fq -- "'.github/workflows/**'" .github/workflows/ci.yml
   ! grep -Fq -- "'.github/workflows/source-ci.yml'" .github/workflows/ci.yml
@@ -99,5 +137,11 @@ PY
 @test "README documents the manual Ubuntu Noble build workflow" {
   grep -Fq -- ".github/workflows/ubuntu-noble-build.yml" README.md
   grep -Fq -- "Manual Ubuntu Noble build workflow" README.md
+  grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
+}
+
+@test "README documents the manual Debian Trixie build workflow" {
+  grep -Fq -- ".github/workflows/debian-trixie-build.yml" README.md
+  grep -Fq -- "Manual Debian Trixie build workflow" README.md
   grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
 }

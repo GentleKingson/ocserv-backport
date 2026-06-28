@@ -48,6 +48,20 @@ SH
   chmod +x "${FAKEBIN}/docker"
 }
 
+install_fake_sudo_docker() {
+  cat > "${FAKEBIN}/sudo" <<SH
+#!/usr/bin/env bash
+printf 'sudo %s\n' "\$*" > "${SMOKE_REPO}/sudo-calls"
+exit 0
+SH
+  cat > "${FAKEBIN}/docker" <<'SH'
+#!/usr/bin/env bash
+echo "unexpected direct docker command: $*" >&2
+exit 99
+SH
+  chmod +x "${FAKEBIN}/sudo" "${FAKEBIN}/docker"
+}
+
 run_smoke() {
   run bash -c "cd '${SMOKE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh $*"
 }
@@ -64,6 +78,18 @@ run_smoke() {
   run_smoke
   teardown_smoke_repo
   [ "${status}" -ne 0 ]
+}
+
+@test "smoke-basic honors DEBIAN_DOCKER_CMD override" {
+  setup_smoke_repo
+  write_deb
+  install_fake_dpkg_deb
+  install_fake_sudo_docker
+  run bash -c "cd '${SMOKE_REPO}' && DEBIAN_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh"
+  sudo_calls="$(cat "${SMOKE_REPO}/sudo-calls")"
+  teardown_smoke_repo
+  [ "${status}" -eq 0 ]
+  [[ "${sudo_calls}" == *"sudo docker run --rm"* ]]
 }
 
 @test "smoke-basic validates local deb metadata and passes expected values to container" {

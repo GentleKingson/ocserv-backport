@@ -76,6 +76,10 @@ run_make_build_with_version() {
   run bash -c "cd '${ENTRY_REPO}' && PATH='${FAKEBIN}:${PATH}' OCSERV_VERSION='${version}' '${SYSTEM_MAKE}' build"
 }
 
+run_make_debian_auto_build() {
+  run bash -c "cd '${ENTRY_REPO}' && PATH='${FAKEBIN}:${PATH}' TARGET_ARCH=amd64 '${SYSTEM_MAKE}' debian-auto-build"
+}
+
 run_build_from_outside() {
   OUTSIDE_DIR="$(mktemp -d)"
   run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${ENTRY_REPO}/scripts/build.sh'"
@@ -188,6 +192,21 @@ assert_status() {
   assert_status 0
   versions="$(make_versions)"
   [ "${versions}" = "1.5.0-1~bpo13+custom1" ]
+}
+
+@test "make debian-auto-build delegates to scripts/debian-auto-build.sh" {
+  setup_entrypoint_repo
+  cat > "${ENTRY_REPO}/scripts/debian-auto-build.sh" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\${TARGET_ARCH:-}" > "${ENTRY_REPO}/debian-auto-build-target-arch"
+SH
+  chmod +x "${ENTRY_REPO}/scripts/debian-auto-build.sh"
+
+  run_make_debian_auto_build
+
+  assert_status 0
+  [ "$(cat "${ENTRY_REPO}/debian-auto-build-target-arch")" = "amd64" ]
 }
 
 @test "dry-run forwards to build.sh without keeping a stage list" {
