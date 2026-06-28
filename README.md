@@ -12,6 +12,8 @@ for local validation only.
 | Target | Purpose |
 |---|---|
 | `make build` | Full Debian trixie local backport pipeline for `ocserv 1.5.0-1` |
+| `scripts/debian-auto-build.sh` | Check a Debian trixie builder and run the Debian build when ready |
+| `scripts/debian-auto-build.sh --provision` | Prepare the Debian builder after confirmation, then run the Debian build |
 | `make source-ci` | Source-package-only path used by scheduled/manual source CI |
 | `scripts/noble-auto-build.sh` | Check an Ubuntu 24.04 Noble builder and run the Noble build when ready |
 | `scripts/noble-auto-build.sh --provision` | Prepare the Noble builder after confirmation, then run the Noble build |
@@ -47,6 +49,12 @@ deploy hosts, or read repository secrets.
 Manual and scheduled source CI run the real source-package path in a
 `debian:trixie` container and upload source package artifacts only.
 
+The Manual Debian Trixie build workflow is
+`.github/workflows/debian-trixie-build.yml`. It provisions a GitHub-hosted
+`ubuntu-24.04` runner for a Debian trixie target build, runs the Debian binary
+build, lintian, and Docker smoke validation, then uploads generated artifacts.
+It does not publish packages, deploy hosts, or read repository secrets.
+
 The Manual Ubuntu Noble build workflow is
 `.github/workflows/ubuntu-noble-build.yml`. It provisions a GitHub-hosted
 `ubuntu-24.04` runner, runs the Noble binary build, lintian, and Docker smoke
@@ -66,6 +74,7 @@ validation, then uploads generated artifacts. It does not publish packages, depl
 | `test/` | Bats tests for lock handling, build entrypoints, CI behavior, and smoke checks |
 | `.github/workflows/ci.yml` | Pull request static checks and stubbed orchestration tests |
 | `.github/workflows/source-ci.yml` | Manual and scheduled source-package CI in `debian:trixie` |
+| `.github/workflows/debian-trixie-build.yml` | Manual Debian Trixie binary build workflow |
 | `.github/workflows/ubuntu-noble-build.yml` | Manual Ubuntu Noble binary build workflow |
 | `docs/` | Detailed Debian and Ubuntu builder guides |
 | `Makefile` | Local entry points |

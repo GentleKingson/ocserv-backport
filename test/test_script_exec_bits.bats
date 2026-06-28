@@ -22,6 +22,7 @@ DIRECTLY_INVOKED_SCRIPTS=(
   lint-package.sh
   smoke-test.sh
   build.sh
+  debian-auto-build.sh
   source-package-ci.sh
   dry-run.sh
   noble-build.sh

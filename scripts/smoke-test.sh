@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~bpo13+0local1}"
 TARGET_ARCH="amd64"
+read -r -a DOCKER_COMMAND <<< "${DEBIAN_DOCKER_CMD:-docker}"
+[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "DEBIAN_DOCKER_CMD must not be empty"
 
 if [[ "${1:-}" == "basic" ]]; then
   shift
@@ -32,7 +34,8 @@ binary_dir="$(cd -- "$(dirname -- "${DEB}")" && pwd)"
 deb_name="$(basename "${DEB}")"
 
 log "smoke-basic: container install and package assertions"
-docker run --rm -v "${binary_dir}:/deb:ro" debian:trixie bash -euxc '
+# shellcheck disable=SC2016
+"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" debian:trixie bash -euxc '
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"
