@@ -4,9 +4,11 @@ load helpers/bats-helper.bash
 setup() {
   cd "${REPO_ROOT}" || return
   AUTO_REPO="$(mktemp -d)"
+  AUTO_REPO="$(cd -- "${AUTO_REPO}" && pwd -P)"
   FAKEBIN="$(mktemp -d)"
   mkdir -p "${AUTO_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${AUTO_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   if [[ -f "${REPO_ROOT}/scripts/debian-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/debian-auto-build.sh" "${AUTO_REPO}/scripts/debian-auto-build.sh"
@@ -407,12 +409,12 @@ if [[ "\$*" != "build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
 fi
-/bin/mkdir -p "${AUTO_REPO}/build/source" "${AUTO_REPO}/build/binary"
+/bin/mkdir -p "${AUTO_REPO}/build/debian/trixie/amd64/source" "${AUTO_REPO}/build/debian/trixie/amd64/binary"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/source/ocserv_1.5.0-1~debian13.1.dsc" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.deb" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" \
-  "${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"
+  "${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc" \
+  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb" \
+  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" \
+  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -574,7 +576,7 @@ run_auto_isolated() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"refreshing Debian dscverify keyrings from debian:sid"* ]]
-  keyring_root="${AUTO_REPO}/build/debian/amd64/debian-keyrings"
+  keyring_root="${AUTO_REPO}/build/debian/trixie/amd64/keyrings/debian"
   grep -Fq -- "docker run --rm" "${AUTO_REPO}/docker-calls"
   grep -Fq -- "-v ${keyring_root}:/out" "${AUTO_REPO}/docker-calls"
   grep -Fq -- "apt-get download debian-archive-keyring debian-keyring" "${AUTO_REPO}/docker-calls"
@@ -641,10 +643,10 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "" ]
-  [[ "${output}" == *"${AUTO_REPO}/build/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
 }
 
 @test "debian-auto-build uses Debian lintian profile on Ubuntu Noble host" {
@@ -674,7 +676,7 @@ run_auto_isolated() {
 
   [ "${status}" -ne 0 ]
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/source/ocserv_*.dsc"* ]]
+  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_*.dsc"* ]]
 }
 
 @test "debian-auto-build default mode reports missing sbuild group commands" {

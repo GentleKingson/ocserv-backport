@@ -4,13 +4,19 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 SOURCE_VERSION="1.5.0-1"
-TARGET_DISTRIBUTION="trixie"
+TARGET_FAMILY="${TARGET_FAMILY:-debian}"
+TARGET_SUITE="${TARGET_SUITE:-trixie}"
+TARGET_ARCH="${TARGET_ARCH:-amd64}"
+# shellcheck source=scripts/_target_paths.sh
+. "${SCRIPT_DIR}/_target_paths.sh"
+TARGET_DISTRIBUTION="${TARGET_SUITE}"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 
-SRCDIR="build/source/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~debian13.1 -> 1.5.0
+SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~debian13.1 -> 1.5.0
 [[ -d "${SRCDIR}" ]] || die "missing source tree: ${SRCDIR}"
 cd "${SRCDIR}"
 

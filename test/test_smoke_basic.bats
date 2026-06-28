@@ -3,8 +3,9 @@ load helpers/bats-helper.bash
 
 setup_smoke_repo() {
   SMOKE_REPO="$(mktemp -d)"
-  mkdir -p "${SMOKE_REPO}/scripts" "${SMOKE_REPO}/build/binary"
+  mkdir -p "${SMOKE_REPO}/scripts" "${SMOKE_REPO}/build/debian/trixie/amd64/binary"
   cp "${REPO_ROOT}/scripts/_common.sh" "${SMOKE_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SMOKE_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/smoke-test.sh" "${SMOKE_REPO}/scripts/smoke-test.sh"
   FAKEBIN="$(mktemp -d)"
 }
@@ -17,7 +18,7 @@ teardown_smoke_repo() {
 }
 
 write_deb() {
-  local path="${SMOKE_REPO}/build/binary/${1:-ocserv_1.5.0-1~debian13.1_amd64.deb}"
+  local path="${SMOKE_REPO}/build/debian/trixie/amd64/binary/${1:-ocserv_1.5.0-1~debian13.1_amd64.deb}"
   printf 'fake deb\n' > "${path}"
 }
 

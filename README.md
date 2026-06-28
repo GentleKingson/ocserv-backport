@@ -83,5 +83,6 @@ validation, then uploads generated artifacts. It does not publish packages, depl
 
 This repository intentionally excludes package publishing, external repository
 hosting, production VPS deployment, production promotion, and rollback
-automation. The Noble repository under `build/noble/${TARGET_ARCH}/repo/` is
-local build plumbing for clean chroots, not a production APT repository.
+automation. The Noble repository under
+`build/ubuntu/noble/${TARGET_ARCH}/repo/` is local build plumbing for clean
+chroots, not a production APT repository.

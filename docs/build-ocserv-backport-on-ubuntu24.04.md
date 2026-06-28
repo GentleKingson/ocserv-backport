@@ -122,7 +122,7 @@ NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1
 OCSERV_DEBIAN_VERSION=1.5.0-1
 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1
 
-TARGET_DISTRIBUTION=noble
+TARGET_SUITE=noble
 TARGET_ARCH=amd64
 ```
 
@@ -175,21 +175,21 @@ make noble-smoke-basic
 Noble 产物按架构隔离：
 
 ```text
-build/noble/${TARGET_ARCH}/source/node-undici/
-build/noble/${TARGET_ARCH}/source/ocserv/
-build/noble/${TARGET_ARCH}/binary/node-undici/
-build/noble/${TARGET_ARCH}/binary/ocserv/
-build/noble/${TARGET_ARCH}/repo/
+build/ubuntu/noble/${TARGET_ARCH}/source/node-undici/
+build/ubuntu/noble/${TARGET_ARCH}/source/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/binary/node-undici/
+build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/repo/
 ```
 
 最终 `ocserv` 包位于：
 
 ```text
-build/noble/${TARGET_ARCH}/binary/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
 ```
 
 `noble-repo` 会在本机生成构建 `ocserv` 所需的临时本地 repo：
 
 ```text
-build/noble/${TARGET_ARCH}/repo/
+build/ubuntu/noble/${TARGET_ARCH}/repo/
 ```

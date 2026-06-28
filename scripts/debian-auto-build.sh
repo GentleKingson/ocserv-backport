@@ -111,6 +111,13 @@ validate_target_arch() {
   fi
 }
 
+load_target_paths() {
+  TARGET_FAMILY="debian"
+  TARGET_SUITE="trixie"
+  # shellcheck source=scripts/_target_paths.sh
+  . "${SCRIPT_DIR}/_target_paths.sh"
+}
+
 print_core_install_guidance() {
   local apt_prefix=""
 
@@ -272,7 +279,7 @@ check_debian_dscverify_keyrings() {
 }
 
 debian_dscverify_keyring_root() {
-  printf '%s\n' "${DEBIAN_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${REPO_ROOT}/build/debian/${TARGET_ARCH}/debian-keyrings}"
+  printf '%s\n' "${DEBIAN_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${TARGET_DEBIAN_KEYRING_DIR}}"
 }
 
 refresh_debian_dscverify_keyrings() {
@@ -592,10 +599,10 @@ print_debian_artifacts() {
   local artifacts=()
   local matches=()
   local patterns=(
-    "${REPO_ROOT}/build/source/ocserv_*.dsc"
-    "${REPO_ROOT}/build/binary/ocserv_*_amd64.deb"
-    "${REPO_ROOT}/build/binary/ocserv_*_amd64.changes"
-    "${REPO_ROOT}/build/binary/ocserv_*_amd64.buildinfo"
+    "${TARGET_SOURCE_ROOT}/ocserv_*.dsc"
+    "${TARGET_BINARY_ROOT}/ocserv_*_${TARGET_ARCH}.deb"
+    "${TARGET_BINARY_ROOT}/ocserv_*_${TARGET_ARCH}.changes"
+    "${TARGET_BINARY_ROOT}/ocserv_*_${TARGET_ARCH}.buildinfo"
   )
 
   for pattern in "${patterns[@]}"; do
@@ -615,6 +622,7 @@ print_debian_artifacts() {
 
 validate_host
 validate_target_arch
+load_target_paths
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()

@@ -5,8 +5,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-TARGET_ARCH="amd64"
+TARGET_FAMILY="${TARGET_FAMILY:-debian}"
+TARGET_SUITE="${TARGET_SUITE:-trixie}"
+TARGET_ARCH="${TARGET_ARCH:-amd64}"
+# shellcheck source=scripts/_target_paths.sh
+. "${SCRIPT_DIR}/_target_paths.sh"
+[[ "${TARGET_ARCH}" == "amd64" ]] || die "unsupported TARGET_ARCH=${TARGET_ARCH}; supported architectures: amd64"
+
 read -r -a DOCKER_COMMAND <<< "${DEBIAN_DOCKER_CMD:-docker}"
 [[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "DEBIAN_DOCKER_CMD must not be empty"
 
@@ -18,9 +25,9 @@ fi
 debs=()
 while IFS= read -r -d '' deb; do
   debs+=("${deb}")
-done < <(find build/binary -maxdepth 1 -type f -name 'ocserv_*_amd64.deb' -print0)
+done < <(find "${TARGET_BINARY_ROOT}" -maxdepth 1 -type f -name "ocserv_*_${TARGET_ARCH}.deb" -print0)
 
-[[ "${#debs[@]}" -eq 1 ]] || die "expected exactly one ocserv amd64 .deb in build/binary (found ${#debs[@]})"
+[[ "${#debs[@]}" -eq 1 ]] || die "expected exactly one ocserv ${TARGET_ARCH} .deb in ${TARGET_BINARY_ROOT} (found ${#debs[@]})"
 DEB="${debs[0]}"
 
 pkg="$(dpkg-deb -f "${DEB}" Package)"

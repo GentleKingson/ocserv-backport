@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
+  for file in _common.sh _target_paths.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }
@@ -226,7 +226,7 @@ verify_source_lock_calls() {
   write_lock_from_fixtures ocserv_1.5.0.orig.tar.xz 3 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad 9999
   install_fake_fetch_commands success
   run_fetch
-  installed="$([ -d "${FETCH_REPO}/build/source/ocserv-1.5.0" ] && echo yes || echo no)"
+  installed="$([ -d "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0" ] && echo yes || echo no)"
   teardown_fetch_repo
   [ "${status}" -ne 0 ]
   [ "${installed}" = "no" ]
@@ -310,7 +310,7 @@ verify_source_lock_calls() {
   make_success_fixtures
   install_fake_fetch_commands dscverify-fail
   run_fetch
-  installed="$([ -d "${FETCH_REPO}/build/source/ocserv-1.5.0" ] && echo yes || echo no)"
+  installed="$([ -d "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0" ] && echo yes || echo no)"
   teardown_fetch_repo
   [ "${status}" -ne 0 ]
   [ "${installed}" = "no" ]
@@ -319,7 +319,7 @@ verify_source_lock_calls() {
   make_success_fixtures
   install_fake_fetch_commands dpkg-source-fail
   run_fetch
-  installed="$([ -d "${FETCH_REPO}/build/source/ocserv-1.5.0" ] && echo yes || echo no)"
+  installed="$([ -d "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0" ] && echo yes || echo no)"
   teardown_fetch_repo
   [ "${status}" -ne 0 ]
   [ "${installed}" = "no" ]
@@ -331,13 +331,13 @@ verify_source_lock_calls() {
   install_fake_fetch_commands success
   run_fetch
   [ "${status}" -eq 0 ]
-  [ -f "${FETCH_REPO}/build/source/ocserv-1.5.0/README" ]
-  [ -f "${FETCH_REPO}/build/source/ocserv_1.5.0.orig.tar.xz" ]
+  [ -f "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0/README" ]
+  [ -f "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0.orig.tar.xz" ]
 
-  printf 'old valid tree\n' > "${FETCH_REPO}/build/source/ocserv-1.5.0/README"
+  printf 'old valid tree\n' > "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0/README"
   install_fake_fetch_commands dpkg-source-fail
   run_fetch
-  preserved="$(cat "${FETCH_REPO}/build/source/ocserv-1.5.0/README")"
+  preserved="$(cat "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0/README")"
   teardown_fetch_repo
   [ "${status}" -ne 0 ]
   [ "${preserved}" = "old valid tree" ]

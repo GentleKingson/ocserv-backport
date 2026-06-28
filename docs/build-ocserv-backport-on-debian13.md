@@ -178,13 +178,13 @@ OCSERV_VERSION=1.5.0-1~debian13.2 make build
 查看 source package 产物：
 
 ```bash
-ls -lh build/source/
+ls -lh build/debian/trixie/amd64/source/
 ```
 
 查看二进制 `.deb` 产物：
 
 ```bash
-ls -lh build/binary/
+ls -lh build/debian/trixie/amd64/binary/
 ```
 
 ## 只构建 source package

@@ -17,6 +17,7 @@ setup_source_ci_repo() {
   SOURCE_CI_REPO="$(mktemp -d)"
   mkdir -p "${SOURCE_CI_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${SOURCE_CI_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SOURCE_CI_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/source-package-ci.sh" "${SOURCE_CI_REPO}/scripts/source-package-ci.sh"
   cp "${REPO_ROOT}/Makefile" "${SOURCE_CI_REPO}/Makefile"
   SYSTEM_MAKE="$(command -v make)"
@@ -125,16 +126,28 @@ source_ci_file() {
 
 @test "source CI verifies lock before cleaning source artifacts" {
   setup_source_ci_repo
-  mkdir -p "${SOURCE_CI_REPO}/build/source" "${SOURCE_CI_REPO}/build/binary"
-  printf 'old source\n' > "${SOURCE_CI_REPO}/build/source/marker"
-  printf 'old binary\n' > "${SOURCE_CI_REPO}/build/binary/marker"
+  mkdir -p "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source" "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary"
+  printf 'old source\n' > "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source/marker"
+  printf 'old binary\n' > "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary/marker"
   install_fake_make verify-lock
   run_source_ci
-  source_marker="$([ -f "${SOURCE_CI_REPO}/build/source/marker" ] && echo yes || echo no)"
-  binary_marker="$([ -f "${SOURCE_CI_REPO}/build/binary/marker" ] && echo yes || echo no)"
+  source_marker="$([ -f "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source/marker" ] && echo yes || echo no)"
+  binary_marker="$([ -f "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary/marker" ] && echo yes || echo no)"
   [ "${status}" -eq 1 ]
   [ "${source_marker}" = "yes" ]
   [ "${binary_marker}" = "yes" ]
+}
+
+@test "source CI ignores legacy build source and binary sentinels" {
+  setup_source_ci_repo
+  mkdir -p "${SOURCE_CI_REPO}/build/source" "${SOURCE_CI_REPO}/build/binary"
+  printf 'legacy source sentinel\n' > "${SOURCE_CI_REPO}/build/source/SENTINEL_OLD_PATH"
+  printf 'legacy binary sentinel\n' > "${SOURCE_CI_REPO}/build/binary/SENTINEL_OLD_PATH"
+  install_fake_make
+  run_source_ci
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${SOURCE_CI_REPO}/build/source/SENTINEL_OLD_PATH")" = "legacy source sentinel" ]
+  [ "$(cat "${SOURCE_CI_REPO}/build/binary/SENTINEL_OLD_PATH")" = "legacy binary sentinel" ]
 }
 
 @test "source CI exports the default local backport version" {

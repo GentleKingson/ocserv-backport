@@ -4,9 +4,11 @@ load helpers/bats-helper.bash
 setup() {
   cd "${REPO_ROOT}" || return
   AUTO_REPO="$(mktemp -d)"
+  AUTO_REPO="$(cd -- "${AUTO_REPO}" && pwd -P)"
   FAKEBIN="$(mktemp -d)"
   mkdir -p "${AUTO_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${AUTO_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   if [[ -f "${REPO_ROOT}/scripts/noble-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
@@ -529,14 +531,14 @@ if [[ "\$*" != "noble-build" ]]; then
   exit 99
 fi
 /bin/mkdir -p \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici" \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/ocserv" \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/repo"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/ocserv" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/repo"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/noble/\${TARGET_ARCH:-amd64}/repo/Packages"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:-amd64}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/repo/Packages"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -763,7 +765,7 @@ run_auto_isolated() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"refreshing Debian dscverify keyrings from debian:sid"* ]]
-  keyring_root="${AUTO_REPO}/build/noble/amd64/debian-keyrings"
+  keyring_root="${AUTO_REPO}/build/ubuntu/noble/amd64/keyrings/debian"
   grep -Fq -- "docker run --rm" "${AUTO_REPO}/docker-calls"
   grep -Fq -- "-v ${keyring_root}:/out" "${AUTO_REPO}/docker-calls"
   grep -Fq -- "-e HOST_UID=" "${AUTO_REPO}/docker-calls"
@@ -895,10 +897,10 @@ run_auto_isolated() {
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/binary/ocserv/ocserv_1.5.0_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/noble/amd64/repo/Packages"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/repo/Packages"* ]]
 }
 
 @test "noble-auto-build fails after successful make when expected artifacts are missing" {
@@ -913,7 +915,7 @@ run_auto_isolated() {
 
   [ "${status}" -ne 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_*.deb"* ]]
+  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_*.deb"* ]]
 }
 
 @test "noble-auto-build default mode reports missing sbuild group commands" {

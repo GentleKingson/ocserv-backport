@@ -72,30 +72,26 @@ jobs:
             | sudo --preserve-env=TARGET_ARCH \
               ./scripts/noble-auto-build.sh --provision
 
+      - name: Stage Ubuntu Noble artifacts
+        if: success()
+        run: |
+          set -euo pipefail
+          staging="${RUNNER_TEMP}/ubuntu-noble-artifacts"
+          target_root="build/ubuntu/noble/${TARGET_ARCH}"
+          staged_root="${staging}/${target_root}"
+          rm -rf "${staging}"
+          mkdir -p "${staged_root}"
+          cp -a "${target_root}/source" "${staged_root}/"
+          cp -a "${target_root}/binary" "${staged_root}/"
+          cp -a "${target_root}/repo" "${staged_root}/"
+
       - name: Upload Ubuntu Noble artifacts
         if: success()
         uses: actions/upload-artifact@v6
         with:
           name: ubuntu-noble-build-amd64
           if-no-files-found: error
-          path: |
-            build/noble/amd64/source/node-undici/*.dsc
-            build/noble/amd64/source/node-undici/*.debian.tar.*
-            build/noble/amd64/source/node-undici/*.orig.tar.*
-            build/noble/amd64/source/node-undici/*_source.changes
-            build/noble/amd64/source/node-undici/*_source.buildinfo
-            build/noble/amd64/source/ocserv/*.dsc
-            build/noble/amd64/source/ocserv/*.debian.tar.*
-            build/noble/amd64/source/ocserv/*.orig.tar.*
-            build/noble/amd64/source/ocserv/*_source.changes
-            build/noble/amd64/source/ocserv/*_source.buildinfo
-            build/noble/amd64/binary/node-undici/*.deb
-            build/noble/amd64/binary/node-undici/*.changes
-            build/noble/amd64/binary/node-undici/*.buildinfo
-            build/noble/amd64/binary/ocserv/*.deb
-            build/noble/amd64/binary/ocserv/*.changes
-            build/noble/amd64/binary/ocserv/*.buildinfo
-            build/noble/amd64/repo/**
+          path: ${{ runner.temp }}/ubuntu-noble-artifacts/**
 
       - name: Prepare Ubuntu Noble build logs
         if: failure()
@@ -110,7 +106,7 @@ jobs:
             mkdir -p "${upload_dir}/$(dirname -- "${safe_name}")"
             cp -- "${log_path}" "${upload_dir}/${safe_name}"
           done < <(
-            find build/noble \
+            find build/ubuntu/noble \
               -type f \
               \( -name '*.build' -o -name '*.buildlog' -o -name '*.log' \) \
               -print0 2>/dev/null || true
