@@ -22,8 +22,8 @@ make noble-build
 - 当前用户有 root 或 sudo 权限。
 - 构建机能访问 Debian mirror、Ubuntu mirror、Docker 官方 APT 源和 GitHub。
 - 构建机可以使用 `sbuild`、`schroot`、`lintian` 和 Docker。
-- 默认目标架构是 `amd64`；需要其他架构时显式设置 `TARGET_ARCH`。
-- `arm64` 构建推荐在原生 arm64 Ubuntu 24.04 主机或 runner 上执行。
+- 未设置 `TARGET_ARCH` 时，Noble 脚本会自动检测 native `amd64`/`arm64`。
+- `arm64` 构建应在原生 arm64 Ubuntu 24.04 主机或 runner 上执行。
 
 ## 推荐流程
 
@@ -54,12 +54,20 @@ scripts/noble-auto-build.sh --provision
 原生 arm64 主机或 GitHub Actions arm64 runner 上可以直接使用：
 
 ```bash
+scripts/noble-auto-build.sh --provision
+```
+
+也可以显式覆盖目标架构：
+
+```bash
+TARGET_ARCH=amd64 scripts/noble-auto-build.sh --provision
 TARGET_ARCH=arm64 scripts/noble-auto-build.sh --provision
 ```
 
 不支持在 amd64 主机上通过 QEMU/binfmt 自动完成 arm64 cross-build。此流程
-只承诺 native target build：宿主、sbuild chroot、Docker smoke test 和
-`TARGET_ARCH` 应保持同一架构。
+只承诺 native target build。显式 `TARGET_ARCH` 与 native 架构不一致时，
+脚本会 warning 后继续，但不会配置 cross-build、QEMU 或 binfmt；调用方必须
+已经准备好匹配目标架构的 native-capable chroot 或 runner。
 
 ## 手动准备
 
@@ -147,7 +155,7 @@ OCSERV_DEBIAN_VERSION=1.5.0-1
 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1
 
 TARGET_SUITE=noble
-TARGET_ARCH=amd64
+TARGET_ARCH=amd64  # 可选显式覆盖；未设置时由 Noble 脚本自动检测
 ```
 
 `*_DEBIAN_VERSION` 只用于 `source-lock/` 和 Debian pool 下载。
@@ -175,8 +183,8 @@ TARGET_ARCH=arm64 make noble-build
 ```
 
 `TARGET_ARCH=arm64` 只会调整路径、repo、产物匹配和 sbuild 的 `--arch` 参数。
-调用方必须已经准备好可用的 arm64 Noble sbuild/schroot 环境，并推荐在
-原生 arm64 主机上运行。
+调用方必须已经准备好可用的 arm64 Noble sbuild/schroot 环境；脚本不会配置
+cross-build、QEMU 或 binfmt。
 
 需要分阶段运行时，按下面顺序执行：
 

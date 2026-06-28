@@ -10,6 +10,7 @@ setup() {
   cp "${REPO_ROOT}/scripts/_common.sh" "${AUTO_REPO}/scripts/_common.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
+  cp "${REPO_ROOT}/scripts/noble-env.sh" "${AUTO_REPO}/scripts/noble-env.sh"
   if [[ -f "${REPO_ROOT}/scripts/noble-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
   fi
@@ -53,8 +54,8 @@ case "$(basename "$0")" in
     echo "dpkg-query stub was not replaced" >&2
     exit 99
     ;;
-  sbuild) echo "noble-${TARGET_ARCH:-amd64}" ;;
-  schroot) echo "chroot:noble-${TARGET_ARCH:-amd64}" ;;
+  sbuild) echo "noble-${TARGET_ARCH:?TARGET_ARCH not exported}" ;;
+  schroot) echo "chroot:noble-${TARGET_ARCH:?TARGET_ARCH not exported}" ;;
   docker)
     case "${1:-}" in
       info) exit 0 ;;
@@ -74,12 +75,13 @@ esac
 SH
     chmod +x "${FAKEBIN}/${cmd}"
   done
+  install_fake_arch_commands
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
 case "\${1:-}" in
   --list-chroots)
-    echo "noble-\${TARGET_ARCH:-amd64}"
+    echo "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     exit 0
     ;;
   *)
@@ -93,11 +95,11 @@ SH
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
 case "\${1:-}" in
   -l|--list)
-    echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+    echo "chroot:noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     exit 0
     ;;
   -c)
-    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
       exit 0
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -124,6 +126,44 @@ exit 0
 SH
   chmod +x "${FAKEBIN}/sbuild" "${FAKEBIN}/schroot" "${FAKEBIN}/id" "${FAKEBIN}/python3"
   install_fake_dpkg_query
+}
+
+install_fake_arch_commands() {
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture)
+    if [[ "${FAKE_DPKG_STATUS:-0}" != "0" ]]; then
+      exit "${FAKE_DPKG_STATUS}"
+    fi
+    if [[ "${FAKE_DPKG_ARCH+x}" == x ]]; then
+      printf '%s\n' "${FAKE_DPKG_ARCH}"
+    else
+      printf 'amd64\n'
+    fi
+    ;;
+  *)
+    echo "unexpected dpkg command: $*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m)
+    if [[ "${FAKE_UNAME_STATUS:-0}" != "0" ]]; then
+      exit "${FAKE_UNAME_STATUS}"
+    fi
+    printf '%s\n' "${FAKE_UNAME_M:-x86_64}"
+    ;;
+  *)
+    echo "unexpected uname command: $*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
 }
 
 install_fake_dpkg_query() {
@@ -214,12 +254,12 @@ install_fake_stale_registered_chroot() {
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
 case "\${1:-}" in
   -l|--list)
-    echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+    echo "chroot:noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     exit 0
     ;;
   -c)
-    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
-      echo "E: 10mount: error: Directory '/srv/chroot/noble-\${TARGET_ARCH:-amd64}' does not exist" >&2
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+      echo "E: 10mount: error: Directory '/srv/chroot/noble-\${TARGET_ARCH:?TARGET_ARCH not exported}' does not exist" >&2
       exit 1
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -236,7 +276,7 @@ SH
 printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
 case "\${1:-}" in
   --list-chroots)
-    echo "noble-\${TARGET_ARCH:-amd64}"
+    echo "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     exit 0
     ;;
   *)
@@ -254,7 +294,7 @@ install_fake_source_chroot() {
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
 case "\${1:-}" in
   -l|--list)
-    echo "source:noble-\${TARGET_ARCH:-amd64}"
+    echo "source:noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     exit 0
     ;;
   *)
@@ -295,12 +335,12 @@ printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
 case "\${1:-}" in
   -l|--list)
     if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
-      echo "chroot:noble-\${TARGET_ARCH:-amd64}"
+      echo "chroot:noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     fi
     exit 0
     ;;
   -c)
-    if [[ -f "${AUTO_REPO}/chroot-created" && "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:-amd64}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+    if [[ -f "${AUTO_REPO}/chroot-created" && "\${1:-}" == "-c" && "\${2:-}" == "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
       exit 0
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -318,7 +358,7 @@ printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
 case "\${1:-}" in
   --list-chroots)
     if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
-      echo "noble-\${TARGET_ARCH:-amd64}"
+      echo "noble-\${TARGET_ARCH:?TARGET_ARCH not exported}"
     fi
     exit 0
     ;;
@@ -531,14 +571,14 @@ if [[ "\$*" != "noble-build" ]]; then
   exit 99
 fi
 /bin/mkdir -p \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/ocserv" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/repo"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/repo"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:-amd64}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:-amd64}/repo/Packages"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/repo/Packages"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -591,6 +631,18 @@ run_auto_isolated() {
   if [[ "${FAKE_DPKG_QUERY_INSTALLED+x}" == x ]]; then
     env_args+=("FAKE_DPKG_QUERY_INSTALLED=${FAKE_DPKG_QUERY_INSTALLED}")
   fi
+  if [[ "${FAKE_DPKG_ARCH+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_ARCH=${FAKE_DPKG_ARCH}")
+  fi
+  if [[ "${FAKE_DPKG_STATUS+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_STATUS=${FAKE_DPKG_STATUS}")
+  fi
+  if [[ "${FAKE_UNAME_M+x}" == x ]]; then
+    env_args+=("FAKE_UNAME_M=${FAKE_UNAME_M}")
+  fi
+  if [[ "${FAKE_UNAME_STATUS+x}" == x ]]; then
+    env_args+=("FAKE_UNAME_STATUS=${FAKE_UNAME_STATUS}")
+  fi
   if [[ "${NOBLE_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
     env_args+=("NOBLE_AUTO_BUILD_SKIP_NEWGRP=${NOBLE_AUTO_BUILD_SKIP_NEWGRP}")
   fi
@@ -622,6 +674,91 @@ run_auto_isolated() {
   else
     run env "${env_args[@]}" /bin/bash -c 'cd "$1" || exit; shift; /bin/bash scripts/noble-auto-build.sh "$@"' _ "${AUTO_REPO}" "$@"
   fi
+}
+
+run_noble_env_with_arch_tools() {
+  run env "PATH=${FAKEBIN}" "$@" /bin/bash -c '
+    cd "$1" || exit
+    shift
+    unset TARGET_ARCH
+    . scripts/noble-env.sh
+    printf "%s\t%s\t%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+  ' _ "${AUTO_REPO}"
+}
+
+@test "noble-env detects dpkg amd64 native architecture" {
+  install_minimal_valid_fakebin
+
+  run_noble_env_with_arch_tools FAKE_DPKG_ARCH=amd64
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'amd64\tamd64\tbuild/ubuntu/noble/amd64' ]
+}
+
+@test "noble-env detects dpkg arm64 native architecture" {
+  install_minimal_valid_fakebin
+
+  run_noble_env_with_arch_tools FAKE_DPKG_ARCH=arm64
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'arm64\tarm64\tbuild/ubuntu/noble/arm64' ]
+}
+
+@test "noble-env falls back to uname when dpkg fails" {
+  install_minimal_valid_fakebin
+
+  run_noble_env_with_arch_tools FAKE_DPKG_STATUS=1 FAKE_UNAME_M=aarch64
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'arm64\tarm64\tbuild/ubuntu/noble/arm64' ]
+}
+
+@test "noble-env falls back to uname when dpkg output is empty" {
+  install_minimal_valid_fakebin
+
+  run_noble_env_with_arch_tools FAKE_DPKG_ARCH= FAKE_UNAME_M=x86_64
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'amd64\tamd64\tbuild/ubuntu/noble/amd64' ]
+}
+
+@test "noble-env normalizes explicit architecture aliases" {
+  install_minimal_valid_fakebin
+
+  run env "PATH=${FAKEBIN}" FAKE_DPKG_ARCH=amd64 /bin/bash -c '
+    cd "$1" || exit
+    TARGET_ARCH=x86_64
+    . scripts/noble-env.sh
+    printf "first=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+    TARGET_ARCH=aarch64
+    . scripts/noble-env.sh
+    printf "second=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+  ' _ "${AUTO_REPO}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'first=amd64/amd64/build/ubuntu/noble/amd64\nsecond=arm64/amd64/build/ubuntu/noble/arm64' ]
+}
+
+@test "noble-env warns once for repeated non-native warning calls" {
+  install_minimal_valid_fakebin
+
+  run env "PATH=${FAKEBIN}" FAKE_DPKG_ARCH=amd64 /bin/bash -c '
+    cd "$1" || exit
+    TARGET_ARCH=aarch64
+    . scripts/noble-env.sh
+    warn_if_non_native_target
+    warn_if_non_native_target
+    TARGET_ARCH=x86_64
+    . scripts/noble-env.sh
+    warn_if_non_native_target
+    printf "final=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+  ' _ "${AUTO_REPO}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(grep -Fc -- "WARNING: TARGET_ARCH=arm64 differs from native architecture amd64." <<<"${output}")" = "1" ]
+  [[ "${output}" == *"This script does not set up cross-build, QEMU, or binfmt."* ]]
+  [[ "${output}" == *"Continuing with explicit TARGET_ARCH; build requires a matching native-capable chroot/runner."* ]]
+  [[ "${output}" == *"final=amd64/amd64/build/ubuntu/noble/amd64"* ]]
 }
 
 @test "noble-auto-build --help prints usage" {
@@ -659,8 +796,8 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   run bash -c "cd '${AUTO_REPO}' && TARGET_ARCH=riscv64 PATH='${FAKEBIN}:${PATH}' NOBLE_AUTO_BUILD_OS_RELEASE_PATH='${AUTO_REPO}/os-release' bash scripts/noble-auto-build.sh"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"unsupported TARGET_ARCH=riscv64"* ]]
-  [[ "${output}" == *"amd64, arm64"* ]]
+  [[ "${output}" == *"Unsupported TARGET_ARCH: riscv64"* ]]
+  [[ "${output}" == *"Supported architectures: amd64, arm64"* ]]
 }
 
 @test "noble-auto-build default mode reports missing core command without sudo side effects" {
@@ -1032,6 +1169,25 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 }
 
+@test "noble-auto-build auto-detects native arm64 and reports ports mirror for missing chroot" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_DPKG_ARCH=arm64 \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Ubuntu Noble target architecture: arm64"* ]]
+  [[ "${output}" == *"Ubuntu Noble native architecture: arm64"* ]]
+  [[ "${output}" != *"WARNING: TARGET_ARCH=arm64 differs from native architecture"* ]]
+  grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports" <<<"${output}"
+}
+
 @test "noble-auto-build rejects source-only sbuild chroot listing" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
@@ -1241,8 +1397,11 @@ run_auto_isolated() {
     run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"host architecture amd64 differs from TARGET_ARCH=arm64"* ]]
-  [[ "${output}" == *"native build is recommended"* ]]
+  [[ "${output}" == *"WARNING: TARGET_ARCH=arm64 differs from native architecture amd64."* ]]
+  [[ "${output}" == *"This script does not set up cross-build, QEMU, or binfmt."* ]]
+  [[ "${output}" == *"Continuing with explicit TARGET_ARCH; build requires a matching native-capable chroot/runner."* ]]
+  [[ "${output}" == *"Ubuntu Noble target architecture: arm64"* ]]
+  [[ "${output}" == *"Ubuntu Noble native architecture: amd64"* ]]
   grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports" <<<"${output}"
 }
 

@@ -46,6 +46,42 @@ setup_noble_repo() {
   done
   SYSTEM_MAKE="$(command -v make)"
   FAKEBIN="$(mktemp -d)"
+  install_fake_arch_commands
+}
+
+install_fake_arch_commands() {
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture)
+    if [[ "${FAKE_DPKG_STATUS:-0}" != "0" ]]; then
+      exit "${FAKE_DPKG_STATUS}"
+    fi
+    if [[ "${FAKE_DPKG_ARCH+x}" == x ]]; then
+      printf '%s\n' "${FAKE_DPKG_ARCH}"
+    else
+      printf 'amd64\n'
+    fi
+    ;;
+  *)
+    echo "unexpected dpkg command: $*" >&2
+    exit 99
+    ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m)
+    printf '%s\n' "${FAKE_UNAME_M:-x86_64}"
+    ;;
+  *)
+    echo "unexpected uname command: $*" >&2
+    exit 99
+    ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
 }
 
 install_fake_make() {
@@ -340,6 +376,18 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 '${SYSTEM_MAKE}' noble-build"
   [ "${status}" -eq 0 ]
   [ "$(cat "${NOBLE_REPO}/noble-build-target-arch")" = "arm64" ]
+}
+
+@test "make noble-build without TARGET_ARCH lets noble script auto-detect architecture" {
+  setup_noble_repo
+  install_fake_make
+
+  run bash -c "cd '${NOBLE_REPO}' && unset TARGET_ARCH && FAKE_DPKG_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' '${SYSTEM_MAKE}' noble-build"
+
+  [ "${status}" -eq 0 ]
+  vars="$(unique_make_env_rows)"
+  [ "${vars}" = $'7.3.0+dfsg1+~cs24.12.11-1\t7.3.0+dfsg1+~cs24.12.11-1\t1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
+  [[ "${vars}" != *$'\tnoble\t' ]]
 }
 
 @test "make noble-auto-build delegates to scripts/noble-auto-build.sh" {
@@ -664,7 +712,7 @@ field="${3:-}"
 case "${field}" in
   Package) printf '%s\n' "ocserv" ;;
   Version) printf '%s\n' "1.5.0-1~ubuntu24.04.1" ;;
-  Architecture) printf '%s\n' "${TARGET_ARCH:-amd64}" ;;
+  Architecture) printf '%s\n' "${TARGET_ARCH:?TARGET_ARCH not exported}" ;;
   Depends) printf '%s\n' "libc6, libllhttp9.2 (>= 7.3.0)" ;;
   *)
     echo "unexpected dpkg-deb command: $*" >&2
@@ -830,7 +878,7 @@ SH
 set -euo pipefail
 printf '%s\n' "\$@" > "${NOBLE_REPO}/sbuild-args"
 build_dir=""
-arch="\${TARGET_ARCH:-amd64}"
+arch="\${TARGET_ARCH:?TARGET_ARCH not exported}"
 prev=""
 for arg in "\$@"; do
   if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi
@@ -862,7 +910,7 @@ if [[ "${exit_status}" -ne 0 ]]; then
   exit "${exit_status}"
 fi
 build_dir=""
-arch="\${TARGET_ARCH:-amd64}"
+arch="\${TARGET_ARCH:?TARGET_ARCH not exported}"
 prev=""
 for arg in "\$@"; do
   if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi

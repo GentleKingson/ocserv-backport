@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/noble-env.sh
 . "${SCRIPT_DIR}/noble-env.sh"
+warn_if_non_native_target
 cd -- "${REPO_ROOT}"
 
 fail() {
