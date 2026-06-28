@@ -84,6 +84,9 @@ done
 
 [[ "$#" -eq 0 ]] || die "unexpected argument: $1"
 
+# shellcheck source=scripts/noble-env.sh
+. "${SCRIPT_DIR}/noble-env.sh"
+
 validate_noble_host() {
   local os_release_path="${NOBLE_AUTO_BUILD_OS_RELEASE_PATH:-/etc/os-release}"
   local ID="" VERSION_CODENAME="" UBUNTU_CODENAME=""
@@ -110,31 +113,6 @@ select_noble_mirror() {
       die "unsupported TARGET_ARCH=${TARGET_ARCH}; supported architectures: amd64, arm64"
       ;;
   esac
-}
-
-load_target_paths() {
-  TARGET_FAMILY="ubuntu"
-  TARGET_SUITE="noble"
-  # shellcheck source=scripts/_target_paths.sh
-  . "${SCRIPT_DIR}/_target_paths.sh"
-}
-
-warn_if_non_native_target_arch() {
-  local host_arch=""
-
-  if ! command -v dpkg >/dev/null 2>&1; then
-    log "host architecture unavailable: dpkg not found"
-    return 0
-  fi
-
-  if ! host_arch="$(dpkg --print-architecture 2>/dev/null)"; then
-    log "host architecture unavailable: dpkg --print-architecture failed"
-    return 0
-  fi
-
-  if [[ -n "${host_arch}" && "${host_arch}" != "${TARGET_ARCH}" ]]; then
-    log "warning: host architecture ${host_arch} differs from TARGET_ARCH=${TARGET_ARCH}; native build is recommended for Noble smoke validation"
-  fi
 }
 
 print_core_install_guidance() {
@@ -726,15 +704,16 @@ check_docker_default() {
   fi
 }
 
-TARGET_ARCH="${TARGET_ARCH:-amd64}"
-export TARGET_ARCH
-
 validate_noble_host
+
+log "Ubuntu Noble target architecture: ${TARGET_ARCH}"
+if [[ -n "${NOBLE_NATIVE_ARCH:-}" ]]; then
+  log "Ubuntu Noble native architecture: ${NOBLE_NATIVE_ARCH}"
+fi
+warn_if_non_native_target
 
 NOBLE_AUTO_BUILD_MIRROR="${NOBLE_AUTO_BUILD_MIRROR:-$(select_noble_mirror)}"
 export NOBLE_AUTO_BUILD_MIRROR
-load_target_paths
-warn_if_non_native_target_arch
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()

@@ -8,8 +8,86 @@ OCSERV_DEBIAN_VERSION="${OCSERV_DEBIAN_VERSION:-1.5.0-1}"
 OCSERV_NOBLE_VERSION="${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
 TARGET_FAMILY="${TARGET_FAMILY:-ubuntu}"
 TARGET_SUITE="${TARGET_SUITE:-${TARGET_DISTRIBUTION:-noble}}"
-TARGET_ARCH="${TARGET_ARCH:-amd64}"
 NOBLE_ENV_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+normalize_target_arch() {
+  case "$1" in
+    amd64|x86_64)
+      printf '%s\n' "amd64"
+      ;;
+    arm64|aarch64)
+      printf '%s\n' "arm64"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+detect_native_arch() {
+  local raw_arch=""
+
+  if command -v dpkg >/dev/null 2>&1; then
+    raw_arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  fi
+
+  if [[ -z "${raw_arch}" ]]; then
+    raw_arch="$(uname -m 2>/dev/null || true)"
+  fi
+
+  [[ -n "${raw_arch}" ]] || return 1
+  normalize_target_arch "${raw_arch}"
+}
+
+resolve_target_arch() {
+  local requested_arch="${TARGET_ARCH:-}"
+  local resolved_arch=""
+
+  NOBLE_NATIVE_ARCH="$(detect_native_arch || true)"
+  export NOBLE_NATIVE_ARCH
+
+  if [[ -n "${requested_arch}" ]]; then
+    if ! resolved_arch="$(normalize_target_arch "${requested_arch}")"; then
+      printf 'Unsupported TARGET_ARCH: %s\n' "${requested_arch}" >&2
+      printf 'Supported architectures: amd64, arm64\n' >&2
+      exit 1
+    fi
+  else
+    if [[ -z "${NOBLE_NATIVE_ARCH}" ]]; then
+      printf 'Unable to detect supported native architecture\n' >&2
+      printf 'Supported architectures: amd64, arm64\n' >&2
+      exit 1
+    fi
+    resolved_arch="${NOBLE_NATIVE_ARCH}"
+  fi
+
+  TARGET_ARCH="${resolved_arch}"
+  export TARGET_ARCH
+}
+
+warn_if_non_native_target() {
+  if [[ -z "${NOBLE_NATIVE_ARCH:-}" || -z "${TARGET_ARCH:-}" ]]; then
+    return 0
+  fi
+
+  if [[ "${TARGET_ARCH}" == "${NOBLE_NATIVE_ARCH}" ]]; then
+    return 0
+  fi
+
+  if [[ "${NOBLE_NON_NATIVE_WARNING_PRINTED:-0}" == 1 ]]; then
+    return 0
+  fi
+
+  printf 'WARNING: TARGET_ARCH=%s differs from native architecture %s.\n' \
+    "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" >&2
+  printf 'This script does not set up cross-build, QEMU, or binfmt.\n' >&2
+  printf 'Continuing with explicit TARGET_ARCH; build requires a matching native-capable chroot/runner.\n' >&2
+  NOBLE_NON_NATIVE_WARNING_PRINTED=1
+  export NOBLE_NON_NATIVE_WARNING_PRINTED
+}
+
+resolve_target_arch
+
 # shellcheck source=scripts/_target_paths.sh
 . "${NOBLE_ENV_DIR}/_target_paths.sh"
 TARGET_DISTRIBUTION="${TARGET_SUITE}"
