@@ -80,10 +80,61 @@ jobs:
           target_root="build/ubuntu/noble/${TARGET_ARCH}"
           staged_root="${staging}/${target_root}"
           rm -rf "${staging}"
-          mkdir -p "${staged_root}"
-          cp -a "${target_root}/source" "${staged_root}/"
-          cp -a "${target_root}/binary" "${staged_root}/"
-          cp -a "${target_root}/repo" "${staged_root}/"
+          mkdir -p \
+            "${staged_root}/source/node-undici" \
+            "${staged_root}/source/ocserv" \
+            "${staged_root}/binary/node-undici" \
+            "${staged_root}/binary/ocserv" \
+            "${staged_root}/repo"
+          find "${target_root}/source/node-undici" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*.dsc' \
+              -o -name '*.debian.tar.*' \
+              -o -name '*.orig.tar.*' \
+              -o -name '*_source.changes' \
+              -o -name '*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/node-undici/" \;
+          find "${target_root}/source/ocserv" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*.dsc' \
+              -o -name '*.debian.tar.*' \
+              -o -name '*.orig.tar.*' \
+              -o -name '*_source.changes' \
+              -o -name '*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/ocserv/" \;
+          find "${target_root}/binary/node-undici" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*.deb' \
+              -o -name '*.changes' \
+              -o -name '*.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/binary/node-undici/" \;
+          find "${target_root}/binary/ocserv" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*.deb' \
+              -o -name '*.changes' \
+              -o -name '*.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/binary/ocserv/" \;
+          find "${target_root}/repo" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name '*.deb' \
+              -o -name 'Packages' \
+              -o -name 'Packages.gz' \
+            \) \
+            -exec cp -- {} "${staged_root}/repo/" \;
 
       - name: Upload Ubuntu Noble artifacts
         if: success()

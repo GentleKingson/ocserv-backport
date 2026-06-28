@@ -80,9 +80,27 @@ jobs:
           target_root="build/debian/trixie/${TARGET_ARCH}"
           staged_root="${staging}/${target_root}"
           rm -rf "${staging}"
-          mkdir -p "${staged_root}"
-          cp -a "${target_root}/source" "${staged_root}/"
-          cp -a "${target_root}/binary" "${staged_root}/"
+          mkdir -p "${staged_root}/source" "${staged_root}/binary"
+          find "${target_root}/source" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.dsc' \
+              -o -name 'ocserv_*.debian.tar.*' \
+              -o -name 'ocserv_*.orig.tar.*' \
+              -o -name 'ocserv_*_source.changes' \
+              -o -name 'ocserv_*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/" \;
+          find "${target_root}/binary" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.deb' \
+              -o -name 'ocserv_*.changes' \
+              -o -name 'ocserv_*.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/binary/" \;
 
       - name: Upload Debian Trixie artifacts
         if: success()

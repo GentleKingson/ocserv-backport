@@ -58,8 +58,18 @@ jobs:
           target_source="build/debian/trixie/${TARGET_ARCH}/source"
           staged_root="${staging}/build/debian/trixie/${TARGET_ARCH}"
           rm -rf "${staging}"
-          mkdir -p "${staged_root}"
-          cp -a "${target_source}" "${staged_root}/"
+          mkdir -p "${staged_root}/source"
+          find "${target_source}" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.dsc' \
+              -o -name 'ocserv_*.debian.tar.*' \
+              -o -name 'ocserv_*.orig.tar.*' \
+              -o -name 'ocserv_*_source.changes' \
+              -o -name 'ocserv_*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/" \;
 
       - name: Upload source package artifacts
         uses: actions/upload-artifact@v6
