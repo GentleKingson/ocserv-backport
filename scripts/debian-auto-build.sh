@@ -10,8 +10,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 CORE_PACKAGES=(
   git curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper
-  debian-keyring sbuild schroot debootstrap lintian python3 python3-yaml
-  bats shellcheck make
+  debian-keyring sbuild schroot debootstrap lintian libdistro-info-perl
+  python3 python3-yaml bats shellcheck make
 )
 
 CORE_COMMANDS=(
