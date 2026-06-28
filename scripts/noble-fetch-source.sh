@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch a locked Debian source package into build/noble/${TARGET_ARCH}/source/.
+# Fetch a locked Debian source package into the Noble target source dir.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

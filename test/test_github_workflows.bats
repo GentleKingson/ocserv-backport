@@ -16,6 +16,18 @@ setup() {
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
   grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
   grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
+  grep -Fq -- "Stage Ubuntu Noble artifacts" "${workflow}"
+  grep -Fq -- 'staging="${RUNNER_TEMP}/ubuntu-noble-artifacts"' "${workflow}"
+  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
+  grep -Fq -- 'build/ubuntu/noble/${TARGET_ARCH}' "${workflow}"
+  grep -Fq -- 'find "${target_root}/source/node-undici"' "${workflow}"
+  grep -Fq -- 'find "${target_root}/source/ocserv"' "${workflow}"
+  grep -Fq -- 'find "${target_root}/binary/node-undici"' "${workflow}"
+  grep -Fq -- 'find "${target_root}/binary/ocserv"' "${workflow}"
+  grep -Fq -- 'find "${target_root}/repo"' "${workflow}"
+  ! grep -Fq -- 'cp -a "${target_root}/source"' "${workflow}"
+  ! grep -Fq -- 'cp -a "${target_root}/binary"' "${workflow}"
+  grep -Fq -- '${{ runner.temp }}/ubuntu-noble-artifacts/**' "${workflow}"
   grep -Fq -- "ubuntu-noble-build-amd64" "${workflow}"
   grep -Fq -- "ubuntu-noble-build-logs-amd64" "${workflow}"
   grep -Fq -- "actions/checkout@v6" "${workflow}"
@@ -38,6 +50,15 @@ setup() {
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
   grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
   grep -Fq -- "./scripts/debian-auto-build.sh --provision" "${workflow}"
+  grep -Fq -- "Stage Debian Trixie artifacts" "${workflow}"
+  grep -Fq -- 'staging="${RUNNER_TEMP}/debian-trixie-artifacts"' "${workflow}"
+  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
+  grep -Fq -- 'build/debian/trixie/${TARGET_ARCH}' "${workflow}"
+  grep -Fq -- 'find "${target_root}/source"' "${workflow}"
+  grep -Fq -- 'find "${target_root}/binary"' "${workflow}"
+  ! grep -Fq -- 'cp -a "${target_root}/source"' "${workflow}"
+  ! grep -Fq -- 'cp -a "${target_root}/binary"' "${workflow}"
+  grep -Fq -- '${{ runner.temp }}/debian-trixie-artifacts/**' "${workflow}"
   grep -Fq -- "debian-trixie-build-amd64" "${workflow}"
   grep -Fq -- "debian-trixie-build-logs-amd64" "${workflow}"
   grep -Fq -- "actions/checkout@v6" "${workflow}"
@@ -105,7 +126,9 @@ PY
   grep -Fq -- "noble-upload-logs" "${workflow}"
   grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
   grep -Fq -- '${{ runner.temp }}/noble-upload-logs/**' "${workflow}"
+  grep -Fq -- "find build/ubuntu/noble" "${workflow}"
   ! grep -Fq -- "build/noble/**/*.build" "${workflow}"
+  ! grep -Fq -- "find build/noble" "${workflow}"
 }
 
 @test "manual Debian Trixie build workflow conditionally frees runner disk space" {
@@ -126,7 +149,22 @@ PY
   grep -Fq -- 'upload_dir="${RUNNER_TEMP}/debian-trixie-upload-logs"' "${workflow}"
   grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
   grep -Fq -- '${{ runner.temp }}/debian-trixie-upload-logs/**' "${workflow}"
+  grep -Fq -- "find build/debian/trixie" "${workflow}"
   ! grep -Fq -- "build/**/*.build" "${workflow}"
+}
+
+@test "source CI workflow uploads staged Debian source artifacts from new layout" {
+  workflow=".github/workflows/source-ci.yml"
+
+  grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
+  grep -Fq -- "Stage source package artifacts" "${workflow}"
+  grep -Fq -- 'staging="${RUNNER_TEMP}/source-package-artifacts"' "${workflow}"
+  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
+  grep -Fq -- 'build/debian/trixie/${TARGET_ARCH}/source' "${workflow}"
+  grep -Fq -- 'find "${target_source}"' "${workflow}"
+  ! grep -Fq -- 'cp -a "${target_source}"' "${workflow}"
+  grep -Fq -- '${{ runner.temp }}/source-package-artifacts/**' "${workflow}"
+  ! grep -Fq -- "build/source/ocserv_" "${workflow}"
 }
 
 @test "primary CI watches every GitHub workflow file" {

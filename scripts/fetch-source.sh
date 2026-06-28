@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch the locked ocserv sid source from Debian pool into build/source/.
+# Fetch the locked ocserv sid source from Debian pool into the target source dir.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,8 +13,12 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dscverify.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-BUILD_ROOT="${REPO_ROOT}/build"
-SOURCE_ROOT="${BUILD_ROOT}/source"
+TARGET_FAMILY="${TARGET_FAMILY:-debian}"
+TARGET_SUITE="${TARGET_SUITE:-trixie}"
+TARGET_ARCH="${TARGET_ARCH:-amd64}"
+# shellcheck source=scripts/_target_paths.sh
+. "${SCRIPT_DIR}/_target_paths.sh"
+SOURCE_ROOT="${TARGET_SOURCE_ROOT}"
 UPSTREAM_VERSION="1.5.0"
 SOURCE_VERSION="1.5.0-1"
 LOCK_TSV="${REPO_ROOT}/source-lock/ocserv/${SOURCE_VERSION}.lock.tsv"
@@ -99,8 +103,8 @@ main() {
   verify_source_lock_unless_internal_skip
   read_lock_tsv "${LOCK_TSV}" "${SOURCE_VERSION}"
 
-  mkdir -p "${BUILD_ROOT}"
-  TMP_ROOT="$(mktemp -d "${BUILD_ROOT}/.fetch-tmp.XXXXXX")"
+  mkdir -p "${TARGET_BUILD_ROOT}"
+  TMP_ROOT="$(mktemp -d "${TARGET_BUILD_ROOT}/.fetch-tmp.XXXXXX")"
   trap cleanup_fetch_tmp EXIT
   local staging="${TMP_ROOT}/staging"
   mkdir -p "${staging}"

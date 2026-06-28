@@ -72,21 +72,43 @@ jobs:
             | sudo --preserve-env=TARGET_ARCH \
               ./scripts/debian-auto-build.sh --provision
 
+      - name: Stage Debian Trixie artifacts
+        if: success()
+        run: |
+          set -euo pipefail
+          staging="${RUNNER_TEMP}/debian-trixie-artifacts"
+          target_root="build/debian/trixie/${TARGET_ARCH}"
+          staged_root="${staging}/${target_root}"
+          rm -rf "${staging}"
+          mkdir -p "${staged_root}/source" "${staged_root}/binary"
+          find "${target_root}/source" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.dsc' \
+              -o -name 'ocserv_*.debian.tar.*' \
+              -o -name 'ocserv_*.orig.tar.*' \
+              -o -name 'ocserv_*_source.changes' \
+              -o -name 'ocserv_*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/" \;
+          find "${target_root}/binary" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.deb' \
+              -o -name 'ocserv_*.changes' \
+              -o -name 'ocserv_*.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/binary/" \;
+
       - name: Upload Debian Trixie artifacts
         if: success()
         uses: actions/upload-artifact@v6
         with:
           name: debian-trixie-build-amd64
           if-no-files-found: error
-          path: |
-            build/source/ocserv_*.dsc
-            build/source/ocserv_*.debian.tar.*
-            build/source/ocserv_*.orig.tar.*
-            build/source/ocserv_*_source.changes
-            build/source/ocserv_*_source.buildinfo
-            build/binary/ocserv_*.deb
-            build/binary/ocserv_*.changes
-            build/binary/ocserv_*.buildinfo
+          path: ${{ runner.temp }}/debian-trixie-artifacts/**
 
       - name: Prepare Debian Trixie build logs
         if: failure()
@@ -101,7 +123,7 @@ jobs:
             mkdir -p "${upload_dir}/$(dirname -- "${safe_name}")"
             cp -- "${log_path}" "${upload_dir}/${safe_name}"
           done < <(
-            find build \
+            find build/debian/trixie \
               -type f \
               \( -name '*.build' -o -name '*.buildlog' -o -name '*.log' \) \
               -print0 2>/dev/null || true

@@ -12,6 +12,8 @@ permissions:
 jobs:
   source-package:
     runs-on: ubuntu-latest
+    env:
+      TARGET_ARCH: amd64
     container:
       image: debian:trixie
 
@@ -49,14 +51,29 @@ jobs:
       - name: Build source package
         run: make source-ci
 
+      - name: Stage source package artifacts
+        run: |
+          set -euo pipefail
+          staging="${RUNNER_TEMP}/source-package-artifacts"
+          target_source="build/debian/trixie/${TARGET_ARCH}/source"
+          staged_root="${staging}/build/debian/trixie/${TARGET_ARCH}"
+          rm -rf "${staging}"
+          mkdir -p "${staged_root}/source"
+          find "${target_source}" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name 'ocserv_*.dsc' \
+              -o -name 'ocserv_*.debian.tar.*' \
+              -o -name 'ocserv_*.orig.tar.*' \
+              -o -name 'ocserv_*_source.changes' \
+              -o -name 'ocserv_*_source.buildinfo' \
+            \) \
+            -exec cp -- {} "${staged_root}/source/" \;
+
       - name: Upload source package artifacts
         uses: actions/upload-artifact@v6
         with:
           name: ocserv-source-package
           if-no-files-found: error
-          path: |
-            build/source/ocserv_*.dsc
-            build/source/ocserv_*.debian.tar.*
-            build/source/ocserv_*.orig.tar.*
-            build/source/ocserv_*_source.changes
-            build/source/ocserv_*_source.buildinfo
+          path: ${{ runner.temp }}/source-package-artifacts/**

@@ -112,6 +112,13 @@ select_noble_mirror() {
   esac
 }
 
+load_target_paths() {
+  TARGET_FAMILY="ubuntu"
+  TARGET_SUITE="noble"
+  # shellcheck source=scripts/_target_paths.sh
+  . "${SCRIPT_DIR}/_target_paths.sh"
+}
+
 print_core_install_guidance() {
   local apt_prefix=""
 
@@ -177,7 +184,7 @@ check_debian_dscverify_keyrings() {
 }
 
 debian_dscverify_keyring_root() {
-  printf '%s\n' "${NOBLE_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${REPO_ROOT}/build/noble/${TARGET_ARCH}/debian-keyrings}"
+  printf '%s\n' "${NOBLE_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${TARGET_DEBIAN_KEYRING_DIR}}"
 }
 
 refresh_debian_dscverify_keyrings() {
@@ -577,7 +584,7 @@ run_noble_build() {
 }
 
 print_noble_artifacts() {
-  local build_root="${REPO_ROOT}/build/noble/${TARGET_ARCH}"
+  local build_root="${TARGET_BUILD_ROOT}"
   local artifact pattern
   local artifacts=()
   local matches=()
@@ -708,6 +715,7 @@ validate_noble_host
 
 NOBLE_AUTO_BUILD_MIRROR="${NOBLE_AUTO_BUILD_MIRROR:-$(select_noble_mirror)}"
 export NOBLE_AUTO_BUILD_MIRROR
+load_target_paths
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()

@@ -19,6 +19,7 @@ setup_entrypoint_repo() {
   ENTRY_REPO="$(mktemp -d)"
   mkdir -p "${ENTRY_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${ENTRY_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${ENTRY_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/dry-run.sh" "${ENTRY_REPO}/scripts/dry-run.sh"
   cp "${REPO_ROOT}/Makefile" "${ENTRY_REPO}/Makefile"
   if [[ -f "${REPO_ROOT}/scripts/build.sh" ]]; then
@@ -155,16 +156,28 @@ assert_status() {
 
 @test "build verifies lock before cleaning old artifacts" {
   setup_entrypoint_repo
-  mkdir -p "${ENTRY_REPO}/build/source" "${ENTRY_REPO}/build/binary"
-  printf 'old source\n' > "${ENTRY_REPO}/build/source/marker"
-  printf 'old binary\n' > "${ENTRY_REPO}/build/binary/marker"
+  mkdir -p "${ENTRY_REPO}/build/debian/trixie/amd64/source" "${ENTRY_REPO}/build/debian/trixie/amd64/binary"
+  printf 'old source\n' > "${ENTRY_REPO}/build/debian/trixie/amd64/source/marker"
+  printf 'old binary\n' > "${ENTRY_REPO}/build/debian/trixie/amd64/binary/marker"
   install_fake_make verify-lock
   run_build_direct
   assert_status 1
-  source_marker="$([ -f "${ENTRY_REPO}/build/source/marker" ] && echo yes || echo no)"
-  binary_marker="$([ -f "${ENTRY_REPO}/build/binary/marker" ] && echo yes || echo no)"
+  source_marker="$([ -f "${ENTRY_REPO}/build/debian/trixie/amd64/source/marker" ] && echo yes || echo no)"
+  binary_marker="$([ -f "${ENTRY_REPO}/build/debian/trixie/amd64/binary/marker" ] && echo yes || echo no)"
   [ "${source_marker}" = "yes" ]
   [ "${binary_marker}" = "yes" ]
+}
+
+@test "build ignores legacy build source and binary sentinels" {
+  setup_entrypoint_repo
+  mkdir -p "${ENTRY_REPO}/build/source" "${ENTRY_REPO}/build/binary"
+  printf 'legacy source sentinel\n' > "${ENTRY_REPO}/build/source/SENTINEL_OLD_PATH"
+  printf 'legacy binary sentinel\n' > "${ENTRY_REPO}/build/binary/SENTINEL_OLD_PATH"
+  install_fake_make
+  run_build_direct
+  assert_status 0
+  [ "$(cat "${ENTRY_REPO}/build/source/SENTINEL_OLD_PATH")" = "legacy source sentinel" ]
+  [ "$(cat "${ENTRY_REPO}/build/binary/SENTINEL_OLD_PATH")" = "legacy binary sentinel" ]
 }
 
 @test "build exports the default local backport version when run directly" {

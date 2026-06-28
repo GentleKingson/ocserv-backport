@@ -5,13 +5,19 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_common.sh"
 
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-TARGET_DISTRIBUTION="trixie"
-TARGET_ARCH="amd64"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-DSC="${REPO_ROOT}/build/source/ocserv_${BACKPORT_VERSION}.dsc"
+TARGET_FAMILY="${TARGET_FAMILY:-debian}"
+TARGET_SUITE="${TARGET_SUITE:-trixie}"
+TARGET_ARCH="${TARGET_ARCH:-amd64}"
+# shellcheck source=scripts/_target_paths.sh
+. "${SCRIPT_DIR}/_target_paths.sh"
+TARGET_DISTRIBUTION="${TARGET_SUITE}"
+[[ "${TARGET_ARCH}" == "amd64" ]] || die "unsupported TARGET_ARCH=${TARGET_ARCH}; supported architectures: amd64"
+
+DSC="${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run 'make src-pkg' first)"
-mkdir -p "${REPO_ROOT}/build/binary"
-BUILD_DIR="$(cd -- "${REPO_ROOT}/build/binary" && pwd)"
+mkdir -p "${TARGET_BINARY_ROOT}"
+BUILD_DIR="$(cd -- "${TARGET_BINARY_ROOT}" && pwd)"
 rm -f -- "${BUILD_DIR}/ocserv_${BACKPORT_VERSION}_${TARGET_ARCH}".*
 
 sbuild \

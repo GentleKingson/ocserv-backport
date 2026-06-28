@@ -19,6 +19,7 @@ setup_noble_repo() {
   NOBLE_REPO="$(mktemp -d)"
   mkdir -p "${NOBLE_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_paths.sh" "${NOBLE_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dsc.sh" "${NOBLE_REPO}/scripts/_dsc.sh"
   if [[ -f "${REPO_ROOT}/scripts/_noble_sbuild.sh" ]]; then
     cp "${REPO_ROOT}/scripts/_noble_sbuild.sh" "${NOBLE_REPO}/scripts/_noble_sbuild.sh"
@@ -142,7 +143,7 @@ SH
 create_noble_source_tree() {
   local package="$1"
   local version="$2"
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${version}"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/${package}/${package}-${version}"
 }
 
 create_noble_rewrap_source_tree() {
@@ -150,7 +151,7 @@ create_noble_rewrap_source_tree() {
   local upstream_version="$2"
   local debian_version="$3"
   local distribution="${4:-unstable}"
-  local source_tree="${NOBLE_REPO}/build/noble/amd64/source/${package}/${package}-${upstream_version}"
+  local source_tree="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/${package}/${package}-${upstream_version}"
 
   mkdir -p "${source_tree}/debian"
   cat > "${source_tree}/debian/rules" <<'EOF'
@@ -362,7 +363,7 @@ SH
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
 
   [ "${status}" -eq 0 ]
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   [ -f "${rules_file}" ]
   # New marker present exactly once (idempotency across rewrap runs).
   grep -Fq -- "before dh-nodejs configure" "${rules_file}"
@@ -378,7 +379,7 @@ SH
   [ "$(grep -Fc -- "before dh-nodejs configure" "${rules_file}")" = "1" ]
 
   # Simulate the binary-build configure hook on the rewrapped source tree.
-  source_tree="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
+  source_tree="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
   run bash -c "cd '${source_tree}' && make -f debian/rules execute_before_dh_auto_configure"
   [ "${status}" -eq 0 ]
   # paths injected with the expected mapping; no baseUrl; no marker field.
@@ -395,7 +396,7 @@ SH
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
 
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   # Seed the exact legacy block produced by commit dcb7443.
   cat >> "${rules_file}" <<'LEGACY'
 
@@ -433,7 +434,7 @@ LEGACY
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
 
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   # Seed the first tsconfig-paths hook variant: it had the final marker, but
   # only injected llparse-builder/tsconfig.json.
   cat >> "${rules_file}" <<'LEGACY'
@@ -452,7 +453,7 @@ LEGACY
   grep -Fq -- 'readdirSync(".")' "${rules_file}"
   ! grep -Fq -- 'p="llparse-builder/tsconfig.json"' "${rules_file}"
 
-  source_tree="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
+  source_tree="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11"
   run bash -c "cd '${source_tree}' && make -f debian/rules execute_before_dh_auto_configure"
   [ "${status}" -eq 0 ]
   for component in fastify-busboy llhttp llparse llparse-builder llparse-frontend; do
@@ -466,7 +467,7 @@ LEGACY
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
 
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   # Seed the configure-only block produced by commit ddec814 (no tsconfig paths).
   cat >> "${rules_file}" <<'LEGACY'
 
@@ -499,7 +500,7 @@ LEGACY
   install_fake_rewrap_commands
   create_noble_rewrap_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11" "7.3.0+dfsg1+~cs24.12.11-1"
 
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/rules"
   # Seed BOTH legacy blocks (a tree rewrapped at dcb7443 then again at ddec814).
   cat >> "${rules_file}" <<'LEGACY'
 
@@ -536,7 +537,7 @@ LEGACY
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
 
   [ "${status}" -eq 0 ]
-  changelog="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/changelog"
+  changelog="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/changelog"
   [ "$(head -n1 "${changelog}")" = "node-undici (7.3.0+dfsg1+~cs24.12.11-1) noble; urgency=medium" ]
 }
 
@@ -559,7 +560,7 @@ LEGACY
   run bash -c "cd '${NOBLE_REPO}' && NODE_UNDICI_NOBLE_VERSION='7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh node-undici"
 
   [ "${status}" -eq 0 ]
-  changelog="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/changelog"
+  changelog="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici-7.3.0+dfsg1+~cs24.12.11/debian/changelog"
   [ "$(head -n1 "${changelog}")" = "node-undici (7.3.0+dfsg1+~cs24.12.11-1~ubuntu24.04.1) noble; urgency=medium" ]
   grep -Fq -- "node-undici (7.3.0+dfsg1+~cs24.12.11-1) unstable; urgency=medium" "${changelog}"
 }
@@ -583,7 +584,7 @@ LEGACY
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
 
   [ "${status}" -eq 0 ]
-  rules_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/rules"
+  rules_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv-1.5.0/debian/rules"
   ! grep -Fq -- "execute_before_dh_auto_configure::" "${rules_file}"
   ! grep -Fq -- "undici-types" "${rules_file}"
 }
@@ -596,7 +597,7 @@ LEGACY
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
 
   [ "${status}" -eq 0 ]
-  control_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/control"
+  control_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv-1.5.0/debian/control"
   grep -Fq -- "libcjose-dev," "${control_file}"
   grep -Fq -- "libssl-dev," "${control_file}"
 }
@@ -609,7 +610,7 @@ LEGACY
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
 
   [ "${status}" -eq 0 ]
-  sysusers_file="${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv-1.5.0/debian/ocserv.sysusers"
+  sysusers_file="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv-1.5.0/debian/ocserv.sysusers"
   grep -Fq -- 'u ocserv - "OpenConnect VPN server" /run/ocserv' "${sysusers_file}"
   ! grep -Fq -- "u!" "${sysusers_file}"
 }
@@ -618,7 +619,7 @@ LEGACY
   setup_noble_repo
   install_fake_source_package_commands 1 0
   create_noble_source_tree node-undici "7.3.0+dfsg1+~cs24.12.11"
-  old_artifact="${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.old"
+  old_artifact="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.old"
   : > "${old_artifact}"
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh node-undici"
@@ -652,7 +653,7 @@ LEGACY
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "dpkg-buildpackage -S -d -us -uc" "${NOBLE_REPO}/dpkg-buildpackage-calls"
-  [ -f "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc" ]
 }
 
 install_fake_smoke_tools() {
@@ -688,10 +689,10 @@ SH
 @test "noble-smoke-basic honors NOBLE_DOCKER_CMD override" {
   setup_noble_repo
   install_fake_smoke_tools
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/ocserv"
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/repo"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
-  touch "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
 
@@ -727,27 +728,27 @@ SH
 @test "noble-repo copies only libllhttp runtime and development debs" {
   setup_noble_repo
   install_fake_dpkg_scanpackages
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/node-undici"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/node-undici_7.3.0_all.deb"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/node-llhttp_7.3.0_all.deb"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/node-undici_7.3.0_all.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/node-llhttp_7.3.0_all.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
   [ "${status}" -eq 0 ]
-  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb" ]
-  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb" ]
-  [ ! -e "${NOBLE_REPO}/build/noble/amd64/repo/node-undici_7.3.0_all.deb" ]
-  [ ! -e "${NOBLE_REPO}/build/noble/amd64/repo/node-llhttp_7.3.0_all.deb" ]
-  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/Packages" ]
-  [ -f "${NOBLE_REPO}/build/noble/amd64/repo/Packages.gz" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb" ]
+  [ ! -e "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/node-undici_7.3.0_all.deb" ]
+  [ ! -e "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/node-llhttp_7.3.0_all.deb" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/Packages" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/Packages.gz" ]
 }
 
 @test "noble-repo rejects missing libllhttp runtime or development debs" {
   setup_noble_repo
   install_fake_dpkg_scanpackages
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/binary/node-undici"
-  touch "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
   [ "${status}" -ne 0 ]
@@ -757,15 +758,15 @@ SH
 @test "noble-repo uses TARGET_ARCH-specific build and repo paths" {
   setup_noble_repo
   install_fake_dpkg_scanpackages
-  mkdir -p "${NOBLE_REPO}/build/noble/arm64/binary/node-undici"
-  touch "${NOBLE_REPO}/build/noble/arm64/binary/node-undici/libllhttp9.2_7.3.0_arm64.deb"
-  touch "${NOBLE_REPO}/build/noble/arm64/binary/node-undici/libllhttp-dev_7.3.0_arm64.deb"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/binary/node-undici"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/binary/node-undici/libllhttp9.2_7.3.0_arm64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/binary/node-undici/libllhttp-dev_7.3.0_arm64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-repo.sh"
   [ "${status}" -eq 0 ]
-  [ -f "${NOBLE_REPO}/build/noble/arm64/repo/libllhttp9.2_7.3.0_arm64.deb" ]
-  [ -f "${NOBLE_REPO}/build/noble/arm64/repo/libllhttp-dev_7.3.0_arm64.deb" ]
-  [ ! -d "${NOBLE_REPO}/build/noble/amd64/repo" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp9.2_7.3.0_arm64.deb" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp-dev_7.3.0_arm64.deb" ]
+  [ ! -d "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo" ]
 }
 
 install_fake_http_python_and_sbuild() {
@@ -878,15 +879,15 @@ SH
 }
 
 create_node_undici_dsc() {
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/node-undici"
-  touch "${NOBLE_REPO}/build/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/node-undici/node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc"
 }
 
 create_ocserv_dsc_and_repo() {
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/source/ocserv"
-  mkdir -p "${NOBLE_REPO}/build/noble/amd64/repo"
-  touch "${NOBLE_REPO}/build/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
-  touch "${NOBLE_REPO}/build/noble/amd64/repo/Packages"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/Packages"
 }
 
 assert_sbuild_common_args() {
@@ -923,7 +924,7 @@ assert_sbuild_common_args() {
   fi
   assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args"
   grep -Fq -- "node-undici_7.3.0+dfsg1+~cs24.12.11-1.dsc" "${NOBLE_REPO}/sbuild-args"
-  [ -f "${NOBLE_REPO}/build/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0+dfsg1+~cs24.12.11-1_amd64.deb" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0+dfsg1+~cs24.12.11-1_amd64.deb" ]
 }
 
 @test "noble-binary-node-undici prints original sbuild output on failure" {
@@ -994,10 +995,10 @@ assert_sbuild_common_args() {
 @test "noble-binary-ocserv injects a temporary localhost HTTP repo and cleans it up" {
   setup_noble_repo
   install_fake_http_python_and_sbuild
-  mkdir -p "${NOBLE_REPO}/build/noble/arm64/source/ocserv"
-  mkdir -p "${NOBLE_REPO}/build/noble/arm64/repo"
-  touch "${NOBLE_REPO}/build/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
-  touch "${NOBLE_REPO}/build/noble/arm64/repo/Packages"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv"
+  mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/Packages"
 
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
   [ "${status}" -eq 0 ]

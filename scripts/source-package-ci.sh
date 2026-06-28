@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+TARGET_FAMILY="${TARGET_FAMILY:-debian}"
+TARGET_SUITE="${TARGET_SUITE:-trixie}"
+TARGET_ARCH="${TARGET_ARCH:-amd64}"
+# shellcheck source=scripts/_target_paths.sh
+. "${SCRIPT_DIR}/_target_paths.sh"
 cd -- "${REPO_ROOT}"
 
 OCSERV_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
@@ -27,7 +32,7 @@ run_stage() {
 
 run_stage 1 verify-lock
 
-rm -rf -- "${REPO_ROOT}/build/source"
+rm -rf -- "${TARGET_SOURCE_ROOT}"
 
 run_stage 2 fetch
 run_stage 3 rewrap
