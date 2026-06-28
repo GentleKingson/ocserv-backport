@@ -1405,7 +1405,7 @@ run_noble_env_with_arch_tools() {
   grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-arm64 http://ports.ubuntu.com/ubuntu-ports" <<<"${output}"
 }
 
-@test "noble-auto-build architecture diagnostic tolerates dpkg failure" {
+@test "noble-auto-build falls back to uname when dpkg architecture lookup fails" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1424,8 +1424,8 @@ SH
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"host architecture unavailable"* ]]
-  [[ "${output}" == *"dpkg --print-architecture failed"* ]]
+  [[ "${output}" == *"Ubuntu Noble target architecture: amd64"* ]]
+  [[ "${output}" == *"Ubuntu Noble native architecture: amd64"* ]]
   grep -Fq -- "Missing sbuild chroot: noble-amd64" <<<"${output}"
 }
 
