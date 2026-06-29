@@ -19,6 +19,13 @@ Noble sbuild chroot 需要已经可用。
 
 ## 自动构建
 
+如果还没有仓库，先克隆并进入仓库目录：
+
+```bash
+git clone https://github.com/GentleKingson/ocserv-backport.git
+cd ocserv-backport
+```
+
 如果环境已经准备好，运行默认检查并构建：
 
 ```bash
