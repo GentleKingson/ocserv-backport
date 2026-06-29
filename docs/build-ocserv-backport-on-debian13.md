@@ -19,7 +19,7 @@
 
 需要能访问 Debian mirror 和 GitHub。
 
-完整本地构建会使用 sbuild、schroot、lintian 和 Docker。
+完整本地构建会使用 sbuild、schroot、lintian 和 Docker CE。
 
 ## 安装工具
 
@@ -36,8 +36,30 @@ sudo apt install -y --no-install-recommends \
   git ca-certificates curl gnupg \
   build-essential fakeroot devscripts dpkg-dev \
   debian-archive-keyring debian-keyring debian-maintainers \
-  sbuild schroot debootstrap lintian libdistro-info-perl docker.io \
+  sbuild schroot debootstrap lintian libdistro-info-perl \
   python3 python3-yaml bats shellcheck
+```
+
+安装 Docker CE：
+
+```bash
+sudo apt remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc || true
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+cat <<EOF | sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: trixie
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+Architectures: $(dpkg --print-architecture)
+EOF
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
 ```
 
 ## 只有 root 用户时创建构建用户
@@ -72,13 +94,16 @@ su - builder
 sudo sbuild-adduser "$USER"
 ```
 
-把当前用户加入 `docker` 组：
+默认无参数模式会直接运行 `docker`。如果手动构建需要让普通用户直接运行
+`docker info` 或 `docker run`，把当前用户加入 `docker` 组：
 
 ```bash
 sudo usermod -aG docker "$USER"
 ```
 
-完整执行 `make build` 前，重新登录，让 `sbuild` 和 `docker` 组权限生效。
+完整执行 `make build` 或无参数 `scripts/debian-auto-build.sh` 前，重新登录，
+让 `sbuild` 和 `docker` 组权限生效。`scripts/debian-auto-build.sh --provision`
+会使用 `sudo docker` 继续准备和构建。
 
 如果现在只想继续创建 sbuild chroot，可以临时进入 `sbuild` 组：
 
@@ -137,7 +162,7 @@ scripts/debian-auto-build.sh --provision
 ```
 
 `--provision` 会安装构建依赖、检查 Debian source signature verification
-keyring、检查 Docker，并在确认后创建 `trixie-amd64-sbuild` sbuild chroot。
+keyring、配置 Docker CE，并在确认后创建 `trixie-amd64-sbuild` sbuild chroot。
 普通用户首次加入 `sbuild` 组后，需要在新 shell 中继续：
 
 ```bash

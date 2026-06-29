@@ -73,6 +73,20 @@ esac
 SH
     chmod +x "${FAKEBIN}/${cmd}"
   done
+  cat > "${FAKEBIN}/dpkg-query" <<SH
+#!/usr/bin/env bash
+installed="\${FAKE_DPKG_QUERY_INSTALLED:-docker-ce docker-ce-cli containerd.io}"
+if [[ -f "${AUTO_REPO}/dpkg-query-installed" ]]; then
+  IFS= read -r installed < "${AUTO_REPO}/dpkg-query-installed"
+fi
+package="\${*: -1}"
+printf 'dpkg-query %s\n' "\$*" >> "${AUTO_REPO}/dpkg-query-calls"
+if [[ " \${installed} " == *" \${package} "* ]]; then
+  printf 'install ok installed'
+  exit 0
+fi
+exit 1
+SH
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
@@ -122,7 +136,7 @@ SH
 if [[ "${1:-}" == "-c" ]]; then exit 0; fi
 exit 0
 SH
-  chmod +x "${FAKEBIN}/sbuild" "${FAKEBIN}/schroot" "${FAKEBIN}/id" "${FAKEBIN}/python3"
+  chmod +x "${FAKEBIN}/dpkg-query" "${FAKEBIN}/sbuild" "${FAKEBIN}/schroot" "${FAKEBIN}/id" "${FAKEBIN}/python3"
 }
 
 allow_fake_provision_commands() {
@@ -131,8 +145,40 @@ allow_fake_provision_commands() {
 printf 'sudo %s\n' "\$*" >> "${AUTO_REPO}/sudo-calls"
 "\$@"
 SH
+  cat > "${FAKEBIN}/install" <<SH
+#!/usr/bin/env bash
+printf 'install %s\n' "\$*" >> "${AUTO_REPO}/install-calls"
+/usr/bin/install "\$@"
+SH
+  cat > "${FAKEBIN}/curl" <<SH
+#!/usr/bin/env bash
+printf 'curl %s\n' "\$*" >> "${AUTO_REPO}/curl-calls"
+output=""
+while [[ "\$#" -gt 0 ]]; do
+  case "\$1" in
+    -o)
+      output="\$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [[ -n "\${output}" ]]; then
+  mkdir -p "\$(dirname -- "\${output}")"
+  : > "\${output}"
+fi
+exit 0
+SH
+  cat > "${FAKEBIN}/tee" <<SH
+#!/usr/bin/env bash
+printf 'tee %s\n' "\$*" >> "${AUTO_REPO}/tee-calls"
+/usr/bin/tee "\$@"
+SH
   cat > "${FAKEBIN}/apt-get" <<SH
 #!/usr/bin/env bash
+set -euo pipefail
 printf 'apt-get %s\n' "\$*" >> "${AUTO_REPO}/apt-get-calls"
 if [[ "\${1:-}" != "-q=1" || "\${2:-}" != "-o=Dpkg::Use-Pty=0" ]]; then
   echo "missing quiet apt flags: \$*" >&2
@@ -149,19 +195,60 @@ case "\${1:-}" in
   update)
     exit 0
     ;;
+  remove)
+    installed="\${FAKE_DPKG_QUERY_INSTALLED:-docker-ce docker-ce-cli containerd.io}"
+    if [[ -f "${AUTO_REPO}/dpkg-query-installed" ]]; then
+      IFS= read -r installed < "${AUTO_REPO}/dpkg-query-installed"
+    fi
+    for package in "\${@:2}"; do
+      [[ "\${package}" == -* ]] && continue
+      installed=" \${installed} "
+      installed="\${installed// \${package} / }"
+      installed="\${installed#" "}"
+      installed="\${installed%" "}"
+    done
+    printf '%s\n' "\${installed}" > "${AUTO_REPO}/dpkg-query-installed"
+    exit 0
+    ;;
   install)
-    if [[ " \$* " == *" docker.io "* ]]; then
+    installed="\${FAKE_DPKG_QUERY_INSTALLED:-docker-ce docker-ce-cli containerd.io}"
+    if [[ -f "${AUTO_REPO}/dpkg-query-installed" ]]; then
+      IFS= read -r installed < "${AUTO_REPO}/dpkg-query-installed"
+    fi
+    for package in "\${@:2}"; do
+      [[ "\${package}" == -* ]] && continue
+      if [[ " \${installed} " != *" \${package} "* ]]; then
+        installed="\${installed} \${package}"
+      fi
+    done
+    printf '%s\n' "\${installed}" > "${AUTO_REPO}/dpkg-query-installed"
+    if [[ " \$* " == *" docker-ce "* ]]; then
+      if [[ "\${FAKE_APT_DOCKER_CONFLICT:-0}" == 1 ]]; then
+        echo "containerd.io : Conflicts: containerd" >&2
+        exit 100
+      fi
       cat > "${FAKEBIN}/docker" <<'DOCKER'
 #!/usr/bin/env bash
-printf 'docker %s\n' "$*" >> "${AUTO_REPO}/docker-calls"
-case "${1:-}" in
-  info) exit 0 ;;
+printf 'docker %s\n' "\$*" >> "${AUTO_REPO}/docker-calls"
+case "\${1:-}" in
+  info)
+    count=0
+    if [[ -f "${AUTO_REPO}/docker-info-count" ]]; then
+      IFS= read -r count < "${AUTO_REPO}/docker-info-count"
+    fi
+    count=\$((count + 1))
+    printf '%s\n' "\${count}" > "${AUTO_REPO}/docker-info-count"
+    if [[ "\${FAKE_APT_DOCKER_INFO_FIRST_STATUS:-0}" != 0 && "\${count}" -eq 1 ]]; then
+      exit "\${FAKE_APT_DOCKER_INFO_FIRST_STATUS}"
+    fi
+    exit 0
+    ;;
   run)
     mount=""
-    while [[ "$#" -gt 0 ]]; do
-      case "$1" in
+    while [[ "\$#" -gt 0 ]]; do
+      case "\$1" in
         -v)
-          mount="$2"
+          mount="\$2"
           shift 2
           ;;
         *)
@@ -169,10 +256,10 @@ case "${1:-}" in
           ;;
       esac
     done
-    out_dir="${mount%:/out}"
-    if [[ -n "${out_dir}" && "${out_dir}" != "${mount}" ]]; then
-      mkdir -p "${out_dir}/root/usr/share/keyrings"
-      : > "${out_dir}/root/usr/share/keyrings/debian-keyring.gpg"
+    out_dir="\${mount%:/out}"
+    if [[ -n "\${out_dir}" && "\${out_dir}" != "\${mount}" ]]; then
+      mkdir -p "\${out_dir}/root/usr/share/keyrings"
+      : > "\${out_dir}/root/usr/share/keyrings/debian-keyring.gpg"
     fi
     exit 0
     ;;
@@ -194,7 +281,7 @@ SH
 printf 'systemctl %s\n' "\$*" >> "${AUTO_REPO}/systemctl-calls"
 exit 0
 SH
-  chmod +x "${FAKEBIN}/sudo" "${FAKEBIN}/apt-get" "${FAKEBIN}/systemctl"
+  chmod +x "${FAKEBIN}/sudo" "${FAKEBIN}/install" "${FAKEBIN}/curl" "${FAKEBIN}/tee" "${FAKEBIN}/apt-get" "${FAKEBIN}/systemctl"
 }
 
 install_fake_docker_info_sequence() {
@@ -437,6 +524,8 @@ run_auto_isolated() {
   local env_args=(
     "PATH=${FAKEBIN}"
     "DEBIAN_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release"
+    "DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH=${DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH:-${AUTO_REPO}/docker.asc}"
+    "DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH=${DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH:-${AUTO_REPO}/docker.sources}"
   )
   if [[ "${DSCVERIFY_KEYRING_PATHS+x}" == x ]]; then
     env_args+=("DSCVERIFY_KEYRING_PATHS=${DSCVERIFY_KEYRING_PATHS}")
@@ -452,6 +541,15 @@ run_auto_isolated() {
   fi
   if [[ "${FAKE_APT_FAIL_COMMAND+x}" == x ]]; then
     env_args+=("FAKE_APT_FAIL_COMMAND=${FAKE_APT_FAIL_COMMAND}")
+  fi
+  if [[ "${FAKE_APT_DOCKER_CONFLICT+x}" == x ]]; then
+    env_args+=("FAKE_APT_DOCKER_CONFLICT=${FAKE_APT_DOCKER_CONFLICT}")
+  fi
+  if [[ "${FAKE_APT_DOCKER_INFO_FIRST_STATUS+x}" == x ]]; then
+    env_args+=("FAKE_APT_DOCKER_INFO_FIRST_STATUS=${FAKE_APT_DOCKER_INFO_FIRST_STATUS}")
+  fi
+  if [[ "${FAKE_DPKG_QUERY_INSTALLED+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_QUERY_INSTALLED=${FAKE_DPKG_QUERY_INSTALLED}")
   fi
   if [[ "${USER+x}" == x ]]; then
     env_args+=("USER=${USER}")
@@ -607,9 +705,48 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Docker is required for the Debian auto-build wrapper"* ]]
-  [[ "${output}" == *"docker.io"* ]]
+  [[ "${output}" == *"Docker CE is required for the Debian auto-build wrapper"* ]]
+  [[ "${output}" == *"docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"* ]]
+  [[ "${output}" != *"docker.io"* ]]
   [[ "${output}" != *"unexpected host command"* ]]
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "debian-auto-build default mode rejects missing Docker CE package even when daemon works" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli" \
+    DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Docker CE"* ]]
+  [[ "${output}" == *"containerd.io"* ]]
+  grep -Fq -- "containerd.io" "${AUTO_REPO}/dpkg-query-calls"
+  [ ! -e "${AUTO_REPO}/sudo-calls" ]
+}
+
+@test "debian-auto-build default mode rejects distro Docker packages" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli containerd.io docker.io containerd runc" \
+    DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Docker CE"* ]]
+  [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
+  grep -Fq -- "docker.io" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fq -- "containerd" "${AUTO_REPO}/dpkg-query-calls"
+  grep -Fq -- "runc" "${AUTO_REPO}/dpkg-query-calls"
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
@@ -628,6 +765,88 @@ run_auto_isolated() {
   grep -Fxq -- "docker info" "${AUTO_REPO}/docker-calls"
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
   [ ! -e "${AUTO_REPO}/systemctl-calls" ]
+}
+
+@test "debian-auto-build --provision installs Docker CE from Debian repo" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/docker.asc"
+  docker_source="${AUTO_REPO}/docker.sources"
+  : > "${keyring}"
+
+  FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli containerd.io docker.io containerd runc podman-docker" \
+    FAKE_APT_DOCKER_INFO_FIRST_STATUS=1 \
+    DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 remove -y" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "docker.io" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "containerd" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "runc" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "podman-docker" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends ca-certificates curl" "${AUTO_REPO}/apt-get-calls"
+  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "${AUTO_REPO}/apt-get-calls"
+  grep -Fxq -- "install -m 0755 -d $(dirname -- "${docker_keyring}")" "${AUTO_REPO}/install-calls"
+  grep -Fq -- "curl -fsSL https://download.docker.com/linux/debian/gpg -o ${docker_keyring}" "${AUTO_REPO}/curl-calls"
+  grep -Fq -- "tee ${docker_source}" "${AUTO_REPO}/tee-calls"
+  grep -Fq -- "URIs: https://download.docker.com/linux/debian" "${docker_source}"
+  grep -Fq -- "Suites: trixie" "${docker_source}"
+  grep -Fq -- "Components: stable" "${docker_source}"
+  grep -Fq -- "Signed-By: ${docker_keyring}" "${docker_source}"
+  grep -Fq -- "Architectures: amd64" "${docker_source}"
+  grep -Fxq -- "systemctl enable --now docker" "${AUTO_REPO}/systemctl-calls"
+  grep -Fxq -- "systemctl enable --now containerd" "${AUTO_REPO}/systemctl-calls"
+  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "debian-auto-build --provision installs Docker CE from Ubuntu repo on Noble host" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/docker.asc"
+  docker_source="${AUTO_REPO}/docker.sources"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o ${docker_keyring}" "${AUTO_REPO}/curl-calls"
+  grep -Fq -- "URIs: https://download.docker.com/linux/ubuntu" "${docker_source}"
+  grep -Fq -- "Suites: noble" "${docker_source}"
+  grep -Fq -- "Components: stable" "${docker_source}"
+  grep -Fq -- "Signed-By: ${docker_keyring}" "${docker_source}"
+  grep -Fq -- "Architectures: amd64" "${docker_source}"
+}
+
+@test "debian-auto-build --provision diagnoses Docker CE containerd conflict" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/docker.asc"
+  docker_source="${AUTO_REPO}/docker.sources"
+  : > "${keyring}"
+
+  FAKE_APT_DOCKER_CONFLICT=1 \
+    DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"containerd.io : Conflicts: containerd"* ]]
+  [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
 }
 
 @test "debian-auto-build default mode runs build and prints artifacts" {
