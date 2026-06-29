@@ -7,16 +7,16 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-# shellcheck source=scripts/debian-env.sh
-. "${SCRIPT_DIR}/debian-env.sh"
+# shellcheck source=scripts/trixie-env.sh
+. "${SCRIPT_DIR}/trixie-env.sh"
 
-read -r -a DOCKER_COMMAND <<< "${DEBIAN_DOCKER_CMD:-docker}"
-[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "DEBIAN_DOCKER_CMD must not be empty"
+read -r -a DOCKER_COMMAND <<< "${TRIXIE_DOCKER_CMD:-docker}"
+[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "TRIXIE_DOCKER_CMD must not be empty"
 
 if [[ "${1:-}" == "basic" ]]; then
   shift
 fi
-[[ "$#" -eq 0 ]] || die "usage: smoke-test.sh"
+[[ "$#" -eq 0 ]] || die "usage: trixie-smoke-test.sh"
 
 debs=()
 while IFS= read -r -d '' deb; do
@@ -36,7 +36,7 @@ arch="$(dpkg-deb -f "${DEB}" Architecture)"
 binary_dir="$(cd -- "$(dirname -- "${DEB}")" && pwd)"
 deb_name="$(basename "${DEB}")"
 
-log "smoke-basic: container install and package assertions"
+log "trixie-smoke-basic: container install and package assertions"
 # shellcheck disable=SC2016
 "${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" debian:trixie bash -euxc '
   deb="/deb/$1"
@@ -70,4 +70,4 @@ log "smoke-basic: container install and package assertions"
   test -d /usr/share/doc/ocserv
 ' bash "${deb_name}" "${BACKPORT_VERSION}" "${TARGET_ARCH}"
 
-log "smoke-basic: OK"
+log "trixie-smoke-basic: OK"

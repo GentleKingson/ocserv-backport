@@ -9,8 +9,8 @@ setup() {
   cp "${REPO_ROOT}/scripts/_common.sh" "${LINT_REPO}/scripts/_common.sh"
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${LINT_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${LINT_REPO}/scripts/_target_paths.sh"
-  [[ -f "${REPO_ROOT}/scripts/debian-env.sh" ]] && cp "${REPO_ROOT}/scripts/debian-env.sh" "${LINT_REPO}/scripts/debian-env.sh"
-  cp "${REPO_ROOT}/scripts/lint-package.sh" "${LINT_REPO}/scripts/lint-package.sh"
+  [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${LINT_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/trixie-lint-package.sh" "${LINT_REPO}/scripts/trixie-lint-package.sh"
   touch "${LINT_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"
   cat > "${FAKEBIN}/lintian" <<SH
 #!/usr/bin/env bash
@@ -40,28 +40,28 @@ teardown() {
 }
 
 @test "lint-package suppresses trixie distribution tag by default" {
-  run bash -c "cd '${LINT_REPO}' && PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+  run bash -c "cd '${LINT_REPO}' && PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/trixie-lint-package.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "lintian --suppress-tags bad-distribution-in-changes-file --fail-on error build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" "${LINT_REPO}/lintian-calls"
 }
 
 @test "lint-package passes explicit lintian profile" {
-  run bash -c "cd '${LINT_REPO}' && LINTIAN_PROFILE=debian PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+  run bash -c "cd '${LINT_REPO}' && LINTIAN_PROFILE=debian PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/trixie-lint-package.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "lintian --profile debian --suppress-tags bad-distribution-in-changes-file --fail-on error build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" "${LINT_REPO}/lintian-calls"
 }
 
 @test "lint-package allows suppress tag override" {
-  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS=custom-tag PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS=custom-tag PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/trixie-lint-package.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "lintian --suppress-tags custom-tag --fail-on error build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" "${LINT_REPO}/lintian-calls"
 }
 
 @test "lint-package allows suppress tags to be disabled" {
-  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS= PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+  run bash -c "cd '${LINT_REPO}' && LINTIAN_SUPPRESS_TAGS= PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/trixie-lint-package.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "lintian --fail-on error build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" "${LINT_REPO}/lintian-calls"
@@ -71,7 +71,7 @@ teardown() {
   mkdir -p "${LINT_REPO}/build/debian/trixie/arm64/binary"
   touch "${LINT_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.changes"
 
-  run bash -c "cd '${LINT_REPO}' && FAKE_DPKG_ARCH=arm64 TARGET_ARCH=arm64 PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/lint-package.sh"
+  run bash -c "cd '${LINT_REPO}' && FAKE_DPKG_ARCH=arm64 TARGET_ARCH=arm64 PATH='${FAKEBIN}':\"\${PATH}\" bash scripts/trixie-lint-package.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "lintian --suppress-tags bad-distribution-in-changes-file --fail-on error build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.changes" "${LINT_REPO}/lintian-calls"

@@ -15,16 +15,15 @@ load helpers/bats-helper.bash
 # target adds a new directly-invoked script.
 DIRECTLY_INVOKED_SCRIPTS=(
   verify-source-lock.sh
-  fetch-source.sh
-  rewrap-changelog.sh
-  build-source-package.sh
-  build-binary.sh
-  lint-package.sh
-  smoke-test.sh
-  build.sh
-  debian-auto-build.sh
-  source-package-ci.sh
-  dry-run.sh
+  trixie-fetch-source.sh
+  trixie-rewrap-changelog.sh
+  trixie-build-source-package.sh
+  trixie-build-binary-ocserv.sh
+  trixie-lint-package.sh
+  trixie-smoke-test.sh
+  trixie-build.sh
+  trixie-auto-build.sh
+  trixie-source-package-ci.sh
   noble-build.sh
   noble-auto-build.sh
   noble-fetch-source.sh

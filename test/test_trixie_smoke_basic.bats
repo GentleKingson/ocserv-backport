@@ -8,8 +8,8 @@ setup_smoke_repo() {
   cp "${REPO_ROOT}/scripts/_common.sh" "${SMOKE_REPO}/scripts/_common.sh"
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SMOKE_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SMOKE_REPO}/scripts/_target_paths.sh"
-  [[ -f "${REPO_ROOT}/scripts/debian-env.sh" ]] && cp "${REPO_ROOT}/scripts/debian-env.sh" "${SMOKE_REPO}/scripts/debian-env.sh"
-  cp "${REPO_ROOT}/scripts/smoke-test.sh" "${SMOKE_REPO}/scripts/smoke-test.sh"
+  [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${SMOKE_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/trixie-smoke-test.sh" "${SMOKE_REPO}/scripts/trixie-smoke-test.sh"
   FAKEBIN="$(mktemp -d)"
   cat > "${FAKEBIN}/dpkg" <<'SH'
 #!/usr/bin/env bash
@@ -83,7 +83,7 @@ SH
 }
 
 run_smoke() {
-  run bash -c "cd '${SMOKE_REPO}' && FAKE_DPKG_ARCH='${FAKE_DPKG_ARCH:-}' TARGET_ARCH='${TARGET_ARCH:-}' PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh $*"
+  run bash -c "cd '${SMOKE_REPO}' && FAKE_DPKG_ARCH='${FAKE_DPKG_ARCH:-}' TARGET_ARCH='${TARGET_ARCH:-}' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-smoke-test.sh $*"
 }
 
 @test "smoke-basic requires exactly one target deb" {
@@ -100,12 +100,12 @@ run_smoke() {
   [ "${status}" -ne 0 ]
 }
 
-@test "smoke-basic honors DEBIAN_DOCKER_CMD override" {
+@test "smoke-basic honors TRIXIE_DOCKER_CMD override" {
   setup_smoke_repo
   write_deb
   install_fake_dpkg_deb
   install_fake_sudo_docker
-  run bash -c "cd '${SMOKE_REPO}' && DEBIAN_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh"
+  run bash -c "cd '${SMOKE_REPO}' && TRIXIE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-smoke-test.sh"
   sudo_calls="$(cat "${SMOKE_REPO}/sudo-calls")"
   teardown_smoke_repo
   [ "${status}" -eq 0 ]

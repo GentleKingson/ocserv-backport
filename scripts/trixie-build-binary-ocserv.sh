@@ -6,11 +6,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/debian-env.sh
-. "${SCRIPT_DIR}/debian-env.sh"
+# shellcheck source=scripts/trixie-env.sh
+. "${SCRIPT_DIR}/trixie-env.sh"
 
 DSC="${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}.dsc"
-[[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run 'make src-pkg' first)"
+[[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run 'make trixie-src-pkg-ocserv' first)"
 mkdir -p "${TARGET_BINARY_ROOT}"
 BUILD_DIR="$(cd -- "${TARGET_BINARY_ROOT}" && pwd)"
 rm -f -- "${BUILD_DIR}/ocserv_${BACKPORT_VERSION}_${TARGET_ARCH}".*
@@ -30,4 +30,4 @@ BUILDINFO="${BUILD_DIR}/ocserv_${BACKPORT_VERSION}_${TARGET_ARCH}.buildinfo"
 [[ -f "${CHANGES}" ]] || die "expected changes not found: ${CHANGES}"
 [[ -f "${BUILDINFO}" ]] || die "expected buildinfo not found: ${BUILDINFO}"
 
-log "binary built: ${DEB}"
+log "trixie binary built: ${DEB}"

@@ -19,8 +19,8 @@ setup_source_ci_repo() {
   cp "${REPO_ROOT}/scripts/_common.sh" "${SOURCE_CI_REPO}/scripts/_common.sh"
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SOURCE_CI_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SOURCE_CI_REPO}/scripts/_target_paths.sh"
-  cp "${REPO_ROOT}/scripts/debian-env.sh" "${SOURCE_CI_REPO}/scripts/debian-env.sh"
-  cp "${REPO_ROOT}/scripts/source-package-ci.sh" "${SOURCE_CI_REPO}/scripts/source-package-ci.sh"
+  cp "${REPO_ROOT}/scripts/trixie-env.sh" "${SOURCE_CI_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/trixie-source-package-ci.sh" "${SOURCE_CI_REPO}/scripts/trixie-source-package-ci.sh"
   cp "${REPO_ROOT}/Makefile" "${SOURCE_CI_REPO}/Makefile"
   SYSTEM_MAKE="$(command -v make)"
   FAKEBIN="$(mktemp -d)"
@@ -58,7 +58,7 @@ install_fake_make() {
 set -euo pipefail
 target="\${1:-}"
 case "\${target}" in
-  verify-lock|fetch|rewrap|src-pkg) ;;
+  trixie-verify-locks|trixie-fetch-ocserv|trixie-rewrap-ocserv|trixie-src-pkg-ocserv) ;;
   *) echo "unexpected target: \${target}" >&2; exit 64 ;;
 esac
 printf '%s\t%s\n' "\${target}" "\${OCSERV_VERSION:-}" >> "${SOURCE_CI_REPO}/make-calls"
@@ -81,19 +81,19 @@ SH
 }
 
 install_source_target_stubs() {
-  install_make_target_stub verify-source-lock.sh verify-lock
-  install_make_target_stub fetch-source.sh fetch
-  install_make_target_stub rewrap-changelog.sh rewrap
-  install_make_target_stub build-source-package.sh src-pkg
+  install_make_target_stub verify-source-lock.sh trixie-verify-locks
+  install_make_target_stub trixie-fetch-source.sh trixie-fetch-ocserv
+  install_make_target_stub trixie-rewrap-changelog.sh trixie-rewrap-ocserv
+  install_make_target_stub trixie-build-source-package.sh trixie-src-pkg-ocserv
 }
 
 run_source_ci() {
-  run bash -c "cd '${SOURCE_CI_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/source-package-ci.sh"
+  run bash -c "cd '${SOURCE_CI_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-source-package-ci.sh"
 }
 
 run_source_ci_from_outside() {
   OUTSIDE_DIR="$(mktemp -d)"
-  run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${SOURCE_CI_REPO}/scripts/source-package-ci.sh'"
+  run bash -c "cd '${OUTSIDE_DIR}' && PATH='${FAKEBIN}:${PATH}' bash '${SOURCE_CI_REPO}/scripts/trixie-source-package-ci.sh'"
 }
 
 source_ci_targets() {
@@ -119,7 +119,7 @@ source_ci_file() {
   run_source_ci
   calls="$(source_ci_targets)"
   [ "${status}" -eq 0 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg' ]
+  [ "${calls}" = $'trixie-verify-locks\ntrixie-fetch-ocserv\ntrixie-rewrap-ocserv\ntrixie-src-pkg-ocserv' ]
 }
 
 @test "source CI entrypoint runs from outside the repo root" {
@@ -128,17 +128,17 @@ source_ci_file() {
   run_source_ci_from_outside
   [ "${status}" -eq 0 ]
   calls="$(source_ci_file target-calls)"
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg' ]
+  [ "${calls}" = $'trixie-verify-locks\ntrixie-fetch-ocserv\ntrixie-rewrap-ocserv\ntrixie-src-pkg-ocserv' ]
 }
 
 @test "source CI stops immediately and reports the failing stage" {
   setup_source_ci_repo
-  install_fake_make rewrap
+  install_fake_make trixie-rewrap-ocserv
   run_source_ci
   calls="$(source_ci_targets)"
   [ "${status}" -eq 1 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap' ]
-  [[ "${output}" == *"SOURCE-CI FAILED at: rewrap"* ]]
+  [ "${calls}" = $'trixie-verify-locks\ntrixie-fetch-ocserv\ntrixie-rewrap-ocserv' ]
+  [[ "${output}" == *"SOURCE-CI FAILED at: trixie-rewrap-ocserv"* ]]
 }
 
 @test "source CI verifies lock before cleaning source artifacts" {
@@ -146,7 +146,7 @@ source_ci_file() {
   mkdir -p "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source" "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary"
   printf 'old source\n' > "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source/marker"
   printf 'old binary\n' > "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary/marker"
-  install_fake_make verify-lock
+  install_fake_make trixie-verify-locks
   run_source_ci
   source_marker="$([ -f "${SOURCE_CI_REPO}/build/debian/trixie/amd64/source/marker" ] && echo yes || echo no)"
   binary_marker="$([ -f "${SOURCE_CI_REPO}/build/debian/trixie/amd64/binary/marker" ] && echo yes || echo no)"
@@ -179,18 +179,18 @@ source_ci_file() {
 @test "source CI preserves an OCSERV_VERSION override" {
   setup_source_ci_repo
   install_fake_make
-  run bash -c "cd '${SOURCE_CI_REPO}' && PATH='${FAKEBIN}:${PATH}' OCSERV_VERSION='1.5.0-1~bpo13+source1' bash scripts/source-package-ci.sh"
+  run bash -c "cd '${SOURCE_CI_REPO}' && PATH='${FAKEBIN}:${PATH}' OCSERV_VERSION='1.5.0-1~bpo13+source1' bash scripts/trixie-source-package-ci.sh"
   versions="$(source_ci_versions)"
   [ "${status}" -eq 0 ]
   [ "${versions}" = "1.5.0-1~bpo13+source1" ]
 }
 
-@test "make source-ci skips fetch target's duplicate lock verification" {
+@test "trixie-source-ci target skips duplicate lock verification during fetch" {
   setup_source_ci_repo
   install_source_target_stubs
 
-  run bash -c "cd '${SOURCE_CI_REPO}' && '${SYSTEM_MAKE}' source-ci"
+  run bash -c "cd '${SOURCE_CI_REPO}' && '${SYSTEM_MAKE}' trixie-source-ci"
   calls="$(source_ci_file target-calls)"
   [ "${status}" -eq 0 ]
-  [ "${calls}" = $'verify-lock\nfetch\nrewrap\nsrc-pkg' ]
+  [ "${calls}" = $'trixie-verify-locks\ntrixie-fetch-ocserv\ntrixie-rewrap-ocserv\ntrixie-src-pkg-ocserv' ]
 }

@@ -76,7 +76,7 @@ jobs:
         run: yamllint .github source-lock
 
       - name: Verify source lock projection
-        run: make verify-lock
+        run: make trixie-verify-locks
 
       - name: Unit tests
         run: make test
@@ -189,4 +189,4 @@ jobs:
           printf 'DSCVERIFY_KEYRING_PATHS=%s\n' "${keyrings}" >> "${GITHUB_ENV}"
 
       - name: Build source package
-        run: make source-ci
+        run: make trixie-source-ci

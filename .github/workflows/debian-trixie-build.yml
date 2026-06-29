@@ -79,7 +79,7 @@ jobs:
           set -euo pipefail
           printf 'yes\n' \
             | sudo --preserve-env=TARGET_ARCH \
-              ./scripts/debian-auto-build.sh --provision
+              ./scripts/trixie-auto-build.sh --provision
 
       - name: Stage Debian Trixie artifacts
         if: success()

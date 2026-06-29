@@ -8,11 +8,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-# shellcheck source=scripts/debian-env.sh
-. "${SCRIPT_DIR}/debian-env.sh"
+# shellcheck source=scripts/trixie-env.sh
+. "${SCRIPT_DIR}/trixie-env.sh"
 SOURCE_NAME="ocserv"
 SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${BACKPORT_VERSION%%-*}"
-[[ -d "${SRCDIR}" ]] || die "missing rewrapped source tree: ${SRCDIR} (run 'make rewrap' first)"
+[[ -d "${SRCDIR}" ]] || die "missing rewrapped source tree: ${SRCDIR} (run 'make trixie-rewrap-ocserv' first)"
 
 rm -f -- "${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}"*
 

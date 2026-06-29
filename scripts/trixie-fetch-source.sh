@@ -13,8 +13,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dscverify.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/debian-env.sh
-. "${SCRIPT_DIR}/debian-env.sh"
+# shellcheck source=scripts/trixie-env.sh
+. "${SCRIPT_DIR}/trixie-env.sh"
 SOURCE_ROOT="${TARGET_SOURCE_ROOT}"
 UPSTREAM_VERSION="1.5.0"
 SOURCE_VERSION="1.5.0-1"
@@ -34,7 +34,7 @@ file_size() {
 }
 
 verify_source_lock_unless_internal_skip() {
-  if [[ "${OCSERV_SKIP_FETCH_VERIFY_LOCK:-}" == "1" ]]; then
+  if [[ "${TRIXIE_SKIP_FETCH_VERIFY_LOCK:-}" == "1" ]]; then
     return 0
   fi
   "${SCRIPT_DIR}/verify-source-lock.sh"

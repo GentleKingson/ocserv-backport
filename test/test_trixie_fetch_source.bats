@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _target_arch.sh _target_paths.sh debian-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
+  for file in _common.sh _target_arch.sh _target_paths.sh trixie-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh trixie-fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }
@@ -144,12 +144,12 @@ SH
 }
 
 run_fetch() {
-  run bash -c "cd '${FETCH_REPO}' && DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+  run bash -c "cd '${FETCH_REPO}' && DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-fetch-source.sh"
 }
 
 run_fetch_with_skip_var() {
   local skip_value="$1"
-  run bash -c "cd '${FETCH_REPO}' && OCSERV_SKIP_FETCH_VERIFY_LOCK='${skip_value}' DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+  run bash -c "cd '${FETCH_REPO}' && TRIXIE_SKIP_FETCH_VERIFY_LOCK='${skip_value}' DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-fetch-source.sh"
 }
 
 verify_source_lock_calls() {
@@ -363,8 +363,8 @@ verify_source_lock_calls() {
   make_success_fixtures
   install_fake_fetch_commands success
   legacy_var="FETCH""_SOURCE"
-  run bash -c "cd '${FETCH_REPO}' && ${legacy_var}=cache PATH='${FAKEBIN}:${PATH}' bash scripts/fetch-source.sh"
+  run bash -c "cd '${FETCH_REPO}' && ${legacy_var}=cache PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-fetch-source.sh"
   [ "${status}" -ne 0 ]
-  ! grep -Eq 'fetch_via_''cache|read_''cache_meta|source-''cache|cache\.''meta' "${FETCH_REPO}/scripts/fetch-source.sh"
+  ! grep -Eq 'fetch_via_''cache|read_''cache_meta|source-''cache|cache\.''meta' "${FETCH_REPO}/scripts/trixie-fetch-source.sh"
   teardown_fetch_repo
 }

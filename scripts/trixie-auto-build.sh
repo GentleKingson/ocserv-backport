@@ -34,13 +34,13 @@ DOCKER_CE_PACKAGES=(
 
 DEBIAN_DSCVERIFY_REQUIRED_KEY="C6AE83D21C677043DA3DAC97F8643574713C9BAE"
 SBUILD_CHROOT_INCLUDE="eatmydata,ccache,gnupg,ca-certificates"
-DEBIAN_AUTO_BUILD_CHROOT_BASE="${DEBIAN_AUTO_BUILD_CHROOT_BASE:-/srv/chroot}"
-DEBIAN_AUTO_BUILD_KEYRING_IMAGE="${DEBIAN_AUTO_BUILD_KEYRING_IMAGE:-debian:sid}"
-DEBIAN_AUTO_BUILD_MIRROR="${DEBIAN_AUTO_BUILD_MIRROR:-http://deb.debian.org/debian}"
+TRIXIE_AUTO_BUILD_CHROOT_BASE="${TRIXIE_AUTO_BUILD_CHROOT_BASE:-/srv/chroot}"
+TRIXIE_AUTO_BUILD_KEYRING_IMAGE="${TRIXIE_AUTO_BUILD_KEYRING_IMAGE:-debian:sid}"
+TRIXIE_AUTO_BUILD_MIRROR="${TRIXIE_AUTO_BUILD_MIRROR:-http://deb.debian.org/debian}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/debian-auto-build.sh [--provision] [--yes]
+Usage: scripts/trixie-auto-build.sh [--provision] [--yes]
 
 Prepare the Debian 13 trixie auto-build wrapper.
 
@@ -60,6 +60,23 @@ ASSUME_YES=0
 SUDO=()
 HOST_ID=""
 HOST_CODENAME=""
+
+reject_legacy_trixie_env() {
+  local legacy_var
+
+  for legacy_var in DEBIAN_DOCKER_CMD DEBIAN_NATIVE_ARCH OCSERV_SKIP_FETCH_VERIFY_LOCK; do
+    if [[ "${!legacy_var+x}" == x ]]; then
+      printf 'error: legacy environment variable %s is no longer supported; use the TRIXIE_* name instead\n' "${legacy_var}" >&2
+      exit 2
+    fi
+  done
+
+  while IFS= read -r legacy_var; do
+    [[ -n "${legacy_var}" ]] || continue
+    printf 'error: legacy environment variable %s is no longer supported; use TRIXIE_AUTO_BUILD_* instead\n' "${legacy_var}" >&2
+    exit 2
+  done < <(compgen -A variable DEBIAN_AUTO_BUILD_)
+}
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -95,8 +112,10 @@ if [[ "${ASSUME_YES}" -eq 1 && "${PROVISION}" -ne 1 ]]; then
   die "--yes requires --provision"
 fi
 
+reject_legacy_trixie_env
+
 read_host_os() {
-  local os_release_path="${DEBIAN_AUTO_BUILD_OS_RELEASE_PATH:-/etc/os-release}"
+  local os_release_path="${TRIXIE_AUTO_BUILD_OS_RELEASE_PATH:-/etc/os-release}"
   local ID="" VERSION_CODENAME="" UBUNTU_CODENAME=""
 
   [[ -r "${os_release_path}" ]] \
@@ -126,8 +145,8 @@ validate_host() {
 }
 
 validate_target_arch() {
-  # shellcheck source=scripts/debian-env.sh
-  . "${SCRIPT_DIR}/debian-env.sh"
+  # shellcheck source=scripts/trixie-env.sh
+  . "${SCRIPT_DIR}/trixie-env.sh"
 }
 
 load_target_paths() {
@@ -147,7 +166,7 @@ print_core_install_guidance() {
   printf ' %s' "${CORE_PACKAGES[@]}" >&2
   printf '\n\n' >&2
   printf 'Or let the wrapper install them with:\n' >&2
-  printf '  scripts/debian-auto-build.sh --provision\n' >&2
+  printf '  scripts/trixie-auto-build.sh --provision\n' >&2
 }
 
 check_core_dependencies() {
@@ -191,7 +210,7 @@ provision_core_dependencies() {
 }
 
 print_docker_ce_install_guidance() {
-  printf 'Docker CE is required for the Debian auto-build wrapper.\n' >&2
+  printf 'Docker CE is required for the Trixie auto-build wrapper.\n' >&2
   printf 'Install Docker CE from the official Docker APT repository at download.docker.com, then install:\n' >&2
   printf '  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin\n' >&2
 }
@@ -260,11 +279,11 @@ check_docker_ce_packages() {
 }
 
 docker_keyring_path() {
-  printf '%s\n' "${DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH:-/etc/apt/keyrings/docker.asc}"
+  printf '%s\n' "${TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH:-/etc/apt/keyrings/docker.asc}"
 }
 
 docker_source_path() {
-  printf '%s\n' "${DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH:-/etc/apt/sources.list.d/docker.sources}"
+  printf '%s\n' "${TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH:-/etc/apt/sources.list.d/docker.sources}"
 }
 
 docker_repo_os() {
@@ -422,13 +441,13 @@ check_debian_dscverify_keyrings() {
 
   if [[ "${required_key_found}" -ne 1 ]]; then
     log "required Debian source signing key not found in dscverify keyrings: ${DEBIAN_DSCVERIFY_REQUIRED_KEY}"
-    log "Run scripts/debian-auto-build.sh --provision without DSCVERIFY_KEYRING_PATHS to refresh keyrings automatically."
+    log "Run scripts/trixie-auto-build.sh --provision without DSCVERIFY_KEYRING_PATHS to refresh keyrings automatically."
     return 1
   fi
 }
 
 debian_dscverify_keyring_root() {
-  printf '%s\n' "${DEBIAN_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${TARGET_DEBIAN_KEYRING_DIR}}"
+  printf '%s\n' "${TRIXIE_AUTO_BUILD_DSCVERIFY_KEYRING_ROOT:-${TARGET_DEBIAN_KEYRING_DIR}}"
 }
 
 refresh_debian_dscverify_keyrings() {
@@ -438,7 +457,7 @@ refresh_debian_dscverify_keyrings() {
   keyring_root="$(debian_dscverify_keyring_root)"
   host_uid="$(id -u)"
   host_gid="$(id -g)"
-  log "refreshing Debian dscverify keyrings from ${DEBIAN_AUTO_BUILD_KEYRING_IMAGE}"
+  log "refreshing Debian dscverify keyrings from ${TRIXIE_AUTO_BUILD_KEYRING_IMAGE}"
   rm -rf -- "${keyring_root}" || return 1
   mkdir -p "${keyring_root}" || return 1
 
@@ -447,7 +466,7 @@ refresh_debian_dscverify_keyrings() {
     -v "${keyring_root}:/out" \
     -e "HOST_UID=${host_uid}" \
     -e "HOST_GID=${host_gid}" \
-    "${DEBIAN_AUTO_BUILD_KEYRING_IMAGE}" \
+    "${TRIXIE_AUTO_BUILD_KEYRING_IMAGE}" \
     bash -euxc '
       workdir="$(mktemp -d)"
       cd "${workdir}"
@@ -473,7 +492,7 @@ refresh_debian_dscverify_keyrings() {
   )
 
   if [[ "${#keyrings[@]}" -eq 0 ]]; then
-    log "no Debian keyrings extracted from ${DEBIAN_AUTO_BUILD_KEYRING_IMAGE}"
+    log "no Debian keyrings extracted from ${TRIXIE_AUTO_BUILD_KEYRING_IMAGE}"
     return 1
   fi
 
@@ -508,15 +527,15 @@ print_sbuild_group_guidance() {
   printf 'Run these commands, then rerun provisioning from the new shell:\n' >&2
   printf "  sudo sbuild-adduser \"\$USER\"\n" >&2
   printf '  newgrp sbuild\n' >&2
-  printf '  scripts/debian-auto-build.sh --provision\n' >&2
+  printf '  scripts/trixie-auto-build.sh --provision\n' >&2
 }
 
 print_sbuild_group_rerun_guidance() {
   printf 'The current shell does not have the sbuild group yet.\n' >&2
   printf 'Run:\n' >&2
   printf '  newgrp sbuild\n' >&2
-  printf '  scripts/debian-auto-build.sh --provision\n' >&2
-  printf 'Then rerun scripts/debian-auto-build.sh --provision from that shell.\n' >&2
+  printf '  scripts/trixie-auto-build.sh --provision\n' >&2
+  printf 'Then rerun scripts/trixie-auto-build.sh --provision from that shell.\n' >&2
 }
 
 ensure_sbuild_group() {
@@ -540,7 +559,7 @@ ensure_sbuild_group() {
   "${SUDO[@]}" sbuild-adduser "${build_user}"
   print_sbuild_group_rerun_guidance
 
-  if [[ "${DEBIAN_AUTO_BUILD_SKIP_NEWGRP:-0}" == 1 ]]; then
+  if [[ "${TRIXIE_AUTO_BUILD_SKIP_NEWGRP:-0}" == 1 ]]; then
     return 1
   fi
 
@@ -557,7 +576,7 @@ sbuild_chroot_name() {
 }
 
 sbuild_chroot_path() {
-  printf '%s/%s\n' "${DEBIAN_AUTO_BUILD_CHROOT_BASE}" "$(sbuild_chroot_name)"
+  printf '%s/%s\n' "${TRIXIE_AUTO_BUILD_CHROOT_BASE}" "$(sbuild_chroot_name)"
 }
 
 print_sbuild_createchroot_command() {
@@ -565,7 +584,7 @@ print_sbuild_createchroot_command() {
     "${TARGET_ARCH}" \
     "${SBUILD_CHROOT_INCLUDE}" \
     "$(sbuild_chroot_path)" \
-    "${DEBIAN_AUTO_BUILD_MIRROR}" >&2
+    "${TRIXIE_AUTO_BUILD_MIRROR}" >&2
 }
 
 print_existing_sbuild_chroot_path_guidance() {
@@ -580,7 +599,7 @@ print_existing_sbuild_chroot_path_guidance() {
   printf 'The directory already exists, but schroot/sbuild does not list %s.\n' "$(sbuild_chroot_name)" >&2
   printf 'If this is a failed chroot creation attempt, review the path and remove it manually before retrying:\n' >&2
   printf '  %srm -rf %s\n' "${sudo_prefix}" "${chroot_path}" >&2
-  printf '  scripts/debian-auto-build.sh --provision\n' >&2
+  printf '  scripts/trixie-auto-build.sh --provision\n' >&2
 }
 
 print_unusable_sbuild_chroot_guidance() {
@@ -686,7 +705,7 @@ provision_sbuild_chroot() {
     "--include=${SBUILD_CHROOT_INCLUDE}"
     trixie
     "$(sbuild_chroot_path)"
-    "${DEBIAN_AUTO_BUILD_MIRROR}"
+    "${TRIXIE_AUTO_BUILD_MIRROR}"
   )
 
   "${SUDO[@]}" sbuild-createchroot "${sbuild_createchroot_args[@]}"
@@ -740,11 +759,11 @@ run_debian_build() {
   fi
 
   if [[ -n "${lintian_profile}" ]]; then
-    log "running make build with DEBIAN_DOCKER_CMD=${docker_cmd} LINTIAN_PROFILE=${lintian_profile}"
-    DEBIAN_DOCKER_CMD="${docker_cmd}" LINTIAN_PROFILE="${lintian_profile}" make build
+    log "running make trixie-build with TRIXIE_DOCKER_CMD=${docker_cmd} LINTIAN_PROFILE=${lintian_profile}"
+    TRIXIE_DOCKER_CMD="${docker_cmd}" LINTIAN_PROFILE="${lintian_profile}" make trixie-build
   else
-    log "running make build with DEBIAN_DOCKER_CMD=${docker_cmd}"
-    DEBIAN_DOCKER_CMD="${docker_cmd}" make build
+    log "running make trixie-build with TRIXIE_DOCKER_CMD=${docker_cmd}"
+    TRIXIE_DOCKER_CMD="${docker_cmd}" make trixie-build
   fi
 }
 
@@ -770,7 +789,7 @@ print_debian_artifacts() {
     artifacts+=("${matches[@]}")
   done
 
-  log "debian-auto-build artifacts:"
+  log "trixie-auto-build artifacts:"
   printf '%s\n' "${artifacts[@]}"
 }
 
@@ -817,6 +836,6 @@ ensure_sbuild_chroot || die "sbuild chroot is unavailable"
 
 cd -- "${REPO_ROOT}"
 
-log "debian-auto-build foundation ready: TARGET_ARCH=${TARGET_ARCH} host=${HOST_ID}:${HOST_CODENAME} mirror=${DEBIAN_AUTO_BUILD_MIRROR} provision=${PROVISION} sudo=${sudo_mode}"
+log "trixie-auto-build foundation ready: TARGET_ARCH=${TARGET_ARCH} host=${HOST_ID}:${HOST_CODENAME} mirror=${TRIXIE_AUTO_BUILD_MIRROR} provision=${PROVISION} sudo=${sudo_mode}"
 run_debian_build
 print_debian_artifacts

@@ -11,10 +11,10 @@ install smoke tests. It is for local validation and release preparation.
 
 | Target | Purpose |
 |---|---|
-| `make build` | Full Debian 13 local backport pipeline |
-| `scripts/debian-auto-build.sh` | Check a Debian 13 builder and run the Debian build when ready |
-| `scripts/debian-auto-build.sh --provision [--yes]` | Prepare the Debian builder, optionally auto-confirming missing chroot creation, then run the Debian build |
-| `make source-ci` | Source-package-only path used by scheduled/manual source CI |
+| `make trixie-build` | Full Debian 13 local backport pipeline |
+| `scripts/trixie-auto-build.sh` | Check a Debian 13 builder and run the Debian build when ready |
+| `scripts/trixie-auto-build.sh --provision [--yes]` | Prepare the Debian builder, optionally auto-confirming missing chroot creation, then run the Debian build |
+| `make trixie-source-ci` | Source-package-only path used by scheduled/manual source CI |
 | `scripts/noble-auto-build.sh` | Check an Ubuntu 24.04 builder and run the Ubuntu build when ready |
 | `scripts/noble-auto-build.sh --provision [--yes]` | Prepare the Ubuntu builder, optionally auto-confirming missing chroot creation, then run the Ubuntu build |
 | `make noble-build` | Lower-level Ubuntu 24.04 backport pipeline |
@@ -34,7 +34,7 @@ Debian inputs. They record the expected `.dsc` and source artifacts, sizes,
 SHA-256 hashes, and Debian pool paths.
 
 The committed `.lock.tsv` files are shell-friendly projections generated from
-the YAML files. Run `make verify-lock` to regenerate and compare them.
+the YAML files. Run `make trixie-verify-locks` to regenerate and compare them.
 
 ## CI
 

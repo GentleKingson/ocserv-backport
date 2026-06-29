@@ -20,49 +20,45 @@ test: ## Run Bats test suite
 	bats test/
 
 .PHONY: ci-script-test
-ci-script-test: ## Run stubbed build-entrypoint orchestration tests
-	bats test/test_build_entrypoint.bats test/test_source_ci.bats
+ci-script-test: ## Run stubbed Trixie build-entrypoint orchestration tests
+	bats test/test_trixie_build_entrypoint.bats test/test_trixie_source_ci.bats
 
-.PHONY: verify-lock
-verify-lock: ## Verify source-lock YAML files match generated TSV projections
+.PHONY: trixie-verify-locks
+trixie-verify-locks: ## Verify source-lock YAML files match generated TSV projections
 	scripts/verify-source-lock.sh
 
-.PHONY: fetch rewrap src-pkg
-fetch: ## Fetch locked ocserv source from Debian pool
-	scripts/fetch-source.sh
+.PHONY: trixie-fetch-ocserv trixie-rewrap-ocserv trixie-src-pkg-ocserv
+trixie-fetch-ocserv: ## Fetch locked ocserv source from Debian pool
+	scripts/trixie-fetch-source.sh
 
-rewrap: ## Rewrite changelog to the trixie backport version
-	scripts/rewrap-changelog.sh
+trixie-rewrap-ocserv: ## Rewrite ocserv changelog to the Trixie backport version
+	scripts/trixie-rewrap-changelog.sh
 
-src-pkg: ## Build the backport source package
-	scripts/build-source-package.sh
+trixie-src-pkg-ocserv: ## Build the ocserv Trixie source package
+	scripts/trixie-build-source-package.sh
 
-.PHONY: binary lint
-binary: ## Build target-architecture binary package with sbuild in trixie
-	scripts/build-binary.sh
+.PHONY: trixie-binary-ocserv trixie-lint
+trixie-binary-ocserv: ## Build target-architecture ocserv binary package with sbuild in trixie
+	scripts/trixie-build-binary-ocserv.sh
 
-lint: ## Run lintian on the generated .changes
-	scripts/lint-package.sh
+trixie-lint: ## Run lintian on the generated Trixie ocserv .changes
+	scripts/trixie-lint-package.sh
 
-.PHONY: smoke-basic
-smoke-basic: ## Install and inspect the local .deb in a trixie container
-	scripts/smoke-test.sh
+.PHONY: trixie-smoke-basic
+trixie-smoke-basic: ## Install and inspect the local Trixie ocserv .deb in a trixie container
+	scripts/trixie-smoke-test.sh
 
-.PHONY: build
-build: ## Run the full local backport validation pipeline
-	scripts/build.sh
+.PHONY: trixie-build
+trixie-build: ## Run the full Debian Trixie local backport validation pipeline
+	scripts/trixie-build.sh
 
-.PHONY: debian-auto-build
-debian-auto-build: ## Run the Debian trixie host auto-build pipeline
-	scripts/debian-auto-build.sh
+.PHONY: trixie-auto-build
+trixie-auto-build: ## Run the Debian Trixie host auto-build pipeline
+	scripts/trixie-auto-build.sh
 
-.PHONY: source-ci
-source-ci: ## Run the real source-package CI pipeline
-	scripts/source-package-ci.sh
-
-.PHONY: dry-run
-dry-run: ## Compatibility alias for the full local build pipeline
-	scripts/dry-run.sh
+.PHONY: trixie-source-ci
+trixie-source-ci: ## Run the real Debian Trixie source-package CI pipeline
+	scripts/trixie-source-package-ci.sh
 
 .PHONY: noble-build
 noble-build: ## Run the Ubuntu 24.04 Noble two-stage local backport pipeline

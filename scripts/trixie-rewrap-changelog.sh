@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 SOURCE_VERSION="1.5.0-1"
-# shellcheck source=scripts/debian-env.sh
-. "${SCRIPT_DIR}/debian-env.sh"
+# shellcheck source=scripts/trixie-env.sh
+. "${SCRIPT_DIR}/trixie-env.sh"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 
@@ -18,7 +18,7 @@ cd "${SRCDIR}"
 
 current_version="$(dpkg-parsechangelog -SVersion)"
 if [[ "${current_version}" == "${BACKPORT_VERSION}" ]]; then
-  die "changelog already rewrapped to ${BACKPORT_VERSION}; rerun fetch before rewrap"
+  die "changelog already rewrapped to ${BACKPORT_VERSION}; rerun trixie-fetch-ocserv before trixie-rewrap-ocserv"
 fi
 [[ "${current_version}" == "${SOURCE_VERSION}" ]] \
   || die "unexpected changelog version ${current_version}; expected ${SOURCE_VERSION}"

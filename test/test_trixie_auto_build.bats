@@ -11,9 +11,9 @@ setup() {
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${AUTO_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
-  [[ -f "${REPO_ROOT}/scripts/debian-env.sh" ]] && cp "${REPO_ROOT}/scripts/debian-env.sh" "${AUTO_REPO}/scripts/debian-env.sh"
-  if [[ -f "${REPO_ROOT}/scripts/debian-auto-build.sh" ]]; then
-    cp "${REPO_ROOT}/scripts/debian-auto-build.sh" "${AUTO_REPO}/scripts/debian-auto-build.sh"
+  [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${AUTO_REPO}/scripts/trixie-env.sh"
+  if [[ -f "${REPO_ROOT}/scripts/trixie-auto-build.sh" ]]; then
+    cp "${REPO_ROOT}/scripts/trixie-auto-build.sh" "${AUTO_REPO}/scripts/trixie-auto-build.sh"
   fi
 }
 
@@ -523,11 +523,11 @@ install_fake_successful_make() {
   cat > "${FAKEBIN}/make" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'make %s DEBIAN_DOCKER_CMD=%s\n' "\$*" "\${DEBIAN_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+printf 'make %s TRIXIE_DOCKER_CMD=%s\n' "\$*" "\${TRIXIE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
 printf '%s\n' "\${DSCVERIFY_KEYRING_PATHS:-}" > "${AUTO_REPO}/make-dscverify-keyrings"
 printf '%s\n' "\${LINTIAN_PROFILE:-}" > "${AUTO_REPO}/make-lintian-profile"
 printf '%s\n' "\${TARGET_ARCH:-}" > "${AUTO_REPO}/make-target-arch"
-if [[ "\$*" != "build" ]]; then
+if [[ "\$*" != "trixie-build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
 fi
@@ -546,9 +546,9 @@ install_fake_make_without_artifacts() {
   cat > "${FAKEBIN}/make" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'make %s DEBIAN_DOCKER_CMD=%s\n' "\$*" "\${DEBIAN_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+printf 'make %s TRIXIE_DOCKER_CMD=%s\n' "\$*" "\${TRIXIE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
 printf '%s\n' "\${LINTIAN_PROFILE:-}" > "${AUTO_REPO}/make-lintian-profile"
-if [[ "\$*" != "build" ]]; then
+if [[ "\$*" != "trixie-build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
 fi
@@ -559,9 +559,9 @@ SH
 run_auto_isolated() {
   local env_args=(
     "PATH=${FAKEBIN}"
-    "DEBIAN_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release"
-    "DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH=${DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH:-${AUTO_REPO}/docker.asc}"
-    "DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH=${DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH:-${AUTO_REPO}/docker.sources}"
+    "TRIXIE_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release"
+    "TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH=${TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH:-${AUTO_REPO}/docker.asc}"
+    "TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH=${TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH:-${AUTO_REPO}/docker.sources}"
   )
   if [[ "${DSCVERIFY_KEYRING_PATHS+x}" == x ]]; then
     env_args+=("DSCVERIFY_KEYRING_PATHS=${DSCVERIFY_KEYRING_PATHS}")
@@ -584,11 +584,11 @@ run_auto_isolated() {
   if [[ "${FAKE_UNAME_STATUS+x}" == x ]]; then
     env_args+=("FAKE_UNAME_STATUS=${FAKE_UNAME_STATUS}")
   fi
-  if [[ "${DEBIAN_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
-    env_args+=("DEBIAN_AUTO_BUILD_SKIP_NEWGRP=${DEBIAN_AUTO_BUILD_SKIP_NEWGRP}")
+  if [[ "${TRIXIE_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
+    env_args+=("TRIXIE_AUTO_BUILD_SKIP_NEWGRP=${TRIXIE_AUTO_BUILD_SKIP_NEWGRP}")
   fi
-  if [[ "${DEBIAN_AUTO_BUILD_CHROOT_BASE+x}" == x ]]; then
-    env_args+=("DEBIAN_AUTO_BUILD_CHROOT_BASE=${DEBIAN_AUTO_BUILD_CHROOT_BASE}")
+  if [[ "${TRIXIE_AUTO_BUILD_CHROOT_BASE+x}" == x ]]; then
+    env_args+=("TRIXIE_AUTO_BUILD_CHROOT_BASE=${TRIXIE_AUTO_BUILD_CHROOT_BASE}")
   fi
   if [[ "${FAKE_APT_FAIL_COMMAND+x}" == x ]]; then
     env_args+=("FAKE_APT_FAIL_COMMAND=${FAKE_APT_FAIL_COMMAND}")
@@ -618,43 +618,43 @@ run_auto_isolated() {
         env_args+=("$1")
         shift
       done
-      printf "%s" "${input}" | env "${env_args[@]}" /bin/bash -c '"'"'cd "$1" || exit; shift; /bin/bash scripts/debian-auto-build.sh "$@"'"'"' _ "${repo}" "$@"
+      printf "%s" "${input}" | env "${env_args[@]}" /bin/bash -c '"'"'cd "$1" || exit; shift; /bin/bash scripts/trixie-auto-build.sh "$@"'"'"' _ "${repo}" "$@"
     ' _ "${RUN_AUTO_INPUT}" "${AUTO_REPO}" "${env_count}" "${env_args[@]}" "$@"
   else
-    run env "${env_args[@]}" /bin/bash -c 'cd "$1" || exit; shift; /bin/bash scripts/debian-auto-build.sh "$@"' _ "${AUTO_REPO}" "$@"
+    run env "${env_args[@]}" /bin/bash -c 'cd "$1" || exit; shift; /bin/bash scripts/trixie-auto-build.sh "$@"' _ "${AUTO_REPO}" "$@"
   fi
 }
 
-@test "debian-auto-build --help prints usage" {
+@test "trixie-auto-build --help prints usage" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   run_auto_isolated --help
   [ "${status}" -eq 0 ]
-  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/trixie-auto-build.sh [--provision] [--yes]" <<<"${output}"
   grep -Fq -- "Auto-confirm creation of a missing sbuild chroot in --provision mode." <<<"${output}"
 }
 
-@test "debian-auto-build rejects unknown options" {
+@test "trixie-auto-build rejects unknown options" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   run_auto_isolated --bad-option
   [ "${status}" -ne 0 ]
-  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/trixie-auto-build.sh [--provision] [--yes]" <<<"${output}"
   [[ "${output}" == *"unknown option: --bad-option"* ]]
 }
 
-@test "debian-auto-build --yes requires --provision" {
+@test "trixie-auto-build --yes requires --provision" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
 
   run_auto_isolated --yes
 
   [ "${status}" -ne 0 ]
-  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/trixie-auto-build.sh [--provision] [--yes]" <<<"${output}"
   grep -Fq -- "--yes requires --provision" <<<"${output}"
 }
 
-@test "debian-auto-build accepts Ubuntu Noble as GitHub runner host" {
+@test "trixie-auto-build accepts Ubuntu Noble as GitHub runner host" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -665,10 +665,10 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
 }
 
-@test "debian-auto-build rejects unsupported hosts" {
+@test "trixie-auto-build rejects unsupported hosts" {
   write_os_release ubuntu jammy
   install_minimal_valid_fakebin
   run_auto_isolated
@@ -676,7 +676,7 @@ run_auto_isolated() {
   [[ "${output}" == *"requires Debian 13 trixie or Ubuntu 24.04 Noble"* ]]
 }
 
-@test "debian-auto-build rejects unsupported TARGET_ARCH values" {
+@test "trixie-auto-build rejects unsupported TARGET_ARCH values" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
 
@@ -688,7 +688,7 @@ run_auto_isolated() {
   done
 }
 
-@test "debian-auto-build auto-detects native arm64 target" {
+@test "trixie-auto-build auto-detects native arm64 target" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -706,7 +706,7 @@ run_auto_isolated() {
   grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-arm64-sbuild http://deb.debian.org/debian" <<<"${output}"
 }
 
-@test "debian-auto-build rejects non-native target by default" {
+@test "trixie-auto-build rejects non-native target by default" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
 
@@ -718,7 +718,7 @@ run_auto_isolated() {
   [[ "${output}" != *"Missing sbuild chroot"* ]]
 }
 
-@test "debian-auto-build allows explicit unsupported non-native override" {
+@test "trixie-auto-build allows explicit unsupported non-native override" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -737,7 +737,7 @@ run_auto_isolated() {
   grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-arm64-sbuild http://deb.debian.org/debian" <<<"${output}"
 }
 
-@test "debian-auto-build non-native override requires literal one" {
+@test "trixie-auto-build non-native override requires literal one" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
 
@@ -748,7 +748,7 @@ run_auto_isolated() {
   [[ "${output}" == *"ALLOW_NON_NATIVE_TARGET_ARCH=1"* ]]
 }
 
-@test "debian-auto-build default mode reports missing core command without sudo side effects" {
+@test "trixie-auto-build default mode reports missing core command without sudo side effects" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   rm "${FAKEBIN}/curl"
@@ -760,13 +760,13 @@ run_auto_isolated() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required command: curl"* ]]
   [[ "${output}" == *"apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends"* ]]
-  [[ "${output}" == *"scripts/debian-auto-build.sh --provision"* ]]
+  [[ "${output}" == *"scripts/trixie-auto-build.sh --provision"* ]]
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
   [ ! -e "${AUTO_REPO}/apt-get-calls" ]
 }
 
-@test "debian-auto-build --provision installs core packages" {
+@test "trixie-auto-build --provision installs core packages" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -789,7 +789,7 @@ run_auto_isolated() {
   [[ "${output}" != *"apt progress output should be hidden"* ]]
 }
 
-@test "debian-auto-build --provision refreshes Debian dscverify keyrings when unset" {
+@test "trixie-auto-build --provision refreshes Debian dscverify keyrings when unset" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -808,7 +808,7 @@ run_auto_isolated() {
   [[ "$(cat "${AUTO_REPO}/make-dscverify-keyrings")" == *"${keyring_root}/root/usr/share/keyrings/debian-keyring.gpg"* ]]
 }
 
-@test "debian-auto-build default mode fails when no Debian keyring is readable" {
+@test "trixie-auto-build default mode fails when no Debian keyring is readable" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -821,7 +821,7 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
-@test "debian-auto-build default mode reports missing Docker without sudo side effects" {
+@test "trixie-auto-build default mode reports missing Docker without sudo side effects" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   rm "${FAKEBIN}/docker"
@@ -831,14 +831,14 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Docker CE is required for the Debian auto-build wrapper"* ]]
+  [[ "${output}" == *"Docker CE is required for the Trixie auto-build wrapper"* ]]
   [[ "${output}" == *"docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"* ]]
   [[ "${output}" != *"docker.io"* ]]
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
-@test "debian-auto-build default mode rejects missing Docker CE package even when daemon works" {
+@test "trixie-auto-build default mode rejects missing Docker CE package even when daemon works" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -856,7 +856,7 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
-@test "debian-auto-build default mode rejects distro Docker packages" {
+@test "trixie-auto-build default mode rejects distro Docker packages" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -876,7 +876,7 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
-@test "debian-auto-build default mode reports Docker daemon repair commands without sudo execution" {
+@test "trixie-auto-build default mode reports Docker daemon repair commands without sudo execution" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 1
@@ -893,7 +893,7 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/systemctl-calls" ]
 }
 
-@test "debian-auto-build --provision installs Docker CE from Debian repo" {
+@test "trixie-auto-build --provision installs Docker CE from Debian repo" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -906,8 +906,8 @@ run_auto_isolated() {
   FAKE_DPKG_QUERY_INSTALLED="docker-ce docker-ce-cli containerd.io docker.io containerd runc podman-docker" \
     FAKE_APT_DOCKER_INFO_FIRST_STATUS=1 \
     DSCVERIFY_KEYRING_PATHS="${keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
@@ -928,10 +928,10 @@ run_auto_isolated() {
   grep -Fq -- "Architectures: amd64" "${docker_source}"
   grep -Fxq -- "systemctl enable --now docker" "${AUTO_REPO}/systemctl-calls"
   grep -Fxq -- "systemctl enable --now containerd" "${AUTO_REPO}/systemctl-calls"
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
 
-@test "debian-auto-build Docker CE source uses host architecture under non-native override" {
+@test "trixie-auto-build Docker CE source uses host architecture under non-native override" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -945,7 +945,7 @@ run_auto_isolated() {
     TARGET_ARCH=arm64 \
     ALLOW_NON_NATIVE_TARGET_ARCH=1 \
     RUN_AUTO_INPUT=$'yes\n' \
-    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
@@ -954,7 +954,7 @@ run_auto_isolated() {
   [ "$(cat "${AUTO_REPO}/make-target-arch")" = "arm64" ]
 }
 
-@test "debian-auto-build --provision installs Docker CE from Ubuntu repo on Noble host" {
+@test "trixie-auto-build --provision installs Docker CE from Ubuntu repo on Noble host" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -965,8 +965,8 @@ run_auto_isolated() {
   : > "${keyring}"
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
@@ -978,7 +978,7 @@ run_auto_isolated() {
   grep -Fq -- "Architectures: amd64" "${docker_source}"
 }
 
-@test "debian-auto-build --provision diagnoses Docker CE containerd conflict" {
+@test "trixie-auto-build --provision diagnoses Docker CE containerd conflict" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -989,8 +989,8 @@ run_auto_isolated() {
 
   FAKE_APT_DOCKER_CONFLICT=1 \
     DSCVERIFY_KEYRING_PATHS="${keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
-    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
     run_auto_isolated --provision
 
   [ "${status}" -ne 0 ]
@@ -998,7 +998,7 @@ run_auto_isolated() {
   [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
 }
 
-@test "debian-auto-build default mode runs build and prints artifacts" {
+@test "trixie-auto-build default mode runs build and prints artifacts" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1009,7 +1009,7 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "" ]
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
@@ -1017,7 +1017,7 @@ run_auto_isolated() {
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
 }
 
-@test "debian-auto-build native arm64 runs build and prints arm64 artifacts" {
+@test "trixie-auto-build native arm64 runs build and prints arm64 artifacts" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1037,7 +1037,7 @@ run_auto_isolated() {
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.buildinfo"* ]]
 }
 
-@test "debian-auto-build uses Debian lintian profile on Ubuntu Noble host" {
+@test "trixie-auto-build uses Debian lintian profile on Ubuntu Noble host" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1048,11 +1048,11 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -eq 0 ]
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "debian" ]
 }
 
-@test "debian-auto-build fails after successful make when expected artifacts are missing" {
+@test "trixie-auto-build fails after successful make when expected artifacts are missing" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1063,11 +1063,11 @@ run_auto_isolated() {
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_*.dsc"* ]]
 }
 
-@test "debian-auto-build default mode reports missing sbuild group commands" {
+@test "trixie-auto-build default mode reports missing sbuild group commands" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_groups "users adm"
@@ -1080,11 +1080,11 @@ run_auto_isolated() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"sudo sbuild-adduser \"\$USER\""* ]]
   [[ "${output}" == *"newgrp sbuild"* ]]
-  [[ "${output}" == *"scripts/debian-auto-build.sh --provision"* ]]
+  [[ "${output}" == *"scripts/trixie-auto-build.sh --provision"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
 }
 
-@test "debian-auto-build --provision adds sbuild group and stops in old shell" {
+@test "trixie-auto-build --provision adds sbuild group and stops in old shell" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_groups "users adm"
@@ -1096,7 +1096,7 @@ run_auto_isolated() {
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" \
     USER=builder \
-    DEBIAN_AUTO_BUILD_SKIP_NEWGRP=1 \
+    TRIXIE_AUTO_BUILD_SKIP_NEWGRP=1 \
     run_auto_isolated --provision
 
   [ "${status}" -ne 0 ]
@@ -1106,7 +1106,7 @@ run_auto_isolated() {
   [[ "${output}" == *"rerun"* ]]
 }
 
-@test "debian-auto-build default mode reports missing trixie sbuild chroot command" {
+@test "trixie-auto-build default mode reports missing trixie sbuild chroot command" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_docker_info_sequence 0
@@ -1123,7 +1123,7 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 }
 
-@test "debian-auto-build rejects registered but unusable chroot in default mode" {
+@test "trixie-auto-build rejects registered but unusable chroot in default mode" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   install_fake_stale_registered_chroot
@@ -1139,7 +1139,7 @@ run_auto_isolated() {
   grep -Fq -- "sudo ls -ld /srv/chroot/trixie-amd64-sbuild" <<<"${output}"
 }
 
-@test "debian-auto-build --provision creates chroot only after literal yes" {
+@test "trixie-auto-build --provision creates chroot only after literal yes" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -1177,10 +1177,10 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sudo-calls"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
 
-@test "debian-auto-build --provision --yes creates missing chroot without prompting" {
+@test "trixie-auto-build --provision --yes creates missing chroot without prompting" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -1200,10 +1200,10 @@ run_auto_isolated() {
   grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
   grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sudo-calls"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
 
-@test "debian-auto-build --yes --provision accepts reverse option order" {
+@test "trixie-auto-build --yes --provision accepts reverse option order" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
   allow_fake_provision_commands
@@ -1222,5 +1222,5 @@ run_auto_isolated() {
   fi
   grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
-  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+  grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
