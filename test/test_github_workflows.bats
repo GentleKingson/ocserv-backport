@@ -171,23 +171,52 @@ PY
   ! grep -Fq -- "build/**/*.build" "${workflow}"
 }
 
-@test "source CI workflow uploads staged Debian source artifacts from new layout" {
-  workflow=".github/workflows/source-ci.yml"
+@test "primary CI runs source package verification without artifacts" {
+  workflow=".github/workflows/ci.yml"
+  removed_workflow=".github/workflows/source-ci"
+  removed_workflow+=".yml"
+  stage_step="Stage source package"
+  stage_step+=" artifacts"
+  upload_step="Upload source package"
+  upload_step+=" artifacts"
+  staging_dir="source-package"
+  staging_dir+="-artifacts"
+  artifact_name="ocserv-source"
+  artifact_name+="-package"
 
+  [ -f "${workflow}" ]
+  [ ! -f "${removed_workflow}" ]
+
+  grep -Fq -- "workflow_dispatch:" "${workflow}"
+  grep -Fq -- "schedule:" "${workflow}"
+  grep -Fq -- "cron: '23 3 * * 1'" "${workflow}"
+  grep -Fq -- "target:" "${workflow}"
+  grep -Fq -- "required: true" "${workflow}"
+  grep -Fq -- "default: checks" "${workflow}"
+  grep -Fq -- "type: choice" "${workflow}"
+  grep -Fq -- "source-package" "${workflow}"
+  grep -Fq -- "all" "${workflow}"
+  grep -Fq -- "github.event_name == 'push'" "${workflow}"
+  grep -Fq -- "github.event_name == 'pull_request'" "${workflow}"
+  grep -Fq -- "github.event_name == 'schedule'" "${workflow}"
+  grep -Fq -- "inputs.target == 'checks'" "${workflow}"
+  grep -Fq -- "inputs.target == 'source-package'" "${workflow}"
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
-  grep -Fq -- "Stage source package artifacts" "${workflow}"
-  grep -Fq -- 'staging="${RUNNER_TEMP}/source-package-artifacts"' "${workflow}"
-  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
-  grep -Fq -- 'build/debian/trixie/${TARGET_ARCH}/source' "${workflow}"
-  grep -Fq -- 'find "${target_source}"' "${workflow}"
-  ! grep -Fq -- 'cp -a "${target_source}"' "${workflow}"
-  grep -Fq -- '${{ runner.temp }}/source-package-artifacts/**' "${workflow}"
-  ! grep -Fq -- "build/source/ocserv_" "${workflow}"
+  grep -Fq -- "image: debian:trixie" "${workflow}"
+  grep -Fq -- "actions/checkout@v6" "${workflow}"
+  grep -Fq -- "make source-ci" "${workflow}"
+  ! grep -Fq -- "${stage_step}" "${workflow}"
+  ! grep -Fq -- "${upload_step}" "${workflow}"
+  ! grep -Fq -- "${staging_dir}" "${workflow}"
+  ! grep -Fq -- "${artifact_name}" "${workflow}"
 }
 
 @test "primary CI watches every GitHub workflow file" {
+  old_source_workflow=".github/workflows/source-ci"
+  old_source_workflow+=".yml"
+
   grep -Fq -- "'.github/workflows/**'" .github/workflows/ci.yml
-  ! grep -Fq -- "'.github/workflows/source-ci.yml'" .github/workflows/ci.yml
+  ! grep -Fq -- "'${old_source_workflow}'" .github/workflows/ci.yml
 }
 
 @test "README documents the manual Ubuntu 24.04 build workflow" {

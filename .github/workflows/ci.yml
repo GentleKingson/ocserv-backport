@@ -19,12 +19,33 @@ name: ci
       - 'README.md'
       - '.github/workflows/**'
   workflow_dispatch:
+    inputs:
+      target:
+        description: CI target to run
+        required: true
+        default: checks
+        type: choice
+        options:
+          - checks
+          - source-package
+          - all
+  schedule:
+    - cron: '23 3 * * 1'
 
 permissions:
   contents: read
 
 jobs:
   checks:
+    if: >-
+      ${{
+        github.event_name == 'push' ||
+        github.event_name == 'pull_request' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.target == 'checks' || inputs.target == 'all')
+        )
+      }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,3 +83,52 @@ jobs:
 
       - name: Entrypoint orchestration tests
         run: make ci-script-test
+
+  source-package:
+    if: >-
+      ${{
+        github.event_name == 'schedule' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.target == 'source-package' || inputs.target == 'all')
+        )
+      }}
+    runs-on: ubuntu-latest
+    env:
+      TARGET_ARCH: amd64
+    container:
+      image: debian:trixie
+
+    steps:
+      - name: Install checkout dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git
+
+      - uses: actions/checkout@v6
+
+      - name: Install source package dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            build-essential \
+            ca-certificates \
+            curl \
+            debhelper \
+            debian-archive-keyring \
+            debian-keyring \
+            debian-maintainers \
+            devscripts \
+            dpkg-dev \
+            fakeroot \
+            gnupg \
+            make \
+            python3 \
+            python3-yaml \
+            xz-utils
+
+      - name: Build source package
+        run: make source-ci

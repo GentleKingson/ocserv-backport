@@ -320,6 +320,8 @@ validation，并上传构建产物。构建产物 artifact 名分别是
 名分别是 `debian-trixie-build-logs-amd64` 和
 `debian-trixie-build-logs-arm64`，失败时也会尝试上传。
 
-手动或定时 source CI 在 `debian:trixie` 容器中只构建 source package artifact。
+`ci.yml` workflow 会在每周定时任务中验证 source package 构建链路，也可以
+通过手动触发时选择 `target=source-package` 或 `target=all` 运行。该路径在
+`debian:trixie` 容器中执行，不上传 GitHub Actions artifacts。
 
 source CI 不运行 `binary`、`lint` 或 `smoke-basic`。
