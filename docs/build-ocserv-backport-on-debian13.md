@@ -195,6 +195,16 @@ scripts/debian-auto-build.sh --provision
 `--provision` 会安装构建依赖、检查 Debian source signature verification
 keyring、配置 Docker CE，并在确认后创建 `trixie-${TARGET_ARCH}-sbuild`
 sbuild chroot。
+
+无人值守环境可以使用：
+
+```bash
+scripts/debian-auto-build.sh --provision --yes
+```
+
+`--yes` 仅自动确认“缺少 sbuild chroot 时创建 chroot”这一项；它不会绕过
+已存在目录、损坏 chroot、非 native 架构 guard 或其他安全检查。
+
 普通用户首次加入 `sbuild` 组后，需要在新 shell 中继续：
 
 ```bash

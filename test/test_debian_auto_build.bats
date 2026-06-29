@@ -630,7 +630,8 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   run_auto_isolated --help
   [ "${status}" -eq 0 ]
-  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Auto-confirm creation of a missing sbuild chroot in --provision mode." <<<"${output}"
 }
 
 @test "debian-auto-build rejects unknown options" {
@@ -638,8 +639,19 @@ run_auto_isolated() {
   install_minimal_valid_fakebin
   run_auto_isolated --bad-option
   [ "${status}" -ne 0 ]
-  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
   [[ "${output}" == *"unknown option: --bad-option"* ]]
+}
+
+@test "debian-auto-build --yes requires --provision" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+
+  run_auto_isolated --yes
+
+  [ "${status}" -ne 0 ]
+  grep -Fq -- "Usage: scripts/debian-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "--yes requires --provision" <<<"${output}"
 }
 
 @test "debian-auto-build accepts Ubuntu Noble as GitHub runner host" {
@@ -1145,11 +1157,70 @@ run_auto_isolated() {
   [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT=$'y\n' \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT="" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
     RUN_AUTO_INPUT=$'yes\n' \
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "debian-auto-build --provision --yes creates missing chroot without prompting" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    run_auto_isolated --provision --yes
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
+  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "debian-auto-build --yes --provision accepts reverse option order" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    run_auto_isolated --yes --provision
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-amd64-sbuild http://deb.debian.org/debian" "${AUTO_REPO}/sbuild-createchroot-calls"
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
