@@ -6,13 +6,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-TARGET_FAMILY="${TARGET_FAMILY:-debian}"
-TARGET_SUITE="${TARGET_SUITE:-trixie}"
-TARGET_ARCH="${TARGET_ARCH:-amd64}"
-# shellcheck source=scripts/_target_paths.sh
-. "${SCRIPT_DIR}/_target_paths.sh"
-TARGET_DISTRIBUTION="${TARGET_SUITE}"
-[[ "${TARGET_ARCH}" == "amd64" ]] || die "unsupported TARGET_ARCH=${TARGET_ARCH}; supported architectures: amd64"
+# shellcheck source=scripts/debian-env.sh
+. "${SCRIPT_DIR}/debian-env.sh"
 
 DSC="${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run 'make src-pkg' first)"

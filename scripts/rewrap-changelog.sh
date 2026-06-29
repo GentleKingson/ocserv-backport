@@ -7,12 +7,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 SOURCE_VERSION="1.5.0-1"
-TARGET_FAMILY="${TARGET_FAMILY:-debian}"
-TARGET_SUITE="${TARGET_SUITE:-trixie}"
-TARGET_ARCH="${TARGET_ARCH:-amd64}"
-# shellcheck source=scripts/_target_paths.sh
-. "${SCRIPT_DIR}/_target_paths.sh"
-TARGET_DISTRIBUTION="${TARGET_SUITE}"
+# shellcheck source=scripts/debian-env.sh
+. "${SCRIPT_DIR}/debian-env.sh"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 

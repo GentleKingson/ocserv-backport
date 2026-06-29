@@ -19,7 +19,9 @@ setup_entrypoint_repo() {
   ENTRY_REPO="$(mktemp -d)"
   mkdir -p "${ENTRY_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${ENTRY_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_arch.sh" "${ENTRY_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${ENTRY_REPO}/scripts/_target_paths.sh"
+  cp "${REPO_ROOT}/scripts/debian-env.sh" "${ENTRY_REPO}/scripts/debian-env.sh"
   cp "${REPO_ROOT}/scripts/dry-run.sh" "${ENTRY_REPO}/scripts/dry-run.sh"
   cp "${REPO_ROOT}/Makefile" "${ENTRY_REPO}/Makefile"
   if [[ -f "${REPO_ROOT}/scripts/build.sh" ]]; then
@@ -27,6 +29,21 @@ setup_entrypoint_repo() {
   fi
   SYSTEM_MAKE="$(command -v make)"
   FAKEBIN="$(mktemp -d)"
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) printf 'amd64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m) printf 'x86_64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
 }
 
 install_fake_make() {

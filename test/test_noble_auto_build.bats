@@ -8,6 +8,7 @@ setup() {
   FAKEBIN="$(mktemp -d)"
   mkdir -p "${AUTO_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${AUTO_REPO}/scripts/_common.sh"
+  [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${AUTO_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   cp "${REPO_ROOT}/scripts/noble-env.sh" "${AUTO_REPO}/scripts/noble-env.sh"

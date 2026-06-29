@@ -8,8 +8,10 @@ setup() {
   FAKEBIN="$(mktemp -d)"
   mkdir -p "${AUTO_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${AUTO_REPO}/scripts/_common.sh"
+  [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${AUTO_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
+  [[ -f "${REPO_ROOT}/scripts/debian-env.sh" ]] && cp "${REPO_ROOT}/scripts/debian-env.sh" "${AUTO_REPO}/scripts/debian-env.sh"
   if [[ -f "${REPO_ROOT}/scripts/debian-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/debian-auto-build.sh" "${AUTO_REPO}/scripts/debian-auto-build.sh"
   fi
@@ -50,10 +52,37 @@ SH
     cat > "${FAKEBIN}/${cmd}" <<'SH'
 #!/usr/bin/env bash
 case "$(basename "$0")" in
-  dpkg) [[ "${1:-}" == "--print-architecture" ]] && echo amd64 ;;
+  dpkg)
+    case "${1:-}" in
+      --print-architecture)
+        if [[ "${FAKE_DPKG_STATUS:-0}" != "0" ]]; then
+          exit "${FAKE_DPKG_STATUS}"
+        fi
+        printf '%s\n' "${FAKE_DPKG_ARCH:-amd64}"
+        ;;
+      *)
+        echo "unexpected dpkg command: $*" >&2
+        exit 99
+        ;;
+    esac
+    ;;
+  uname)
+    case "${1:-}" in
+      -m)
+        if [[ "${FAKE_UNAME_STATUS:-0}" != "0" ]]; then
+          exit "${FAKE_UNAME_STATUS}"
+        fi
+        printf '%s\n' "${FAKE_UNAME_M:-x86_64}"
+        ;;
+      *)
+        echo "unexpected uname command: $*" >&2
+        exit 99
+        ;;
+    esac
+    ;;
   gpg) exit 0 ;;
-  sbuild) echo "trixie-amd64-sbuild" ;;
-  schroot) echo "chroot:trixie-amd64-sbuild" ;;
+  sbuild) echo "trixie-${TARGET_ARCH:-amd64}-sbuild" ;;
+  schroot) echo "chroot:trixie-${TARGET_ARCH:-amd64}-sbuild" ;;
   docker)
     case "${1:-}" in
       info) exit 0 ;;
@@ -90,9 +119,10 @@ SH
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+target="trixie-\${TARGET_ARCH:-amd64}-sbuild"
 case "\${1:-}" in
   --list-chroots)
-    echo "trixie-amd64-sbuild"
+    echo "\${target}"
     exit 0
     ;;
   *)
@@ -104,13 +134,14 @@ SH
   cat > "${FAKEBIN}/schroot" <<SH
 #!/usr/bin/env bash
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+target="trixie-\${TARGET_ARCH:-amd64}-sbuild"
 case "\${1:-}" in
   -l|--list)
-    echo "chroot:trixie-amd64-sbuild"
+    echo "chroot:\${target}"
     exit 0
     ;;
   -c)
-    if [[ "\${1:-}" == "-c" && "\${2:-}" == "trixie-amd64-sbuild" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "\${target}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
       exit 0
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -391,14 +422,15 @@ install_fake_stale_registered_chroot() {
   cat > "${FAKEBIN}/schroot" <<SH
 #!/usr/bin/env bash
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+target="trixie-\${TARGET_ARCH:-amd64}-sbuild"
 case "\${1:-}" in
   -l|--list)
-    echo "chroot:trixie-amd64-sbuild"
+    echo "chroot:\${target}"
     exit 0
     ;;
   -c)
-    if [[ "\${1:-}" == "-c" && "\${2:-}" == "trixie-amd64-sbuild" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
-      echo "E: 10mount: error: Directory '/srv/chroot/trixie-amd64-sbuild' does not exist" >&2
+    if [[ "\${1:-}" == "-c" && "\${2:-}" == "\${target}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+      echo "E: 10mount: error: Directory '/srv/chroot/\${target}' does not exist" >&2
       exit 1
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -417,15 +449,16 @@ install_fake_sbuild_createchroot() {
   cat > "${FAKEBIN}/schroot" <<SH
 #!/usr/bin/env bash
 printf 'schroot %s\n' "\$*" >> "${AUTO_REPO}/schroot-calls"
+target="trixie-\${TARGET_ARCH:-amd64}-sbuild"
 case "\${1:-}" in
   -l|--list)
     if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
-      echo "chroot:trixie-amd64-sbuild"
+      echo "chroot:\${target}"
     fi
     exit 0
     ;;
   -c)
-    if [[ -f "${AUTO_REPO}/chroot-created" && "\${1:-}" == "-c" && "\${2:-}" == "trixie-amd64-sbuild" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
+    if [[ -f "${AUTO_REPO}/chroot-created" && "\${1:-}" == "-c" && "\${2:-}" == "\${target}" && "\${3:-}" == "-u" && "\${4:-}" == "root" && "\${5:-}" == "--" && "\${6:-}" == "true" ]]; then
       exit 0
     fi
     echo "unexpected schroot command: \$*" >&2
@@ -440,10 +473,11 @@ SH
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 printf 'sbuild %s\n' "\$*" >> "${AUTO_REPO}/sbuild-calls"
+target="trixie-\${TARGET_ARCH:-amd64}-sbuild"
 case "\${1:-}" in
   --list-chroots)
     if [[ -f "${AUTO_REPO}/chroot-created" ]]; then
-      echo "trixie-amd64-sbuild"
+      echo "\${target}"
     fi
     exit 0
     ;;
@@ -492,16 +526,18 @@ set -euo pipefail
 printf 'make %s DEBIAN_DOCKER_CMD=%s\n' "\$*" "\${DEBIAN_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
 printf '%s\n' "\${DSCVERIFY_KEYRING_PATHS:-}" > "${AUTO_REPO}/make-dscverify-keyrings"
 printf '%s\n' "\${LINTIAN_PROFILE:-}" > "${AUTO_REPO}/make-lintian-profile"
+printf '%s\n' "\${TARGET_ARCH:-}" > "${AUTO_REPO}/make-target-arch"
 if [[ "\$*" != "build" ]]; then
   echo "unexpected make command: \$*" >&2
   exit 99
 fi
-/bin/mkdir -p "${AUTO_REPO}/build/debian/trixie/amd64/source" "${AUTO_REPO}/build/debian/trixie/amd64/binary"
+target_arch="\${TARGET_ARCH:-amd64}"
+/bin/mkdir -p "${AUTO_REPO}/build/debian/trixie/\${target_arch}/source" "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc" \
-  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb" \
-  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes" \
-  "${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/source/ocserv_1.5.0-1~debian13.1.dsc" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.deb" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.changes" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.buildinfo"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -532,6 +568,21 @@ run_auto_isolated() {
   fi
   if [[ "${TARGET_ARCH+x}" == x ]]; then
     env_args+=("TARGET_ARCH=${TARGET_ARCH}")
+  fi
+  if [[ "${ALLOW_NON_NATIVE_TARGET_ARCH+x}" == x ]]; then
+    env_args+=("ALLOW_NON_NATIVE_TARGET_ARCH=${ALLOW_NON_NATIVE_TARGET_ARCH}")
+  fi
+  if [[ "${FAKE_DPKG_ARCH+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_ARCH=${FAKE_DPKG_ARCH}")
+  fi
+  if [[ "${FAKE_DPKG_STATUS+x}" == x ]]; then
+    env_args+=("FAKE_DPKG_STATUS=${FAKE_DPKG_STATUS}")
+  fi
+  if [[ "${FAKE_UNAME_M+x}" == x ]]; then
+    env_args+=("FAKE_UNAME_M=${FAKE_UNAME_M}")
+  fi
+  if [[ "${FAKE_UNAME_STATUS+x}" == x ]]; then
+    env_args+=("FAKE_UNAME_STATUS=${FAKE_UNAME_STATUS}")
   fi
   if [[ "${DEBIAN_AUTO_BUILD_SKIP_NEWGRP+x}" == x ]]; then
     env_args+=("DEBIAN_AUTO_BUILD_SKIP_NEWGRP=${DEBIAN_AUTO_BUILD_SKIP_NEWGRP}")
@@ -613,13 +664,76 @@ run_auto_isolated() {
   [[ "${output}" == *"requires Debian 13 trixie or Ubuntu 24.04 Noble"* ]]
 }
 
-@test "debian-auto-build rejects unsupported TARGET_ARCH" {
+@test "debian-auto-build rejects unsupported TARGET_ARCH values" {
   write_os_release debian trixie
   install_minimal_valid_fakebin
-  TARGET_ARCH=arm64 run_auto_isolated
+
+  for arch in i386 armhf riscv64 unknown; do
+    TARGET_ARCH="${arch}" run_auto_isolated
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Unsupported TARGET_ARCH: ${arch}"* ]]
+    [[ "${output}" == *"Supported architectures: amd64, arm64"* ]]
+  done
+}
+
+@test "debian-auto-build auto-detects native arm64 target" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_DPKG_ARCH=arm64 \
+    run_auto_isolated
+
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"unsupported TARGET_ARCH=arm64"* ]]
-  [[ "${output}" == *"amd64"* ]]
+  [[ "${output}" == *"Debian Trixie target architecture: arm64"* ]]
+  [[ "${output}" == *"Debian Trixie native architecture: arm64"* ]]
+  grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-arm64-sbuild http://deb.debian.org/debian" <<<"${output}"
+}
+
+@test "debian-auto-build rejects non-native target by default" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+
+  TARGET_ARCH=arm64 run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"TARGET_ARCH=arm64 differs from native architecture amd64"* ]]
+  [[ "${output}" == *"ALLOW_NON_NATIVE_TARGET_ARCH=1"* ]]
+  [[ "${output}" != *"Missing sbuild chroot"* ]]
+}
+
+@test "debian-auto-build allows explicit unsupported non-native override" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_missing_chroot
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    TARGET_ARCH=arm64 \
+    ALLOW_NON_NATIVE_TARGET_ARCH=1 \
+    run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"ALLOW_NON_NATIVE_TARGET_ARCH=1 only bypasses the native-architecture guard."* ]]
+  [[ "${output}" == *"This path is unsupported by this project."* ]]
+  grep -Fq -- "sudo sbuild-createchroot --arch=arm64 --chroot-suffix=-sbuild --include=eatmydata,ccache,gnupg,ca-certificates trixie /srv/chroot/trixie-arm64-sbuild http://deb.debian.org/debian" <<<"${output}"
+}
+
+@test "debian-auto-build non-native override requires literal one" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+
+  TARGET_ARCH=arm64 ALLOW_NON_NATIVE_TARGET_ARCH=yes run_auto_isolated
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"TARGET_ARCH=arm64 differs from native architecture amd64"* ]]
+  [[ "${output}" == *"ALLOW_NON_NATIVE_TARGET_ARCH=1"* ]]
 }
 
 @test "debian-auto-build default mode reports missing core command without sudo side effects" {
@@ -805,6 +919,29 @@ run_auto_isolated() {
   grep -Fxq -- "make build DEBIAN_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }
 
+@test "debian-auto-build Docker CE source uses host architecture under non-native override" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_source="${AUTO_REPO}/docker.sources"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    TARGET_ARCH=arm64 \
+    ALLOW_NON_NATIVE_TARGET_ARCH=1 \
+    RUN_AUTO_INPUT=$'yes\n' \
+    DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "Architectures: amd64" "${docker_source}"
+  grep -Fq -- "sudo sbuild-createchroot --arch=arm64" "${AUTO_REPO}/sudo-calls"
+  [ "$(cat "${AUTO_REPO}/make-target-arch")" = "arm64" ]
+}
+
 @test "debian-auto-build --provision installs Docker CE from Ubuntu repo on Noble host" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
@@ -866,6 +1003,26 @@ run_auto_isolated() {
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
+}
+
+@test "debian-auto-build native arm64 runs build and prints arm64 artifacts" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    FAKE_DPKG_ARCH=arm64 \
+    run_auto_isolated
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${AUTO_REPO}/make-target-arch")" = "arm64" ]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.changes"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.buildinfo"* ]]
 }
 
 @test "debian-auto-build uses Debian lintian profile on Ubuntu Noble host" {

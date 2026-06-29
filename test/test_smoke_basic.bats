@@ -3,11 +3,29 @@ load helpers/bats-helper.bash
 
 setup_smoke_repo() {
   SMOKE_REPO="$(mktemp -d)"
-  mkdir -p "${SMOKE_REPO}/scripts" "${SMOKE_REPO}/build/debian/trixie/amd64/binary"
+  local target_arch="${TARGET_ARCH:-amd64}"
+  mkdir -p "${SMOKE_REPO}/scripts" "${SMOKE_REPO}/build/debian/trixie/${target_arch}/binary"
   cp "${REPO_ROOT}/scripts/_common.sh" "${SMOKE_REPO}/scripts/_common.sh"
+  [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SMOKE_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SMOKE_REPO}/scripts/_target_paths.sh"
+  [[ -f "${REPO_ROOT}/scripts/debian-env.sh" ]] && cp "${REPO_ROOT}/scripts/debian-env.sh" "${SMOKE_REPO}/scripts/debian-env.sh"
   cp "${REPO_ROOT}/scripts/smoke-test.sh" "${SMOKE_REPO}/scripts/smoke-test.sh"
   FAKEBIN="$(mktemp -d)"
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) printf '%s\n' "${FAKE_DPKG_ARCH:-amd64}" ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m) printf '%s\n' "${FAKE_UNAME_M:-x86_64}" ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
 }
 
 teardown_smoke_repo() {
@@ -18,7 +36,8 @@ teardown_smoke_repo() {
 }
 
 write_deb() {
-  local path="${SMOKE_REPO}/build/debian/trixie/amd64/binary/${1:-ocserv_1.5.0-1~debian13.1_amd64.deb}"
+  local target_arch="${TARGET_ARCH:-amd64}"
+  local path="${SMOKE_REPO}/build/debian/trixie/${target_arch}/binary/${1:-ocserv_1.5.0-1~debian13.1_${target_arch}.deb}"
   printf 'fake deb\n' > "${path}"
 }
 
@@ -64,7 +83,7 @@ SH
 }
 
 run_smoke() {
-  run bash -c "cd '${SMOKE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh $*"
+  run bash -c "cd '${SMOKE_REPO}' && FAKE_DPKG_ARCH='${FAKE_DPKG_ARCH:-}' TARGET_ARCH='${TARGET_ARCH:-}' PATH='${FAKEBIN}:${PATH}' bash scripts/smoke-test.sh $*"
 }
 
 @test "smoke-basic requires exactly one target deb" {
@@ -105,6 +124,32 @@ run_smoke() {
   [[ "${args}" == *"ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
   [[ "${args}" == *"1.5.0-1~debian13.1"* ]]
   [[ "${args}" == *"amd64"* ]]
+}
+
+@test "smoke-basic supports arm64 target deb while ignoring architecture independent debs" {
+  TARGET_ARCH=arm64 setup_smoke_repo
+  TARGET_ARCH=arm64 write_deb
+  printf 'fake all deb\n' > "${SMOKE_REPO}/build/debian/trixie/arm64/binary/ocserv-data_1.5.0-1~debian13.1_all.deb"
+  install_fake_docker
+  cat > "${FAKEBIN}/dpkg-deb" <<'SH'
+#!/usr/bin/env bash
+field="$3"
+case "$field" in
+  Package) echo ocserv ;;
+  Version) echo 1.5.0-1~debian13.1 ;;
+  Architecture) echo arm64 ;;
+  *) exit 2 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg-deb"
+
+  FAKE_DPKG_ARCH=arm64 TARGET_ARCH=arm64 run_smoke
+  args="$(cat "${SMOKE_REPO}/docker-args")"
+  teardown_smoke_repo
+
+  [ "${status}" -eq 0 ]
+  [[ "${args}" == *"ocserv_1.5.0-1~debian13.1_arm64.deb"* ]]
+  [[ "${args}" == *"arm64"* ]]
 }
 
 @test "smoke-basic propagates docker failure" {

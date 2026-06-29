@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _target_paths.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
+  for file in _common.sh _target_arch.sh _target_paths.sh debian-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }
@@ -70,6 +70,21 @@ install_fake_fetch_commands() {
   FAKEBIN="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/fake-keyrings"
   printf 'fake keyring\n' > "${FETCH_REPO}/fake-keyrings/debian-keyring.gpg"
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) printf 'amd64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m) printf 'x86_64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
   cat > "${FAKEBIN}/curl" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
