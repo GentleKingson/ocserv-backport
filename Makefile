@@ -38,7 +38,7 @@ src-pkg: ## Build the backport source package
 	scripts/build-source-package.sh
 
 .PHONY: binary lint
-binary: ## Build amd64 binary package with sbuild in trixie
+binary: ## Build target-architecture binary package with sbuild in trixie
 	scripts/build-binary.sh
 
 lint: ## Run lintian on the generated .changes

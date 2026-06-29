@@ -13,11 +13,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dscverify.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-TARGET_FAMILY="${TARGET_FAMILY:-debian}"
-TARGET_SUITE="${TARGET_SUITE:-trixie}"
-TARGET_ARCH="${TARGET_ARCH:-amd64}"
-# shellcheck source=scripts/_target_paths.sh
-. "${SCRIPT_DIR}/_target_paths.sh"
+# shellcheck source=scripts/debian-env.sh
+. "${SCRIPT_DIR}/debian-env.sh"
 SOURCE_ROOT="${TARGET_SOURCE_ROOT}"
 UPSTREAM_VERSION="1.5.0"
 SOURCE_VERSION="1.5.0-1"

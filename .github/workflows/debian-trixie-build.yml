@@ -9,10 +9,19 @@ permissions:
 
 jobs:
   debian-trixie-build:
-    runs-on: ubuntu-24.04
+    name: debian-trixie-build-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     env:
-      TARGET_ARCH: amd64
+      TARGET_ARCH: ${{ matrix.arch }}
 
     steps:
       - uses: actions/checkout@v6
@@ -106,12 +115,12 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: debian-trixie-build-amd64
+          name: debian-trixie-build-${{ matrix.arch }}
           if-no-files-found: error
           path: ${{ runner.temp }}/debian-trixie-artifacts/**
 
       - name: Prepare Debian Trixie build logs
-        if: failure()
+        if: always()
         run: |
           set -euo pipefail
           upload_dir="${RUNNER_TEMP}/debian-trixie-upload-logs"
@@ -130,9 +139,9 @@ jobs:
           )
 
       - name: Upload Debian Trixie build logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: debian-trixie-build-logs-amd64
+          name: debian-trixie-build-logs-${{ matrix.arch }}
           if-no-files-found: warn
           path: ${{ runner.temp }}/debian-trixie-upload-logs/**

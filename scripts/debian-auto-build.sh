@@ -116,19 +116,12 @@ validate_host() {
 }
 
 validate_target_arch() {
-  TARGET_ARCH="${TARGET_ARCH:-amd64}"
-  export TARGET_ARCH
-
-  if [[ "${TARGET_ARCH}" != "amd64" ]]; then
-    die "unsupported TARGET_ARCH=${TARGET_ARCH}; supported architectures: amd64"
-  fi
+  # shellcheck source=scripts/debian-env.sh
+  . "${SCRIPT_DIR}/debian-env.sh"
 }
 
 load_target_paths() {
-  TARGET_FAMILY="debian"
-  TARGET_SUITE="trixie"
-  # shellcheck source=scripts/_target_paths.sh
-  . "${SCRIPT_DIR}/_target_paths.sh"
+  :
 }
 
 print_core_install_guidance() {
@@ -338,7 +331,7 @@ provision_docker_ce() {
 
   repo_os="$(docker_repo_os)"
   log "installing Docker CE from the official Docker ${repo_os} repository"
-  arch="$(dpkg --print-architecture)"
+  arch="${HOST_ARCH}"
   keyring_path="$(docker_keyring_path)"
   source_path="$(docker_source_path)"
   keyring_dir="$(dirname -- "${keyring_path}")"
@@ -769,6 +762,8 @@ print_debian_artifacts() {
 validate_host
 validate_target_arch
 load_target_paths
+log "Debian Trixie target architecture: ${TARGET_ARCH}"
+log "Debian Trixie native architecture: ${HOST_ARCH}"
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()

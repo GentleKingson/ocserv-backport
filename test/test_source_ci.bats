@@ -17,11 +17,28 @@ setup_source_ci_repo() {
   SOURCE_CI_REPO="$(mktemp -d)"
   mkdir -p "${SOURCE_CI_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${SOURCE_CI_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SOURCE_CI_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SOURCE_CI_REPO}/scripts/_target_paths.sh"
+  cp "${REPO_ROOT}/scripts/debian-env.sh" "${SOURCE_CI_REPO}/scripts/debian-env.sh"
   cp "${REPO_ROOT}/scripts/source-package-ci.sh" "${SOURCE_CI_REPO}/scripts/source-package-ci.sh"
   cp "${REPO_ROOT}/Makefile" "${SOURCE_CI_REPO}/Makefile"
   SYSTEM_MAKE="$(command -v make)"
   FAKEBIN="$(mktemp -d)"
+  cat > "${FAKEBIN}/dpkg" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --print-architecture) printf 'amd64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/uname" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -m) printf 'x86_64\n' ;;
+  *) exit 99 ;;
+esac
+SH
+  chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/uname"
 }
 
 teardown_source_ci_repo() {

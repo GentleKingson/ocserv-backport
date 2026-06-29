@@ -43,17 +43,18 @@ Manual and scheduled source CI run the real source-package path in a
 `debian:trixie` container and upload source package artifacts only.
 
 The Manual Debian 13 build workflow is
-`.github/workflows/debian-trixie-build.yml`. It provisions a GitHub-hosted
-`ubuntu-24.04` runner for a Debian 13 target build, runs the Debian binary
-build, lintian, and Docker smoke validation, then uploads generated artifacts.
+`.github/workflows/debian-trixie-build.yml`. It builds amd64 and arm64 in a
+matrix: amd64 runs on `ubuntu-24.04`, and arm64 runs on the native
+`ubuntu-24.04-arm` runner. It runs the Debian binary build, lintian, and Docker
+smoke validation, then uploads generated artifacts.
 It does not publish packages, deploy hosts, or read repository secrets.
 
 The Manual Ubuntu 24.04 build workflow is
 `.github/workflows/ubuntu-noble-build.yml`. It builds amd64 and arm64 in a
 matrix: amd64 runs on `ubuntu-24.04`, and arm64 runs on the native
 `ubuntu-24.04-arm` runner. It runs the Ubuntu binary build, lintian, and Docker
-smoke validation, then uploads generated artifacts. It does not publish
-packages, deploy hosts, or read repository secrets.
+smoke validation, then uploads generated artifacts.
+It does not publish packages, deploy hosts, or read repository secrets.
 
 ## Detailed Guides
 

@@ -19,6 +19,7 @@ setup_noble_repo() {
   NOBLE_REPO="$(mktemp -d)"
   mkdir -p "${NOBLE_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_target_arch.sh" "${NOBLE_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${NOBLE_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dsc.sh" "${NOBLE_REPO}/scripts/_dsc.sh"
   if [[ -f "${REPO_ROOT}/scripts/_noble_sbuild.sh" ]]; then
@@ -899,6 +900,16 @@ SH
 
 install_fake_noble_binary_sbuild() {
   local exit_status="${1:-0}"
+  cat > "${FAKEBIN}/python3" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "-m" && "\${2:-}" == "http.server" ]]; then
+  printf '%s\n' "\$*" > "${NOBLE_REPO}/http-server-args"
+  trap 'exit 0' TERM INT
+  while true; do sleep 1; done
+fi
+printf '%s\n' "43123"
+SH
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
@@ -941,7 +952,7 @@ case "\${*: -1}" in
     ;;
 esac
 SH
-  chmod +x "${FAKEBIN}/sbuild"
+  chmod +x "${FAKEBIN}/python3" "${FAKEBIN}/sbuild"
 }
 
 install_fake_failing_sbuild_with_build_log() {
