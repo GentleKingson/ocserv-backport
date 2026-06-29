@@ -13,12 +13,22 @@
 - 构建机是 native `amd64` 或 `arm64`；`arm64` 构建应在原生 arm64
   Ubuntu 24.04 主机或 runner 上执行。
 
-不需要预先安装 `sbuild`、`schroot`、`lintian` 或 Docker；`--provision`
-会准备这些工具。
+如果使用 `--provision`，不需要预先安装 `sbuild`、`schroot`、`lintian`
+或 Docker；脚本会准备这些工具。如果使用无参数模式，这些工具和对应
+Noble sbuild chroot 需要已经可用。
 
 ## 自动构建
 
-首次准备构建机并运行完整 Noble 构建：
+如果环境已经准备好，运行默认检查并构建：
+
+```bash
+scripts/noble-auto-build.sh
+```
+
+这个模式不会安装依赖、配置 Docker CE 或创建 sbuild chroot；它只检查现有环境。
+检查通过后，脚本会继续运行完整 Noble 构建。
+
+如果这是新的 Ubuntu 24.04 Noble 构建机，或默认检查提示需要准备环境，运行：
 
 ```bash
 scripts/noble-auto-build.sh --provision
@@ -28,12 +38,6 @@ scripts/noble-auto-build.sh --provision
 keyring、配置 Docker CE，并在确认后创建 `noble-${TARGET_ARCH}` sbuild chroot。
 如果普通用户首次加入 `sbuild` 组，脚本会提示在新 shell 中继续；按提示进入
 新 shell 后重新运行自动构建即可。
-
-环境已经准备好时，只检查环境并继续构建：
-
-```bash
-scripts/noble-auto-build.sh
-```
 
 未设置 `TARGET_ARCH` 时，Noble 脚本会自动检测 native `amd64`/`arm64`。
 也可以显式设置 `TARGET_ARCH` 覆盖目标架构。显式目标架构与 native 架构不一致时，
