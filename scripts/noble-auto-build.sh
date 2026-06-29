@@ -41,12 +41,13 @@ NOBLE_AUTO_BUILD_KEYRING_IMAGE="${NOBLE_AUTO_BUILD_KEYRING_IMAGE:-debian:sid}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/noble-auto-build.sh [--provision]
+Usage: scripts/noble-auto-build.sh [--provision] [--yes]
 
 Prepare the Ubuntu 24.04 Noble auto-build wrapper.
 
 Options:
   --provision  Prepare host build prerequisites before running.
+  --yes        Auto-confirm creation of a missing sbuild chroot in --provision mode.
   -h, --help   Show this help.
 EOF
 }
@@ -56,12 +57,16 @@ usage_stderr() {
 }
 
 PROVISION=0
+ASSUME_YES=0
 SUDO=()
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --provision)
       PROVISION=1
+      ;;
+    --yes)
+      ASSUME_YES=1
       ;;
     -h|--help)
       usage
@@ -83,6 +88,11 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 [[ "$#" -eq 0 ]] || die "unexpected argument: $1"
+
+if [[ "${ASSUME_YES}" -eq 1 && "${PROVISION}" -ne 1 ]]; then
+  usage_stderr
+  die "--yes requires --provision"
+fi
 
 # shellcheck source=scripts/noble-env.sh
 . "${SCRIPT_DIR}/noble-env.sh"
@@ -424,12 +434,17 @@ provision_sbuild_chroot() {
 
   target="$(sbuild_chroot_name)"
   print_missing_sbuild_chroot_guidance
-  printf 'Type yes to create this chroot now: ' >&2
-  IFS= read -r answer || answer=""
 
-  if [[ "${answer}" != "yes" ]]; then
-    log "sbuild chroot creation cancelled; rerun after creating ${target}"
-    return 1
+  if [[ "${ASSUME_YES}" -eq 1 ]]; then
+    log "creating missing sbuild chroot because --yes was provided: ${target}"
+  else
+    printf 'Type yes to create this chroot now: ' >&2
+    IFS= read -r answer || answer=""
+
+    if [[ "${answer}" != "yes" ]]; then
+      log "sbuild chroot creation cancelled; rerun after creating ${target}"
+      return 1
+    fi
   fi
 
   sbuild_createchroot_args=(

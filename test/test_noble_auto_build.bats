@@ -767,7 +767,8 @@ run_noble_env_with_arch_tools() {
   install_minimal_valid_fakebin
   run_auto --help
   [ "${status}" -eq 0 ]
-  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Auto-confirm creation of a missing sbuild chroot in --provision mode." <<<"${output}"
 }
 
 @test "noble-auto-build rejects unknown options" {
@@ -775,13 +776,24 @@ run_noble_env_with_arch_tools() {
   install_minimal_valid_fakebin
   run_auto --bad-option
   [ "${status}" -ne 0 ]
-  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision] [--yes]" <<<"${output}"
   [[ "${output}" == *"unknown option: --bad-option"* ]]
 
   run_auto -x
   [ "${status}" -ne 0 ]
-  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision]" <<<"${output}"
+  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision] [--yes]" <<<"${output}"
   [[ "${output}" == *"unknown option: -x"* ]]
+}
+
+@test "noble-auto-build --yes requires --provision" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+
+  run_auto --yes
+
+  [ "${status}" -ne 0 ]
+  grep -Fq -- "Usage: scripts/noble-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "--yes requires --provision" <<<"${output}"
 }
 
 @test "noble-auto-build rejects non-Noble hosts" {
@@ -1296,6 +1308,24 @@ run_noble_env_with_arch_tools() {
   [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT=$'y\n' \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    RUN_AUTO_INPUT="" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${AUTO_REPO}/sbuild-createchroot-calls" ]
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
     RUN_AUTO_INPUT=$'yes\n' \
     NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
     NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
@@ -1303,6 +1333,57 @@ run_noble_env_with_arch_tools() {
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "noble-auto-build --provision --yes creates missing chroot without prompting" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --provision --yes
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
+  grep -Fxq -- "sudo sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sudo-calls"
+  grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
+  grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "noble-auto-build --yes --provision accepts reverse option order" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_docker_info_sequence 0
+  install_fake_sbuild_createchroot
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    run_auto_isolated --yes --provision
+
+  [ "${status}" -eq 0 ]
+  if grep -Fq -- "Type yes to create this chroot now" <<<"${output}"; then
+    false
+  fi
+  grep -Fq -- "creating missing sbuild chroot because --yes was provided" <<<"${output}"
   grep -Fxq -- "sbuild-createchroot --arch=amd64 --chroot-suffix= --components=main,universe --include=eatmydata,ccache,gnupg,ca-certificates noble /srv/chroot/noble-amd64 http://archive.ubuntu.com/ubuntu" "${AUTO_REPO}/sbuild-createchroot-calls"
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
 }

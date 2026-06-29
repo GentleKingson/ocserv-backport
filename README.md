@@ -13,12 +13,16 @@ install smoke tests. It is for local validation and release preparation.
 |---|---|
 | `make build` | Full Debian 13 local backport pipeline |
 | `scripts/debian-auto-build.sh` | Check a Debian 13 builder and run the Debian build when ready |
-| `scripts/debian-auto-build.sh --provision` | Prepare the Debian builder after confirmation, then run the Debian build |
+| `scripts/debian-auto-build.sh --provision [--yes]` | Prepare the Debian builder, optionally auto-confirming missing chroot creation, then run the Debian build |
 | `make source-ci` | Source-package-only path used by scheduled/manual source CI |
 | `scripts/noble-auto-build.sh` | Check an Ubuntu 24.04 builder and run the Ubuntu build when ready |
-| `scripts/noble-auto-build.sh --provision` | Prepare the Ubuntu builder after confirmation, then run the Ubuntu build |
+| `scripts/noble-auto-build.sh --provision [--yes]` | Prepare the Ubuntu builder, optionally auto-confirming missing chroot creation, then run the Ubuntu build |
 | `make noble-build` | Lower-level Ubuntu 24.04 backport pipeline |
 | `make test` | Run the Bats test suite |
+
+For unattended builder setup, `--yes` only confirms creation of a missing
+sbuild chroot during `--provision`; it does not bypass existing-directory,
+unusable-chroot, architecture, or other safety checks.
 
 Use the detailed guides for builder setup, version overrides, and target-specific
 workflow notes.
