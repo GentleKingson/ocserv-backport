@@ -39,8 +39,10 @@ stubbed build-entrypoint orchestration tests. It does not build Debian binary
 packages, create sbuild chroots, run Docker smoke tests, publish artifacts,
 deploy hosts, or read repository secrets.
 
-Manual and scheduled source CI run the real source-package path in a
-`debian:trixie` container and upload source package artifacts only.
+The `ci.yml` workflow also runs source package verification on its weekly
+schedule, or manually with `target=source-package` or `target=all`. That path
+runs in a `debian:trixie` container and does not upload GitHub Actions
+artifacts.
 
 The Manual Debian 13 build workflow is
 `.github/workflows/debian-trixie-build.yml`. It builds amd64 and arm64 in a
