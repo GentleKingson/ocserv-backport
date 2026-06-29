@@ -130,5 +130,63 @@ jobs:
             python3-yaml \
             xz-utils
 
+      - name: Refresh Debian source verification keyrings
+        run: |
+          set -eu
+
+          workdir="$(mktemp -d)"
+          mkdir -p \
+            "${workdir}/lists/partial" \
+            "${workdir}/sourceparts"
+
+          cat > "${workdir}/sid.sources" <<'EOF'
+          Types: deb
+          URIs: http://deb.debian.org/debian
+          Suites: sid
+          Components: main
+          Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+          EOF
+
+          apt_sid() {
+            apt-get \
+              -o "Dir::Etc::sourcelist=${workdir}/sid.sources" \
+              -o "Dir::Etc::sourceparts=${workdir}/sourceparts" \
+              -o "Dir::State::lists=${workdir}/lists" \
+              -o "APT::Get::List-Cleanup=0" \
+              "$@"
+          }
+
+          apt_sid update
+
+          (
+            cd "${workdir}"
+            apt_sid download \
+              debian-archive-keyring \
+              debian-keyring
+          )
+
+          keyring_root="${workdir}/root"
+          mkdir -p "${keyring_root}"
+          for deb in "${workdir}"/*.deb; do
+            dpkg-deb -x "${deb}" "${keyring_root}"
+          done
+
+          keyrings="$(
+            find "${keyring_root}/usr/share/keyrings" \
+              -maxdepth 1 \
+              -type f \
+              \( -name 'debian-*.gpg' -o -name 'debian-*.pgp' \) \
+              -print \
+              | sort \
+              | paste -sd: -
+          )"
+
+          if [ -z "${keyrings}" ]; then
+            echo "no Debian keyrings extracted from sid packages" >&2
+            exit 1
+          fi
+
+          printf 'DSCVERIFY_KEYRING_PATHS=%s\n' "${keyrings}" >> "${GITHUB_ENV}"
+
       - name: Build source package
         run: make source-ci
