@@ -226,16 +226,17 @@ PY
   ! grep -Fq -- "'${old_source_workflow}'" .github/workflows/ci.yml
 }
 
-@test "README documents the manual Ubuntu 24.04 build workflow" {
-  grep -Fq -- ".github/workflows/ubuntu-noble-build.yml" README.md
-  grep -Fq -- "Manual Ubuntu 24.04 build workflow" README.md
-  grep -Fq -- "amd64 and arm64" README.md
-  grep -Fq -- "ubuntu-24.04-arm" README.md
-  grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
+@test "README is a concise project entrypoint" {
+  grep -Fq -- "# ocserv-backport" README.md
+  grep -Fq -- "Multi-version ocserv backport build and validation pipelines for Debian 13 and" README.md
+  grep -Fq -- "Ubuntu 24.04." README.md
+  grep -Fq -- "## Build Guides" README.md
+  grep -Fq -- "[Build on Debian 13](docs/build-ocserv-backport-on-debian13.md)" README.md
+  grep -Fq -- "[Build on Ubuntu 24.04](docs/build-ocserv-backport-on-ubuntu24.04.md)" README.md
+  [ -f docs/build-ocserv-backport-on-debian13.md ]
+  [ -f docs/build-ocserv-backport-on-ubuntu24.04.md ]
 }
 
-@test "README documents the manual Debian 13 build workflow" {
-  grep -Fq -- ".github/workflows/debian-trixie-build.yml" README.md
-  grep -Fq -- "Manual Debian 13 build workflow" README.md
-  grep -Fq -- "does not publish packages, deploy hosts, or read repository secrets" README.md
+@test "README does not duplicate workflow or command reference details" {
+  ! grep -Eq -- "Source Locks|Boundaries|GitHub Actions|workflow|manual Debian|manual Ubuntu|scripts/|make " README.md
 }
