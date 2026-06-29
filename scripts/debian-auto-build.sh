@@ -19,6 +19,19 @@ CORE_COMMANDS=(
   debootstrap lintian python3 bats shellcheck make
 )
 
+DOCKER_CONFLICT_PACKAGES=(
+  docker.io docker-doc docker-compose docker-compose-v2 podman-docker
+  containerd runc
+)
+
+DOCKER_REQUIRED_CE_PACKAGES=(
+  docker-ce docker-ce-cli containerd.io
+)
+
+DOCKER_CE_PACKAGES=(
+  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+)
+
 DEBIAN_DSCVERIFY_REQUIRED_KEY="C6AE83D21C677043DA3DAC97F8643574713C9BAE"
 SBUILD_CHROOT_INCLUDE="eatmydata,ccache,gnupg,ca-certificates"
 DEBIAN_AUTO_BUILD_CHROOT_BASE="${DEBIAN_AUTO_BUILD_CHROOT_BASE:-/srv/chroot}"
@@ -174,14 +187,10 @@ provision_core_dependencies() {
   apt_quiet install -y --no-install-recommends "${CORE_PACKAGES[@]}"
 }
 
-print_docker_install_guidance() {
-  printf 'Docker is required for the Debian auto-build wrapper.\n' >&2
-  if [[ "${HOST_ID}" == "debian" ]]; then
-    printf 'Install it with:\n' >&2
-    printf '  sudo apt-get install -y --no-install-recommends docker.io\n' >&2
-  else
-    printf 'Use the Docker installation already available on the Ubuntu runner, or install Docker before rerunning.\n' >&2
-  fi
+print_docker_ce_install_guidance() {
+  printf 'Docker CE is required for the Debian auto-build wrapper.\n' >&2
+  printf 'Install Docker CE from the official Docker APT repository at download.docker.com, then install:\n' >&2
+  printf '  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin\n' >&2
 }
 
 print_docker_daemon_guidance() {
@@ -200,25 +209,159 @@ docker_command_for_make() {
   printf '%s\n' "${DOCKER_COMMAND[*]}"
 }
 
-provision_docker_if_needed() {
-  if command -v docker >/dev/null 2>&1; then
+print_docker_mix_guidance() {
+  log "Do not mix distro Docker packages with Docker CE/containerd.io"
+  print_docker_ce_install_guidance
+}
+
+package_is_installed() {
+  local package="$1"
+  local package_status
+
+  if package_status="$(dpkg-query -W -f='${Status}' "${package}" 2>/dev/null)" \
+    && [[ "${package_status}" == "install ok installed" ]]; then
     return 0
   fi
 
-  if [[ "${HOST_ID}" != "debian" ]]; then
-    print_docker_install_guidance
+  return 1
+}
+
+check_docker_ce_packages() {
+  local package missing_count=0 conflict_count=0
+
+  for package in "${DOCKER_CONFLICT_PACKAGES[@]}"; do
+    if package_is_installed "${package}"; then
+      log "conflicting distro Docker package installed: ${package}"
+      conflict_count=$((conflict_count + 1))
+    fi
+  done
+
+  if [[ "${conflict_count}" -gt 0 ]]; then
+    print_docker_mix_guidance
     return 1
   fi
 
-  log "installing docker.io for Debian smoke tests"
+  for package in "${DOCKER_REQUIRED_CE_PACKAGES[@]}"; do
+    if ! package_is_installed "${package}"; then
+      log "missing required Docker CE package: ${package}"
+      missing_count=$((missing_count + 1))
+    fi
+  done
+
+  if [[ "${missing_count}" -gt 0 ]]; then
+    print_docker_ce_install_guidance
+    return 1
+  fi
+
+  return 0
+}
+
+docker_keyring_path() {
+  printf '%s\n' "${DEBIAN_AUTO_BUILD_DOCKER_KEYRING_PATH:-/etc/apt/keyrings/docker.asc}"
+}
+
+docker_source_path() {
+  printf '%s\n' "${DEBIAN_AUTO_BUILD_DOCKER_SOURCE_PATH:-/etc/apt/sources.list.d/docker.sources}"
+}
+
+docker_repo_os() {
+  case "${HOST_ID}:${HOST_CODENAME}" in
+    debian:trixie)
+      printf '%s\n' "debian"
+      ;;
+    ubuntu:noble)
+      printf '%s\n' "ubuntu"
+      ;;
+    *)
+      die "unsupported Docker CE host: ${HOST_ID:-unknown}:${HOST_CODENAME:-unknown}"
+      ;;
+  esac
+}
+
+docker_repo_uri() {
+  printf 'https://download.docker.com/linux/%s\n' "$(docker_repo_os)"
+}
+
+write_docker_apt_source() {
+  local arch="$1"
+  local keyring_path="$2"
+  local source_path="$3"
+
+  {
+    printf 'Types: deb\n'
+    printf 'URIs: %s\n' "$(docker_repo_uri)"
+    printf 'Suites: %s\n' "${HOST_CODENAME}"
+    printf 'Components: stable\n'
+    printf 'Signed-By: %s\n' "${keyring_path}"
+    printf 'Architectures: %s\n' "${arch}"
+  } | "${SUDO[@]}" tee "${source_path}" >/dev/null
+}
+
+installed_docker_conflicts() {
+  local package
+
+  for package in "${DOCKER_CONFLICT_PACKAGES[@]}"; do
+    if package_is_installed "${package}"; then
+      printf '%s\n' "${package}"
+    fi
+  done
+}
+
+remove_installed_docker_conflicts() {
+  local package
+  local -a installed_conflicts=()
+
+  while IFS= read -r package; do
+    [[ -n "${package}" ]] || continue
+    installed_conflicts+=("${package}")
+  done < <(installed_docker_conflicts)
+
+  if [[ "${#installed_conflicts[@]}" -gt 0 ]]; then
+    apt_quiet remove -y "${installed_conflicts[@]}"
+  fi
+}
+
+install_docker_ce_packages() {
+  local install_output
+
+  if ! install_output="$(apt_quiet_capture install -y "${DOCKER_CE_PACKAGES[@]}")"; then
+    printf '%s\n' "${install_output}" >&2
+    if [[ "${install_output}" == *"containerd.io : Conflicts: containerd"* ]]; then
+      log "Do not mix distro Docker packages with Docker CE/containerd.io"
+    fi
+    return 1
+  fi
+}
+
+provision_docker_ce() {
+  local arch keyring_path source_path keyring_dir source_dir repo_os
+
+  repo_os="$(docker_repo_os)"
+  log "installing Docker CE from the official Docker ${repo_os} repository"
+  arch="$(dpkg --print-architecture)"
+  keyring_path="$(docker_keyring_path)"
+  source_path="$(docker_source_path)"
+  keyring_dir="$(dirname -- "${keyring_path}")"
+  source_dir="$(dirname -- "${source_path}")"
+
+  remove_installed_docker_conflicts
   apt_quiet update
-  apt_quiet install -y --no-install-recommends docker.io
+  apt_quiet install -y --no-install-recommends ca-certificates curl
+  "${SUDO[@]}" install -m 0755 -d "${keyring_dir}"
+  "${SUDO[@]}" curl -fsSL "https://download.docker.com/linux/${repo_os}/gpg" -o "${keyring_path}"
+  "${SUDO[@]}" chmod a+r "${keyring_path}"
+  "${SUDO[@]}" install -m 0755 -d "${source_dir}"
+  write_docker_apt_source "${arch}" "${keyring_path}" "${source_path}"
+  apt_quiet update
+  install_docker_ce_packages
 }
 
 check_docker_provisioned() {
   if ! command -v docker >/dev/null 2>&1; then
-    die "docker command is not available after Docker provisioning"
+    die "docker command is not available after Docker CE installation"
   fi
+
+  check_docker_ce_packages || return 1
 
   if docker_info >/dev/null 2>&1; then
     return 0
@@ -226,6 +369,7 @@ check_docker_provisioned() {
 
   log "Docker daemon is not reachable; attempting limited systemd repair."
   "${SUDO[@]}" systemctl enable --now docker
+  "${SUDO[@]}" systemctl enable --now containerd || true
   sleep 2
 
   if docker_info >/dev/null 2>&1; then
@@ -241,9 +385,11 @@ check_docker_provisioned() {
 
 check_docker_default() {
   if ! command -v docker >/dev/null 2>&1; then
-    print_docker_install_guidance
+    print_docker_ce_install_guidance
     return 1
   fi
+
+  check_docker_ce_packages || return 1
 
   if ! docker_info >/dev/null 2>&1; then
     print_docker_daemon_guidance
@@ -649,10 +795,10 @@ fi
 check_core_dependencies || die "missing core build dependencies"
 
 if [[ "${PROVISION}" -eq 1 ]]; then
-  provision_docker_if_needed || die "Docker is unavailable"
-  check_docker_provisioned || die "Docker daemon is unavailable after provisioning"
+  provision_docker_ce
+  check_docker_provisioned || die "Docker daemon is unavailable after Docker CE provisioning"
 else
-  check_docker_default || die "Docker is unavailable"
+  check_docker_default || die "Docker CE is unavailable"
 fi
 
 ensure_debian_dscverify_keyrings || die "Debian dscverify keyrings are unavailable"
