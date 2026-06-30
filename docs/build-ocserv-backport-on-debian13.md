@@ -301,7 +301,8 @@ build/debian/trixie/${TARGET_ARCH}/keyrings/debian/
 Pull request CI 只运行静态检查、锁文件验证、单测和 stub 编排测试。
 
 Pull request CI 不创建 sbuild chroot，不运行 Docker smoke test，也不构建或上传
-二进制 `.deb` 文件。
+二进制 `.deb` 文件。仅修改 `docs/**` 通常不会触发这个 PR CI；需要时可以手动
+触发 workflow。
 
 `ci.yml` workflow 会在每周定时任务中验证 source package 构建链路，也可以通过
 手动触发时选择 `target=source-package` 或 `target=all` 运行。该路径在
