@@ -225,6 +225,17 @@ candidates with a colon-separated list:
 DSCVERIFY_KEYRING_PATHS=/path/to/debian-keyring.gpg:/path/to/extra.gpg make noble-build
 ```
 
+Locked sources are downloaded from `https://deb.debian.org/debian` by default.
+Debian removes superseded versions from the live pool, so set
+`DEBIAN_SOURCE_MIRRORS` to a space-separated list of archive roots to try in
+order. Every file is still checked against the locked size and SHA256, so a
+fallback mirror cannot change the build input. For example, to fall back to
+snapshot.debian.org:
+
+```bash
+DEBIAN_SOURCE_MIRRORS="https://deb.debian.org/debian https://snapshot.debian.org/archive/debian/20260616T083027Z" make noble-build
+```
+
 ## Manual build commands
 
 Run the full build:

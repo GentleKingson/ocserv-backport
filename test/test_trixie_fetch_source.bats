@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _target_arch.sh _target_paths.sh trixie-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh read-source-lock.py verify-source-lock.sh trixie-fetch-source.sh; do
+  for file in _common.sh _target_arch.sh _target_paths.sh trixie-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh _fetch.sh read-source-lock.py verify-source-lock.sh trixie-fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }
@@ -102,6 +102,14 @@ case "${mode}:\${url}" in
     echo "simulated artifact download failure" >&2
     exit 22
     ;;
+  primary-down:https://deb.debian.org/*)
+    echo "simulated primary mirror outage" >&2
+    exit 22
+    ;;
+  primary-corrupt:https://deb.debian.org/*)
+    printf 'tampered' > "\${dest}"
+    exit 0
+    ;;
 esac
 case "\${url}" in
   *ocserv_1.5.0-1.dsc) cp "${FETCH_REPO}/fixtures/ocserv_1.5.0-1.dsc" "\${dest}" ;;
@@ -145,6 +153,11 @@ SH
 
 run_fetch() {
   run bash -c "cd '${FETCH_REPO}' && DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg:${FETCH_REPO}/fake-keyrings/missing-tag2upload.pgp' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-fetch-source.sh"
+}
+
+run_fetch_with_mirrors() {
+  local mirrors="$1"
+  run bash -c "cd '${FETCH_REPO}' && DEBIAN_SOURCE_MIRRORS='${mirrors}' DSCVERIFY_KEYRING_PATHS='${FETCH_REPO}/fake-keyrings/debian-keyring.gpg' PATH='${FAKEBIN}:${PATH}' bash scripts/trixie-fetch-source.sh"
 }
 
 run_fetch_with_skip_var() {
@@ -199,6 +212,46 @@ verify_source_lock_calls() {
   [ "${status}" -eq 0 ]
   [ "$(printf '%s\n' "${urls}" | sed -n '1p')" = "https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.dsc" ]
   [ "$(printf '%s\n' "${urls}" | sed -n '2p')" = "https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0.orig.tar.xz" ]
+}
+
+@test "fetch retries transient curl failures with bounded timeouts" {
+  grep -Fq -- "--retry 3 --retry-connrefused --connect-timeout 30" "${REPO_ROOT}/scripts/_fetch.sh"
+}
+
+@test "fetch falls back to the next mirror when the primary is unreachable" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands primary-down
+  run_fetch_with_mirrors "https://deb.debian.org/debian https://snapshot.debian.org/archive/debian/20260616T083027Z/"
+  urls="$(cat "${FETCH_REPO}/curl-urls")"
+  installed="$([ -f "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0/README" ] && echo yes || echo no)"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [ "${installed}" = "yes" ]
+  [ "$(printf '%s\n' "${urls}" | sed -n '1p')" = "https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.dsc" ]
+  [ "$(printf '%s\n' "${urls}" | sed -n '2p')" = "https://snapshot.debian.org/archive/debian/20260616T083027Z/pool/main/o/ocserv/ocserv_1.5.0-1.dsc" ]
+}
+
+@test "fetch rejects mirror content that does not match the lock and tries the next mirror" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands primary-corrupt
+  run_fetch_with_mirrors "https://deb.debian.org/debian https://mirror.example/debian"
+  teardown_fetch_repo
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"rejecting ocserv_1.5.0-1.dsc from https://deb.debian.org/debian/pool/main/o/ocserv/ocserv_1.5.0-1.dsc"* ]]
+}
+
+@test "fetch fails without installing when every mirror serves bad content" {
+  setup_fetch_repo
+  make_success_fixtures
+  install_fake_fetch_commands primary-corrupt
+  run_fetch_with_mirrors "https://deb.debian.org/debian"
+  installed="$([ -d "${FETCH_REPO}/build/debian/trixie/amd64/source/ocserv-1.5.0" ] && echo yes || echo no)"
+  teardown_fetch_repo
+  [ "${status}" -ne 0 ]
+  [ "${installed}" = "no" ]
+  [[ "${output}" == *"no mirror provided a valid ocserv_1.5.0-1.dsc"* ]]
 }
 
 @test "fetch passes only readable configured keyrings to dscverify" {
