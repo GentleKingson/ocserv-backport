@@ -76,9 +76,8 @@ jobs:
       - name: Build and test Ubuntu Noble packages
         run: |
           set -euo pipefail
-          printf 'yes\n' \
-            | sudo --preserve-env=TARGET_ARCH \
-              ./scripts/noble-auto-build.sh --provision
+          sudo --preserve-env=TARGET_ARCH \
+            ./scripts/noble-auto-build.sh --provision --yes
 
       - name: Stage Ubuntu Noble artifacts
         if: success()
