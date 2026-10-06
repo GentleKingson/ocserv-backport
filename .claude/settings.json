@@ -1,5 +1,10 @@
 {
   "language": "chinese",
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
   "permissions": {
     "allow": [
       "Bash(git filter-branch:*)",
