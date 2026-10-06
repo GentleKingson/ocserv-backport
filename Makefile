@@ -60,6 +60,10 @@ trixie-source-ci: ## Run the real Debian Trixie source-package CI pipeline
 noble-build: ## Run the Ubuntu 24.04 Noble two-stage local backport pipeline
 	scripts/noble-build.sh
 
+.PHONY: noble-source-ci
+noble-source-ci: ## Run the real Ubuntu Noble source-package CI pipeline
+	scripts/noble-source-package-ci.sh
+
 .PHONY: noble-auto-build
 noble-auto-build: ## Run the Ubuntu 24.04 Noble host auto-build pipeline
 	scripts/noble-auto-build.sh

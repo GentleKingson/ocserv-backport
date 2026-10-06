@@ -169,18 +169,6 @@ jobs:
               \( -name '*.build' -o -name '*.buildlog' -o -name '*.log' \) \
               -print0 2>/dev/null || true
           )
-          while IFS= read -r -d '' log_path; do
-            safe_name="tmp/$(basename -- "${log_path}")"
-            safe_name="${safe_name//:/_}"
-            mkdir -p "${upload_dir}/$(dirname -- "${safe_name}")"
-            cp -- "${log_path}" "${upload_dir}/${safe_name}"
-          done < <(
-            find /tmp \
-              -maxdepth 1 \
-              -type f \
-              -name 'noble-libllhttp-repo.*.log' \
-              -print0 2>/dev/null || true
-          )
 
       - name: Upload Ubuntu Noble build logs
         if: failure()
