@@ -10,3 +10,7 @@ packages, and validates them for local release preparation.
 
 - [Build on Debian 13](docs/build-ocserv-backport-on-debian13.md)
 - [Build on Ubuntu 24.04](docs/build-ocserv-backport-on-ubuntu24.04.md)
+
+## Releases
+
+- [Publish a release](docs/release.md)
