@@ -4,7 +4,7 @@ load helpers/bats-helper.bash
 setup_fetch_repo() {
   FETCH_REPO="$(mktemp -d)"
   mkdir -p "${FETCH_REPO}/scripts" "${FETCH_REPO}/source-lock/ocserv" "${FETCH_REPO}/fixtures"
-  for file in _common.sh _target_arch.sh _target_paths.sh trixie-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh _fetch.sh read-source-lock.py verify-source-lock.sh trixie-fetch-source.sh; do
+  for file in _common.sh _versions.sh _target_arch.sh _target_paths.sh trixie-env.sh _dsc.sh _lock_tsv.sh _dscverify.sh _fetch.sh read-source-lock.py verify-source-lock.sh trixie-fetch-source.sh; do
     cp "${REPO_ROOT}/scripts/${file}" "${FETCH_REPO}/scripts/${file}"
   done
 }

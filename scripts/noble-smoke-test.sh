@@ -51,6 +51,7 @@ log "noble-smoke-basic: container install and package assertions"
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"
+  expected_upstream="$4"
 
   echo "deb [trusted=yes] file:/repo ./" > /etc/apt/sources.list.d/local-libllhttp.list
   apt-get update -qq
@@ -66,7 +67,7 @@ log "noble-smoke-basic: container install and package assertions"
   test -x /usr/sbin/ocserv
   version_output="$(ocserv --version 2>&1 || true)"
   printf "%s\n" "${version_output}"
-  printf "%s\n" "${version_output}" | grep -F "1.5.0"
+  printf "%s\n" "${version_output}" | grep -F "${expected_upstream}"
 
   set +e
   ocserv -c /etc/ocserv/ocserv.conf -t >/tmp/ocserv-config-test 2>&1
@@ -83,6 +84,6 @@ log "noble-smoke-basic: container install and package assertions"
   if ldd /usr/sbin/ocserv | grep -i "not found"; then
     exit 1
   fi
-' bash "${deb_name}" "${OCSERV_NOBLE_VERSION}" "${TARGET_ARCH}"
+' bash "${deb_name}" "${OCSERV_NOBLE_VERSION}" "${TARGET_ARCH}" "${PKG_UPSTREAM_VERSION}"
 
 log "noble-smoke-basic: OK"

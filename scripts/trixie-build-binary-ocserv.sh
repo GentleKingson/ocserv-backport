@@ -4,10 +4,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
+BACKPORT_VERSION="${OCSERV_VERSION}"
 
 DSC="${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run 'make trixie-src-pkg-ocserv' first)"

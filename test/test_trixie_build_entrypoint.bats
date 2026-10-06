@@ -22,6 +22,7 @@ setup_entrypoint_repo() {
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${ENTRY_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${ENTRY_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/trixie-env.sh" "${ENTRY_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${ENTRY_REPO}/scripts/_versions.sh"
   cp "${REPO_ROOT}/Makefile" "${ENTRY_REPO}/Makefile"
   if [[ -f "${REPO_ROOT}/scripts/trixie-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/trixie-build.sh" "${ENTRY_REPO}/scripts/trixie-build.sh"

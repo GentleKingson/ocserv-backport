@@ -7,11 +7,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dsc.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
+BACKPORT_VERSION="${OCSERV_VERSION}"
 SOURCE_NAME="ocserv"
-SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${BACKPORT_VERSION%%-*}"
+SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${OCSERV_UPSTREAM_VERSION}"
 [[ -d "${SRCDIR}" ]] || die "missing rewrapped source tree: ${SRCDIR} (run 'make trixie-rewrap-ocserv' first)"
 
 rm -f -- "${TARGET_SOURCE_ROOT}/ocserv_${BACKPORT_VERSION}"*
