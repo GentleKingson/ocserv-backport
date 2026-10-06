@@ -544,10 +544,10 @@ fi
 target_arch="\${TARGET_ARCH:-amd64}"
 /bin/mkdir -p "${AUTO_REPO}/build/debian/trixie/\${target_arch}/source" "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/source/ocserv_1.5.0-1~debian13.1.dsc" \
-  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.deb" \
-  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.changes" \
-  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.1_\${target_arch}.buildinfo"
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/source/ocserv_1.5.0-1~debian13.2.dsc" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.2_\${target_arch}.deb" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.2_\${target_arch}.changes" \
+  "${AUTO_REPO}/build/debian/trixie/\${target_arch}/binary/ocserv_1.5.0-1~debian13.2_\${target_arch}.buildinfo"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -1044,10 +1044,10 @@ run_auto_isolated() {
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
   [ "$(cat "${AUTO_REPO}/make-lintian-profile")" = "" ]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.buildinfo"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.2.dsc"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.2_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.2_amd64.changes"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.2_amd64.buildinfo"* ]]
 }
 
 @test "trixie-auto-build native arm64 runs build and prints arm64 artifacts" {
@@ -1064,10 +1064,10 @@ run_auto_isolated() {
 
   [ "${status}" -eq 0 ]
   [ "$(cat "${AUTO_REPO}/make-target-arch")" = "arm64" ]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/source/ocserv_1.5.0-1~debian13.1.dsc"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.changes"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.1_arm64.buildinfo"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/source/ocserv_1.5.0-1~debian13.2.dsc"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.2_arm64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.2_arm64.changes"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/debian/trixie/arm64/binary/ocserv_1.5.0-1~debian13.2_arm64.buildinfo"* ]]
 }
 
 @test "trixie-auto-build uses Debian lintian profile on Ubuntu Noble host" {

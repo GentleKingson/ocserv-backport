@@ -205,8 +205,8 @@ the Noble version defaults to a value derived from the Debian version:
 
 ```text
 OCSERV_DEBIAN_VERSION=1.5.0-1
-BACKPORT_REVISION=1
-OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1  # defaults to ${OCSERV_DEBIAN_VERSION}~ubuntu24.04.${BACKPORT_REVISION}
+BACKPORT_REVISION=2
+OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.2  # defaults to ${OCSERV_DEBIAN_VERSION}~ubuntu24.04.${BACKPORT_REVISION}
 
 TARGET_SUITE=noble
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Noble script when unset

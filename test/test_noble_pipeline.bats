@@ -132,8 +132,8 @@ set -euo pipefail
 printf 'dpkg-buildpackage %s\n' "\$*" >> "${NOBLE_REPO}/dpkg-buildpackage-calls"
 case "\${PWD}" in
   */source/ocserv/ocserv-*)
-    dsc="\${PWD%/*}/ocserv_\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}.dsc"
-    printf 'Source: ocserv\nVersion: %s\n' "\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}" > "\${dsc}"
+    dsc="\${PWD%/*}/ocserv_\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.2}.dsc"
+    printf 'Source: ocserv\nVersion: %s\n' "\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.2}" > "\${dsc}"
     ;;
   *)
     echo "unexpected source package cwd: \${PWD}" >&2
@@ -299,7 +299,7 @@ SH
   run_noble_build_direct
   [ "${status}" -eq 0 ]
   vars="$(unique_make_env_rows)"
-  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tamd64' ]
+  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.2\tnoble\tamd64' ]
 }
 
 @test "noble-build preserves TARGET_ARCH override without cross-build setup" {
@@ -308,7 +308,7 @@ SH
   run_noble_build_direct_with_arch arm64
   [ "${status}" -eq 0 ]
   vars="$(unique_make_env_rows)"
-  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
+  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.2\tnoble\tarm64' ]
   [[ ! -e "${NOBLE_REPO}/cross-build-requested" ]]
 }
 
@@ -342,7 +342,7 @@ SH
 
   [ "${status}" -eq 0 ]
   vars="$(unique_make_env_rows)"
-  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.1\tnoble\tarm64' ]
+  [ "${vars}" = $'1.5.0-1\t1.5.0-1~ubuntu24.04.2\tnoble\tarm64' ]
   [[ "${vars}" != *$'\tnoble\t' ]]
 }
 
@@ -368,14 +368,14 @@ SH
 
   [ "${status}" -eq 0 ]
   changelog="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv-1.5.0/debian/changelog"
-  [ "$(head -n1 "${changelog}")" = "ocserv (1.5.0-1~ubuntu24.04.1) noble; urgency=medium" ]
+  [ "$(head -n1 "${changelog}")" = "ocserv (1.5.0-1~ubuntu24.04.2) noble; urgency=medium" ]
   grep -Fq -- "ocserv (1.5.0-1) unstable; urgency=medium" "${changelog}"
 }
 
 @test "noble-rewrap-ocserv rejects an already rewrapped changelog" {
   setup_noble_repo
   install_fake_rewrap_commands
-  create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1~ubuntu24.04.1" noble
+  create_noble_rewrap_source_tree ocserv "1.5.0" "1.5.0-1~ubuntu24.04.2" noble
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-rewrap-changelog.sh ocserv"
 
@@ -493,7 +493,7 @@ EOF
   setup_noble_repo
   install_fake_source_package_commands 0
   create_noble_source_tree ocserv "1.5.0"
-  old_artifact="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.old"
+  old_artifact="${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.2.old"
   : > "${old_artifact}"
 
   run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}' /bin/bash scripts/noble-build-source-package.sh ocserv"
@@ -515,7 +515,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "dpkg-buildpackage -S -d -us -uc" "${NOBLE_REPO}/dpkg-buildpackage-calls"
-  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.2.dsc" ]
 }
 
 install_fake_smoke_tools() {
@@ -525,7 +525,7 @@ set -euo pipefail
 field="${3:-}"
 case "${field}" in
   Package) printf '%s\n' "ocserv" ;;
-  Version) printf '%s\n' "1.5.0-1~ubuntu24.04.1" ;;
+  Version) printf '%s\n' "1.5.0-1~ubuntu24.04.2" ;;
   Architecture) printf '%s\n' "${TARGET_ARCH:?TARGET_ARCH not exported}" ;;
   Depends) printf '%s\n' "${FAKE_DEB_DEPENDS:-libc6, libgnutls30t64}" ;;
   *)
@@ -552,13 +552,13 @@ SH
   setup_noble_repo
   install_fake_smoke_tools
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.2_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
 
   [ "${status}" -eq 0 ]
   grep -Fq -- "sudo docker run --rm" "${NOBLE_REPO}/sudo-calls"
-  grep -Fq -- " bash ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb 1.5.0-1~ubuntu24.04.1 amd64 1.5.0" "${NOBLE_REPO}/sudo-calls"
+  grep -Fq -- " bash ocserv_1.5.0-1~ubuntu24.04.2_amd64.deb 1.5.0-1~ubuntu24.04.2 amd64 1.5.0" "${NOBLE_REPO}/sudo-calls"
   # No local libllhttp APT repo is mounted into the smoke container.
   ! grep -Fq -- ":/repo:ro" "${NOBLE_REPO}/sudo-calls"
   [ ! -e "${NOBLE_REPO}/docker-calls" ]
@@ -568,7 +568,7 @@ SH
   setup_noble_repo
   install_fake_smoke_tools
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.2_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && FAKE_DEB_DEPENDS='libc6, libllhttp9.2 (>= 9.2)' NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
 
@@ -589,7 +589,7 @@ esac
 SH
   chmod +x "${FAKEBIN}/dpkg"
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.2_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
 
@@ -609,7 +609,7 @@ esac
 SH
   chmod +x "${FAKEBIN}/dpkg"
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.2_amd64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && NOBLE_DOCKER_CMD='sudo docker' PATH='${FAKEBIN}:${PATH}' bash scripts/noble-smoke-test.sh"
 
@@ -650,7 +650,7 @@ done
 mkdir -p "\${build_dir}"
 case "\${*: -1}" in
   *ocserv_*.dsc)
-    version="\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
+    version="\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.2}"
     touch "\${build_dir}/ocserv_\${version}_\${arch}.deb"
     touch "\${build_dir}/ocserv_\${version}_\${arch}.changes"
     touch "\${build_dir}/ocserv_\${version}_\${arch}.buildinfo"
@@ -683,7 +683,7 @@ printf '%s\n' \
   "dh_auto_build --buildsystem=meson" \
   "../src/worker-http.c:42:10: fatal error: llhttp.h: No such file or directory" \
   "dpkg-buildpackage: error: debian/rules binary subprocess returned exit status 2" \
-  > "\${build_dir}/ocserv_1.5.0-1~ubuntu24.04.1_amd64.build"
+  > "\${build_dir}/ocserv_1.5.0-1~ubuntu24.04.2_amd64.build"
 printf '%s\n' "E: Build failure (dpkg-buildpackage died)" >&2
 exit 42
 SH
@@ -692,7 +692,7 @@ SH
 
 create_ocserv_dsc() {
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.2.dsc"
 }
 
 assert_sbuild_common_args() {
@@ -731,7 +731,7 @@ assert_sbuild_common_args() {
   if grep -Eq -- "--extra-(package|repository)" "${NOBLE_REPO}/sbuild-args"; then
     false
   fi
-  grep -Fq -- "ocserv_1.5.0-1~ubuntu24.04.1.dsc" "${NOBLE_REPO}/sbuild-args"
+  grep -Fq -- "ocserv_1.5.0-1~ubuntu24.04.2.dsc" "${NOBLE_REPO}/sbuild-args"
 }
 
 @test "noble-binary-ocserv prints original sbuild output on failure" {
@@ -757,7 +757,7 @@ assert_sbuild_common_args() {
   [ "${status}" -eq 42 ]
   [[ "${output}" == *"E: Build failure (dpkg-buildpackage died)"* ]]
   [[ "${output}" == *"latest sbuild build log:"* ]]
-  [[ "${output}" == *"ocserv_1.5.0-1~ubuntu24.04.1_amd64.build"* ]]
+  [[ "${output}" == *"ocserv_1.5.0-1~ubuntu24.04.2_amd64.build"* ]]
   [[ "${output}" == *"llhttp.h: No such file or directory"* ]]
 }
 
@@ -765,14 +765,14 @@ assert_sbuild_common_args() {
   setup_noble_repo
   install_fake_noble_binary_sbuild
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.2.dsc"
 
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
   [ "${status}" -eq 0 ]
   assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args" arm64
   ! grep -Fq -- "--extra-package" "${NOBLE_REPO}/sbuild-args"
-  [ "$(tail -n 1 "${NOBLE_REPO}/sbuild-args")" = "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc" ]
-  [ -f "${NOBLE_REPO}/build/ubuntu/noble/arm64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.1_arm64.deb" ]
+  [ "$(tail -n 1 "${NOBLE_REPO}/sbuild-args")" = "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.2.dsc" ]
+  [ -f "${NOBLE_REPO}/build/ubuntu/noble/arm64/binary/ocserv/ocserv_1.5.0-1~ubuntu24.04.2_arm64.deb" ]
 }
 
 @test "noble-binary-ocserv requires the ocserv source package" {

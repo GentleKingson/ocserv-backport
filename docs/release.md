@@ -9,7 +9,7 @@ them as a GitHub Release named after the tag.
 1. Make sure `main` has the versions you want to ship in
    `scripts/_versions.sh`.
    - New Debian source: add its `source-lock/` files and update
-     `OCSERV_DEBIAN_VERSION`; keep `BACKPORT_REVISION=1`.
+     `OCSERV_DEBIAN_VERSION`; reset `BACKPORT_REVISION` to `1`.
    - Rebuild of an already released Debian source: increase
      `BACKPORT_REVISION` (for example `1` -> `2`), so the packages become
      `~debian13.2` and `~ubuntu24.04.2` and apt treats them as an upgrade.
