@@ -41,9 +41,45 @@ followed by `-` or `.` (`1.5.0-2`, `1.5.0.1`).
    - `ocserv_<version>~ubuntu24.04.<n>_{amd64,arm64}.deb`
 
    It writes `SHA256SUMS` for them and creates the release with
-   `gh release create`. GitHub stores `~` in asset names as `.`; the files and
+   `gh release create` (see [Release notes](#release-notes)). GitHub stores `~` in asset names as `.`; the files and
    `SHA256SUMS` already use the stored names, so
    `sha256sum -c SHA256SUMS` works on the downloads.
+
+## Release notes
+
+The release body has three parts, in this order:
+
+1. `.github/release-notes/<tag>.md`, if it exists. Commit it before tagging
+   to add highlights, upgrade notes or known issues for that release only.
+2. `.github/release-notes/template.md`, rendered by
+   `scripts/release-render-notes.sh` with `${TAG}`, `${OCSERV_DEBIAN13}` and
+   `${OCSERV_NOBLE}` replaced by the tag and the packaged versions.
+3. The list of merged pull requests that `gh release create --generate-notes`
+   produces. [`.github/release.yml`](../.github/release.yml) groups them by
+   label:
+
+   | Category | Label |
+   | --- | --- |
+   | Breaking changes | `release/breaking` |
+   | Security | `release/security` |
+   | Debian 13 (trixie) | `area/debian` |
+   | Ubuntu 24.04 (noble) | `area/ubuntu` |
+   | Build & Packaging | `area/packaging` |
+   | Documentation | `area/docs` |
+   | Dependencies | `area/dependencies` |
+   | Other changes | Unmatched PRs |
+
+Create these labels in the repository before applying them. Area labels are
+optional. Use `release/internal` only for changes with no effect on the
+published packages, such as test refactors or CI-only maintenance; it removes
+the PR from the generated notes even when other labels are present. Dependabot
+GitHub Actions updates get it automatically. Do not apply it to security fixes
+or breaking changes.
+
+The generated list uses PR titles, so write titles for people installing the
+packages. The [PR template](../.github/PULL_REQUEST_TEMPLATE.md) has an
+optional one-sentence Release note; nothing parses it, but it helps when
+writing a `<tag>.md` file.
 
 ## Dry run
 
@@ -51,7 +87,8 @@ Run the `release` workflow manually from the Actions tab (or
 `gh workflow run release.yml --ref <branch>`) to build and collect the
 release assets without publishing anything. The tag and already-published
 checks are skipped, and the collected files plus `SHA256SUMS` are uploaded as
-the `release-assets` artifact. A tag push uploads the same artifact before it
+the `release-assets` artifact, with the rendered notes header in the
+`release-notes` artifact. A tag push uploads the same artifacts before it
 creates the release.
 
 ## When a build fails

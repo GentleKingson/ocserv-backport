@@ -79,6 +79,16 @@ jobs:
             "${RUNNER_TEMP}/artifacts" "${RUNNER_TEMP}/release"
           ls -l "${RUNNER_TEMP}/release"
 
+      - name: Render release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          OCSERV_DEBIAN13: ${{ needs.preflight.outputs.ocserv_debian13 }}
+          OCSERV_NOBLE: ${{ needs.preflight.outputs.ocserv_noble }}
+        run: |
+          set -euo pipefail
+          scripts/release-render-notes.sh > "${RUNNER_TEMP}/release-notes.md"
+          cat "${RUNNER_TEMP}/release-notes.md"
+
       - name: Upload release assets
         uses: actions/upload-artifact@v7
         with:
@@ -86,30 +96,26 @@ jobs:
           if-no-files-found: error
           path: ${{ runner.temp }}/release/*
 
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release-notes.md
+
       - name: Publish GitHub release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          OCSERV_DEBIAN13: ${{ needs.preflight.outputs.ocserv_debian13 }}
-          OCSERV_NOBLE: ${{ needs.preflight.outputs.ocserv_noble }}
         run: |
           set -euo pipefail
-          notes="${RUNNER_TEMP}/release-notes.md"
-          cat > "${notes}" <<NOTES
-          ocserv-backport ${TAG} includes amd64 and arm64 ocserv deb
-          packages for Debian Trixie and Ubuntu Noble. The Ubuntu Noble
-          package is built with the llhttp copy bundled in ocserv, so it
-          needs no separate libllhttp package.
-
-          - Debian 13 (trixie): ocserv ${OCSERV_DEBIAN13}
-          - Ubuntu 24.04 (noble): ocserv ${OCSERV_NOBLE}
-
-          Verify downloads with \`sha256sum -c SHA256SUMS\`.
-          NOTES
+          # The rendered notes come first; GitHub appends the PR list grouped
+          # by the labels in .github/release.yml.
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${TAG}" \
-            --notes-file "${notes}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            --generate-notes \
             --verify-tag \
             "${RUNNER_TEMP}"/release/*

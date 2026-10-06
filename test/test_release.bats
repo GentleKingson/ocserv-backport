@@ -28,6 +28,7 @@ fake_build_artifacts() {
 @test "release scripts are executable for direct workflow calls" {
   [ -x scripts/release-preflight.sh ]
   [ -x scripts/release-collect-assets.sh ]
+  [ -x scripts/release-render-notes.sh ]
 }
 
 @test "release preflight prints versions for a tag matching upstream" {
@@ -121,4 +122,45 @@ fake_build_artifacts() {
   grep -Fq -- "name: release-assets" "${workflow}"
   awk '/- name: Publish GitHub release/{getline; print}' "${workflow}" \
     | grep -Fq -- "if: github.event_name == 'push'"
+}
+
+@test "release notes render the template with the packaged versions" {
+  run env TAG=2.0.0 OCSERV_DEBIAN13=2.0.0-1~debian13.1 \
+    OCSERV_NOBLE=2.0.0-1~ubuntu24.04.1 scripts/release-render-notes.sh
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == "## Packages"* ]]
+  [[ "${output}" == *'`2.0.0-1~debian13.1`'* ]]
+  [[ "${output}" == *'`2.0.0-1~ubuntu24.04.1`'* ]]
+  [[ "${output}" == *"sha256sum -c --ignore-missing SHA256SUMS"* ]]
+  [[ "${output}" != *'${'* ]]
+}
+
+@test "release notes put a per-tag notes file before the template" {
+  mkdir -p "${WORK}/notes"
+  printf '%s\n' '## Packages' '${OCSERV_NOBLE}' > "${WORK}/notes/template.md"
+  printf '%s\n' '## Upgrade notes' 'Restart ocserv.' > "${WORK}/notes/2.0.0-2.md"
+  run env TAG=2.0.0-2 OCSERV_DEBIAN13=d OCSERV_NOBLE=n \
+    scripts/release-render-notes.sh "${WORK}/notes"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '%s\n' '## Upgrade notes' 'Restart ocserv.' '' \
+    '## Packages' 'n')" ]
+}
+
+@test "release notes fail without the packaged versions" {
+  run env -u OCSERV_NOBLE TAG=2.0.0 OCSERV_DEBIAN13=d \
+    scripts/release-render-notes.sh
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"OCSERV_NOBLE must be set"* ]]
+}
+
+@test "release workflow appends generated notes grouped by labels" {
+  workflow=".github/workflows/release.yml"
+
+  grep -Fq -- "scripts/release-render-notes.sh" "${workflow}"
+  grep -Fq -- "--generate-notes" "${workflow}"
+  grep -Fq -- "name: release-notes" "${workflow}"
+  grep -Fq -- "- release/internal" .github/release.yml
+  grep -Fq -- '- "*"' .github/release.yml
+  grep -Fq -- "- release/internal" .github/dependabot.yml
+  grep -Fq -- "## Release note" .github/PULL_REQUEST_TEMPLATE.md
 }

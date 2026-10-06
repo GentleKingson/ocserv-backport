@@ -5,3 +5,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # CI-only updates; keep them out of the generated release notes.
+    labels:
+      - dependencies
+      - release/internal
