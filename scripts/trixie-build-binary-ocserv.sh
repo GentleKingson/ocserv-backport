@@ -3,6 +3,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=scripts/_sbuild.sh
+. "${SCRIPT_DIR}/_sbuild.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/trixie-env.sh
@@ -15,7 +17,7 @@ mkdir -p "${TARGET_BINARY_ROOT}"
 BUILD_DIR="$(cd -- "${TARGET_BINARY_ROOT}" && pwd)"
 rm -f -- "${BUILD_DIR}/ocserv_${BACKPORT_VERSION}_${TARGET_ARCH}".*
 
-sbuild \
+run_sbuild \
   --chroot-mode=schroot \
   -d "${TARGET_DISTRIBUTION}" \
   --arch="${TARGET_ARCH}" \

@@ -17,6 +17,7 @@ setup_source_ci_repo() {
   SOURCE_CI_REPO="$(mktemp -d)"
   mkdir -p "${SOURCE_CI_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${SOURCE_CI_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_pipeline.sh" "${SOURCE_CI_REPO}/scripts/_pipeline.sh"
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SOURCE_CI_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SOURCE_CI_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/trixie-env.sh" "${SOURCE_CI_REPO}/scripts/trixie-env.sh"
