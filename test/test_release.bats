@@ -5,8 +5,7 @@ setup() {
   cd "${REPO_ROOT}" || return
   WORK="$(mktemp -d)"
   export OCSERV_DEBIAN_VERSION=2.0.0-1
-  export NODE_UNDICI_DEBIAN_VERSION=9.0.0+dfsg-1
-  unset OCSERV_VERSION OCSERV_NOBLE_VERSION NODE_UNDICI_NOBLE_VERSION BACKPORT_REVISION
+  unset OCSERV_VERSION OCSERV_NOBLE_VERSION BACKPORT_REVISION
 }
 
 teardown() {
@@ -23,9 +22,6 @@ fake_build_artifacts() {
   for arch in amd64 arm64; do
     fake_deb "debian-trixie-build-${arch}/build/debian/trixie/${arch}/binary/ocserv_2.0.0-1~debian13.1_${arch}.deb"
     fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/ocserv/ocserv_2.0.0-1~ubuntu24.04.1_${arch}.deb"
-    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/node-undici/libllhttp9.2_9.2.1_${arch}.deb"
-    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/node-undici/libllhttp-dev_9.2.1_${arch}.deb"
-    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/repo/libllhttp9.2_9.2.1_${arch}.deb"
   done
 }
 
@@ -39,7 +35,7 @@ fake_build_artifacts() {
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "ocserv_debian13=2.0.0-1~debian13.1" ]
   [ "${lines[1]}" = "ocserv_noble=2.0.0-1~ubuntu24.04.1" ]
-  [ "${lines[2]}" = "node_undici_noble=9.0.0+dfsg-1" ]
+  [ "${#lines[@]}" -eq 2 ]
 }
 
 @test "release preflight accepts suffixed tags of the upstream version" {
@@ -59,7 +55,7 @@ fake_build_artifacts() {
 }
 
 @test "release preflight rejects ocserv versions that are already published" {
-  printf '%s\n' libllhttp9.2_9.2.1_amd64.deb ocserv_2.0.0-1.ubuntu24.04.1_arm64.deb \
+  printf '%s\n' SHA256SUMS ocserv_2.0.0-1.ubuntu24.04.1_arm64.deb \
     > "${WORK}/published"
   run scripts/release-preflight.sh 2.0.0-2 "${WORK}/published"
   [ "${status}" -ne 0 ]
@@ -70,15 +66,13 @@ fake_build_artifacts() {
   [ "${status}" -eq 0 ]
 }
 
-@test "release collect picks the six packages and writes checksums" {
+@test "release collect picks the four ocserv packages and writes checksums" {
   fake_build_artifacts
   run scripts/release-collect-assets.sh "${WORK}/artifacts" "${WORK}/release"
   [ "${status}" -eq 0 ]
   run bash -c "cd '${WORK}/release' && LC_ALL=C ls"
   [ "${output}" = "$(printf '%s\n' \
     SHA256SUMS \
-    libllhttp9.2_9.2.1_amd64.deb \
-    libllhttp9.2_9.2.1_arm64.deb \
     ocserv_2.0.0-1.debian13.1_amd64.deb \
     ocserv_2.0.0-1.debian13.1_arm64.deb \
     ocserv_2.0.0-1.ubuntu24.04.1_amd64.deb \

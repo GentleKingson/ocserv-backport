@@ -103,7 +103,7 @@ Install build tools:
 ```bash
 sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends \
   git ca-certificates curl gnupg \
-  build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs \
+  build-essential fakeroot devscripts dpkg-dev debhelper \
   debian-archive-keyring debian-keyring debian-maintainers \
   sbuild schroot debootstrap lintian \
   python3 python3-yaml bats shellcheck
@@ -199,14 +199,11 @@ sudo sbuild-update -udcar noble-arm64
 
 ## Version variables
 
-The Noble scripts keep Debian source package versions separate from Ubuntu
-backport versions. All version defaults live in `scripts/_versions.sh`; the
-Noble versions default to values derived from the Debian versions:
+The Noble scripts keep the Debian source package version separate from the
+Ubuntu backport version. All version defaults live in `scripts/_versions.sh`;
+the Noble version defaults to a value derived from the Debian version:
 
 ```text
-NODE_UNDICI_DEBIAN_VERSION=7.3.0+dfsg1+~cs24.12.11-1
-NODE_UNDICI_NOBLE_VERSION=7.3.0+dfsg1+~cs24.12.11-1
-
 OCSERV_DEBIAN_VERSION=1.5.0-1
 BACKPORT_REVISION=1
 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.1  # defaults to ${OCSERV_DEBIAN_VERSION}~ubuntu24.04.${BACKPORT_REVISION}
@@ -215,8 +212,8 @@ TARGET_SUITE=noble
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Noble script when unset
 ```
 
-`*_DEBIAN_VERSION` is used only for `source-lock/` and Debian pool downloads.
-`*_NOBLE_VERSION` is used only for `debian/changelog` and the final Noble build
+`OCSERV_DEBIAN_VERSION` is used only for `source-lock/` and Debian pool downloads.
+`OCSERV_NOBLE_VERSION` is used only for `debian/changelog` and the final Noble build
 artifacts. Do not put `~ubuntu24.04.*` in `source-lock` paths.
 
 If the build host uses non-standard Debian keyring paths, override the default
@@ -251,7 +248,7 @@ Build a specific architecture:
 TARGET_ARCH=arm64 make noble-build
 ```
 
-`TARGET_ARCH=arm64` only adjusts paths, repository layout, artifact matching,
+`TARGET_ARCH=arm64` only adjusts paths, artifact matching,
 and the `--arch` argument passed to sbuild. The caller must already provide a
 matching native-capable Noble sbuild/schroot environment or runner for the
 target architecture. The scripts do not configure cross-build, QEMU, or binfmt.
@@ -260,11 +257,6 @@ To run the build in stages, execute the following targets in order:
 
 ```bash
 make noble-verify-locks
-make noble-fetch-node-undici
-make noble-rewrap-node-undici
-make noble-src-pkg-node-undici
-make noble-binary-node-undici
-make noble-repo
 make noble-fetch-ocserv
 make noble-rewrap-ocserv
 make noble-src-pkg-ocserv
@@ -273,7 +265,7 @@ make noble-lint
 make noble-smoke-basic
 ```
 
-Run only the source package path for both packages:
+Run only the source package path:
 
 ```bash
 make noble-source-ci
@@ -282,23 +274,26 @@ make noble-source-ci
 `make noble-source-ci` runs only:
 
 ```text
-noble-verify-locks -> noble-fetch-node-undici -> noble-rewrap-node-undici
-  -> noble-src-pkg-node-undici -> noble-fetch-ocserv -> noble-rewrap-ocserv
+noble-verify-locks -> noble-fetch-ocserv -> noble-rewrap-ocserv
   -> noble-src-pkg-ocserv
 ```
 
 It does not run sbuild, lintian, or the Docker smoke test.
+
+Ubuntu 24.04 Noble has no `libllhttp` package. `noble-rewrap-ocserv` therefore
+switches the Debian packaging to the llhttp copy bundled in the ocserv upstream
+tarball (`src/llhttp`): it changes `-Dlocal-llhttp=false` to
+`-Dlocal-llhttp=true` in `debian/rules` and drops `libllhttp-dev` from
+`Build-Depends`. The resulting `ocserv` package has no `libllhttp` runtime
+dependency, and the smoke test fails if one appears.
 
 ## Artifact directories
 
 Noble artifacts are isolated by architecture:
 
 ```text
-build/ubuntu/noble/${TARGET_ARCH}/source/node-undici/
 build/ubuntu/noble/${TARGET_ARCH}/source/ocserv/
-build/ubuntu/noble/${TARGET_ARCH}/binary/node-undici/
 build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
-build/ubuntu/noble/${TARGET_ARCH}/repo/
 build/ubuntu/noble/${TARGET_ARCH}/keyrings/debian/
 ```
 
@@ -311,14 +306,7 @@ build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
 Source package artifacts are located in:
 
 ```text
-build/ubuntu/noble/${TARGET_ARCH}/source/node-undici/
 build/ubuntu/noble/${TARGET_ARCH}/source/ocserv/
-```
-
-`noble-repo` creates the temporary local repository required to build `ocserv`:
-
-```text
-build/ubuntu/noble/${TARGET_ARCH}/repo/
 ```
 
 When the automatic build refreshes the Debian source signature verification

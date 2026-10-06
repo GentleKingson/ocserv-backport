@@ -10,7 +10,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/_dsc.sh
 . "${SCRIPT_DIR}/_dsc.sh"
 
-[[ "$#" -eq 1 ]] || die "usage: noble-build-source-package.sh node-undici|ocserv"
+[[ "$#" -eq 1 ]] || die "usage: noble-build-source-package.sh ocserv"
 noble_package_vars "$1"
 
 [[ -d "${PKG_SOURCE_TREE}" ]] || die "missing rewrapped source tree: ${PKG_SOURCE_TREE} (run noble-rewrap-${PKG_SOURCE} first)"
@@ -24,16 +24,12 @@ print_source_package_host_dependency_guidance() {
 
   printf 'Install Noble source package host dependencies with:\n' >&2
   printf '  %sapt-get update\n' "${apt_prefix}" >&2
-  printf '  %sapt-get install -y --no-install-recommends debhelper dh-nodejs\n' "${apt_prefix}" >&2
+  printf '  %sapt-get install -y --no-install-recommends debhelper\n' "${apt_prefix}" >&2
 }
 
 ensure_source_package_host_commands() {
   local cmd missing_count=0
   local -a required_commands=(dh)
-
-  if [[ "${PKG_SOURCE}" == "node-undici" ]]; then
-    required_commands+=(pkgjs-pjson)
-  fi
 
   for cmd in "${required_commands[@]}"; do
     if ! command -v "${cmd}" >/dev/null 2>&1; then

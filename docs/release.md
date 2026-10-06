@@ -39,8 +39,6 @@ followed by `-` or `.` (`1.5.0-2`, `1.5.0.1`).
    files, failing if any is missing or has an unexpected version:
    - `ocserv_<version>~debian13.<n>_{amd64,arm64}.deb`
    - `ocserv_<version>~ubuntu24.04.<n>_{amd64,arm64}.deb`
-   - `libllhttp<soname>_<version>_{amd64,arm64}.deb` (Noble runtime
-     dependency)
 
    It writes `SHA256SUMS` for them and creates the release with
    `gh release create`. GitHub stores `~` in asset names as `.`; the files and

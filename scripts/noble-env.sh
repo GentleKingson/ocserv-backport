@@ -46,24 +46,18 @@ NOBLE_SBUILD_CHROOT="${TARGET_DISTRIBUTION}-${TARGET_ARCH}"
 export NOBLE_SBUILD_CHROOT
 
 NOBLE_BUILD_ROOT="${TARGET_BUILD_ROOT}"
-NOBLE_REPO_DIR="${TARGET_REPO_ROOT}"
-export NOBLE_BUILD_ROOT NOBLE_REPO_DIR
+export NOBLE_BUILD_ROOT
 
 noble_package_vars() {
   local package="$1"
   case "${package}" in
-    node-undici)
-      PKG_SOURCE="node-undici"
-      PKG_DEBIAN_VERSION="${NODE_UNDICI_DEBIAN_VERSION}"
-      PKG_NOBLE_VERSION="${NODE_UNDICI_NOBLE_VERSION}"
-      ;;
     ocserv)
       PKG_SOURCE="ocserv"
       PKG_DEBIAN_VERSION="${OCSERV_DEBIAN_VERSION}"
       PKG_NOBLE_VERSION="${OCSERV_NOBLE_VERSION}"
       ;;
     *)
-      die "usage: ${0##*/} node-undici|ocserv"
+      die "usage: ${0##*/} ocserv"
       ;;
   esac
 

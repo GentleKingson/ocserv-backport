@@ -19,11 +19,9 @@ fi
 
 shopt -s nullglob
 ocserv_debs=("${PKG_BINARY_DIR}"/ocserv_*_"${TARGET_ARCH}".deb)
-runtime_debs=("${NOBLE_REPO_DIR}"/libllhttp9.2_*.deb)
 shopt -u nullglob
 
 [[ "${#ocserv_debs[@]}" -eq 1 ]] || die "expected exactly one ocserv ${TARGET_ARCH} .deb in ${PKG_BINARY_DIR} (found ${#ocserv_debs[@]})"
-[[ "${#runtime_debs[@]}" -eq 1 ]] || die "expected exactly one libllhttp9.2 .deb in ${NOBLE_REPO_DIR} (found ${#runtime_debs[@]})"
 
 DEB="${ocserv_debs[0]}"
 pkg="$(dpkg-deb -f "${DEB}" Package)"
@@ -33,7 +31,8 @@ depends="$(dpkg-deb -f "${DEB}" Depends)"
 [[ "${pkg}" == "ocserv" ]] || die "deb Package ${pkg} != ocserv"
 [[ "${version}" == "${OCSERV_NOBLE_VERSION}" ]] || die "deb Version ${version} != ${OCSERV_NOBLE_VERSION}"
 [[ "${arch}" == "${TARGET_ARCH}" ]] || die "deb Architecture ${arch} != ${TARGET_ARCH}"
-[[ "${depends}" == *"libllhttp9.2"* ]] || die "ocserv Depends does not include libllhttp9.2: ${depends}"
+# ocserv is built with its bundled llhttp; Noble has no libllhttp package.
+[[ "${depends}" != *"libllhttp"* ]] || die "ocserv Depends unexpectedly includes libllhttp: ${depends}"
 
 host_arch="unavailable"
 if command -v dpkg >/dev/null 2>&1; then
@@ -42,21 +41,21 @@ fi
 log "noble-smoke-basic: host dpkg architecture: ${host_arch}"
 
 binary_dir="$(cd -- "${PKG_BINARY_DIR}" && pwd)"
-repo_dir="$(cd -- "${NOBLE_REPO_DIR}" && pwd)"
 deb_name="$(basename "${DEB}")"
 
 log "noble-smoke-basic: container install and package assertions"
 # shellcheck disable=SC2016
-"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" -v "${repo_dir}:/repo:ro" ubuntu:24.04 bash -euxc '
+"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" ubuntu:24.04 bash -euxc '
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"
   expected_upstream="$4"
 
-  echo "deb [trusted=yes] file:/repo ./" > /etc/apt/sources.list.d/local-libllhttp.list
   apt-get update -qq
   apt-get install -s -y "${deb}" | tee /tmp/ocserv-install-plan
-  grep -q "libllhttp9.2" /tmp/ocserv-install-plan
+  if grep -q "libllhttp" /tmp/ocserv-install-plan; then
+    exit 1
+  fi
   apt-get install -y -qq "${deb}"
 
   installed_version="$(dpkg-query -W -f="\${Version}" ocserv)"
@@ -82,6 +81,9 @@ log "noble-smoke-basic: container install and package assertions"
     echo "ocserv config test command exists, but the default smoke config did not pass" >&2
   fi
   if ldd /usr/sbin/ocserv | grep -i "not found"; then
+    exit 1
+  fi
+  if ldd /usr/sbin/ocserv | grep -i "libllhttp"; then
     exit 1
   fi
 ' bash "${deb_name}" "${OCSERV_NOBLE_VERSION}" "${TARGET_ARCH}" "${PKG_UPSTREAM_VERSION}"

@@ -6,7 +6,7 @@ versions() {
     set -euo pipefail
     . scripts/_versions.sh
     printf "%s\n" "${OCSERV_DEBIAN_VERSION}" "${OCSERV_UPSTREAM_VERSION}" "${OCSERV_VERSION}" \
-      "${OCSERV_NOBLE_VERSION}" "${NODE_UNDICI_DEBIAN_VERSION}" "${NODE_UNDICI_NOBLE_VERSION}"
+      "${OCSERV_NOBLE_VERSION}"
   '
 }
 
@@ -17,10 +17,9 @@ versions() {
   [ "${lines[1]}" = "1.5.0" ]
   [ "${lines[2]}" = "1.5.0-1~debian13.1" ]
   [ "${lines[3]}" = "1.5.0-1~ubuntu24.04.1" ]
-  [ "${lines[4]}" = "7.3.0+dfsg1+~cs24.12.11-1" ]
-  [ "${lines[5]}" = "7.3.0+dfsg1+~cs24.12.11-1" ]
+  [ "${#lines[@]}" -eq 4 ]
   [ -f "source-lock/ocserv/${lines[0]}.yaml" ]
-  [ -f "source-lock/node-undici/${lines[4]}.yaml" ]
+  [ ! -e source-lock/node-undici ]
 }
 
 @test "_versions.sh derives backport and upstream versions from the Debian version" {
@@ -48,7 +47,7 @@ versions() {
 @test "package version literals live only in scripts/_versions.sh" {
   local output
   output="$(
-    grep -n -E '1\.5\.0|7\.3\.0\+dfsg1' Makefile scripts/* \
+    grep -n -E '1\.5\.0' Makefile scripts/* \
       | grep -v '^scripts/_versions\.sh:' \
       | grep -v '^scripts/_fetch\.sh:.*snapshot\.debian\.org' \
       || true

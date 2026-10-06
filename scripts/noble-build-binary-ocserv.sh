@@ -14,19 +14,6 @@ noble_package_vars ocserv
 DSC="${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_NOBLE_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run noble-src-pkg-ocserv first)"
 
-# Hand the locally built libllhttp packages to sbuild, which serves them to
-# the build chroot from its own temporary archive.
-shopt -s nullglob
-llhttp_debs=("${NOBLE_REPO_DIR}"/libllhttp9.2_*.deb "${NOBLE_REPO_DIR}"/libllhttp-dev_*.deb)
-shopt -u nullglob
-[[ "${#llhttp_debs[@]}" -eq 2 ]] \
-  || die "expected libllhttp9.2 and libllhttp-dev debs in ${NOBLE_REPO_DIR} (run noble-repo first)"
-
-extra_package_args=()
-for deb in "${llhttp_debs[@]}"; do
-  extra_package_args+=("--extra-package=${deb}")
-done
-
 mkdir -p "${PKG_BINARY_DIR}"
 rm -f -- "${PKG_BINARY_DIR}"/*
 
@@ -37,7 +24,6 @@ run_sbuild \
   --arch="${TARGET_ARCH}" \
   --build-dir "${PKG_BINARY_DIR}" \
   --no-run-lintian \
-  "${extra_package_args[@]}" \
   "${DSC}"
 
 DEB="${PKG_BINARY_DIR}/ocserv_${PKG_NOBLE_VERSION}_${TARGET_ARCH}.deb"

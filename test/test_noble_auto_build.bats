@@ -48,7 +48,7 @@ install_minimal_valid_fakebin() {
 /bin/chmod "$@"
 SH
   /bin/chmod +x "${FAKEBIN}/chmod"
-  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source dh pkgjs-pjson sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
+  for cmd in git curl gpg dpkg-buildpackage dscverify dpkg-source dh sbuild schroot debootstrap lintian bats shellcheck docker dpkg dpkg-query make sleep sudo apt-get systemctl sbuild-adduser sbuild-createchroot newgrp; do
     cat > "${FAKEBIN}/${cmd}" <<'SH'
 #!/usr/bin/env bash
 case "$(basename "$0")" in
@@ -587,14 +587,9 @@ if [[ "\$*" != "noble-build" ]]; then
   exit 99
 fi
 /bin/mkdir -p \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/repo"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici/libllhttp9.2_7.3.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/node-undici/libllhttp-dev_7.3.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb" \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/repo/Packages"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -847,20 +842,20 @@ run_noble_env_with_arch_tools() {
   [ ! -e "${AUTO_REPO}/apt-get-calls" ]
 }
 
-@test "noble-auto-build default mode reports missing pkgjs-pjson without sudo side effects" {
+@test "noble-auto-build default mode reports missing dh without sudo side effects" {
   write_os_release ubuntu noble
   install_minimal_valid_fakebin
-  rm "${FAKEBIN}/pkgjs-pjson"
+  rm "${FAKEBIN}/dh"
   keyring="${AUTO_REPO}/debian-keyring.gpg"
   : > "${keyring}"
 
   DSCVERIFY_KEYRING_PATHS="${keyring}" run_auto_isolated
 
   [ "${status}" -ne 0 ]
-  grep -Fq -- "missing required command: pkgjs-pjson" <<<"${output}"
+  grep -Fq -- "missing required command: dh" <<<"${output}"
   grep -Fq -- "sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends" <<<"${output}"
   grep -Fq -- "debhelper" <<<"${output}"
-  grep -Fq -- "dh-nodejs" <<<"${output}"
+  ! grep -Fq -- "dh-nodejs" <<<"${output}"
   grep -Fq -- "scripts/noble-auto-build.sh --provision" <<<"${output}"
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
@@ -906,9 +901,10 @@ run_noble_env_with_arch_tools() {
   [ "${status}" -eq 0 ]
   grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/apt-get-calls"
   install_call="$(grep -F -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install" "${AUTO_REPO}/apt-get-calls")"
-  for package in git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper dh-nodejs debian-archive-keyring debian-keyring debian-maintainers sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck; do
+  for package in git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev debhelper debian-archive-keyring debian-keyring debian-maintainers sbuild schroot debootstrap lintian python3 python3-yaml bats shellcheck; do
     [[ "${install_call}" == *" ${package}"* || "${install_call}" == *" ${package} "* ]]
   done
+  [[ "${install_call}" != *"dh-nodejs"* ]]
   grep -Fq -- "sudo apt-get -q=1 -o=Dpkg::Use-Pty=0 update" "${AUTO_REPO}/sudo-calls"
   [[ "${output}" != *"apt progress output should be hidden"* ]]
   [[ "${output}" == *"using Debian dscverify keyring: ${keyring}"* ]]
@@ -1062,10 +1058,8 @@ run_noble_env_with_arch_tools() {
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_7.3.0_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp-dev_7.3.0_amd64.deb"* ]]
   [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0_amd64.deb"* ]]
-  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/repo/Packages"* ]]
+  [[ "${output}" != *"libllhttp"* ]]
 }
 
 @test "noble-auto-build fails after successful make when expected artifacts are missing" {
@@ -1080,7 +1074,7 @@ run_noble_env_with_arch_tools() {
 
   [ "${status}" -ne 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/ubuntu/noble/amd64/binary/node-undici/libllhttp9.2_*.deb"* ]]
+  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_*.deb"* ]]
 }
 
 @test "noble-auto-build default mode reports missing sbuild group commands" {
