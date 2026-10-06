@@ -865,54 +865,8 @@ SH
   [ ! -d "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo" ]
 }
 
-install_fake_http_python_and_sbuild() {
-  cat > "${FAKEBIN}/python3" <<SH
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1:-}" == "-m" && "\${2:-}" == "http.server" ]]; then
-  printf '%s\n' "\$*" > "${NOBLE_REPO}/http-server-args"
-  printf '%s\n' "\$\$" > "${NOBLE_REPO}/http-server-pid"
-  trap 'exit 0' TERM INT
-  while true; do sleep 1; done
-fi
-printf '%s\n' "43123"
-SH
-  cat > "${FAKEBIN}/sbuild" <<SH
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "\$@" > "${NOBLE_REPO}/sbuild-args"
-build_dir=""
-arch="\${TARGET_ARCH:?TARGET_ARCH not exported}"
-prev=""
-for arg in "\$@"; do
-  if [[ "\${prev}" == "--build-dir" ]]; then build_dir="\${arg}"; fi
-  case "\${arg}" in
-    --build-dir=*) build_dir="\${arg#--build-dir=}" ;;
-    --arch=*) arch="\${arg#--arch=}" ;;
-  esac
-  prev="\${arg}"
-done
-mkdir -p "\${build_dir}"
-version="\${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
-touch "\${build_dir}/ocserv_\${version}_\${arch}.deb"
-touch "\${build_dir}/ocserv_\${version}_\${arch}.changes"
-touch "\${build_dir}/ocserv_\${version}_\${arch}.buildinfo"
-SH
-  chmod +x "${FAKEBIN}/python3" "${FAKEBIN}/sbuild"
-}
-
 install_fake_noble_binary_sbuild() {
   local exit_status="${1:-0}"
-  cat > "${FAKEBIN}/python3" <<SH
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1:-}" == "-m" && "\${2:-}" == "http.server" ]]; then
-  printf '%s\n' "\$*" > "${NOBLE_REPO}/http-server-args"
-  trap 'exit 0' TERM INT
-  while true; do sleep 1; done
-fi
-printf '%s\n' "43123"
-SH
   cat > "${FAKEBIN}/sbuild" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
@@ -955,7 +909,7 @@ case "\${*: -1}" in
     ;;
 esac
 SH
-  chmod +x "${FAKEBIN}/python3" "${FAKEBIN}/sbuild"
+  chmod +x "${FAKEBIN}/sbuild"
 }
 
 install_fake_failing_sbuild_with_build_log() {
@@ -994,6 +948,8 @@ create_ocserv_dsc_and_repo() {
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo"
   touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
   touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/Packages"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb"
 }
 
 assert_sbuild_common_args() {
@@ -1065,7 +1021,7 @@ assert_sbuild_common_args() {
   install_fake_noble_binary_sbuild
   create_ocserv_dsc_and_repo
 
-  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' NOBLE_HTTP_STARTUP_SLEEP=0 bash scripts/noble-build-binary-ocserv.sh > '${NOBLE_REPO}/script-output' 2>&1"
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh > '${NOBLE_REPO}/script-output' 2>&1"
 
   [ "${status}" -eq 0 ]
   if grep -Fq -- "Installing build dependencies" "${NOBLE_REPO}/script-output"; then
@@ -1081,7 +1037,11 @@ assert_sbuild_common_args() {
     return 1
   fi
   assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args"
-  grep -Fq -- "--extra-repository=deb [trusted=yes] http://127.0.0.1:" "${NOBLE_REPO}/sbuild-args"
+  grep -Fxq -- "--extra-package=${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp9.2_7.3.0_amd64.deb" "${NOBLE_REPO}/sbuild-args"
+  grep -Fxq -- "--extra-package=${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb" "${NOBLE_REPO}/sbuild-args"
+  if grep -Fq -- "--extra-repository" "${NOBLE_REPO}/sbuild-args"; then
+    false
+  fi
   grep -Fq -- "ocserv_1.5.0-1~ubuntu24.04.1.dsc" "${NOBLE_REPO}/sbuild-args"
 }
 
@@ -1090,7 +1050,7 @@ assert_sbuild_common_args() {
   install_fake_noble_binary_sbuild 43
   create_ocserv_dsc_and_repo
 
-  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' NOBLE_HTTP_STARTUP_SLEEP=0 bash scripts/noble-build-binary-ocserv.sh"
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
 
   [ "${status}" -eq 43 ]
   [[ "${output}" == *"Installing build dependencies"* ]]
@@ -1098,24 +1058,31 @@ assert_sbuild_common_args() {
   [[ "${output}" == *"Building dependency tree..."* ]]
 }
 
-@test "noble-binary-ocserv injects a temporary localhost HTTP repo and cleans it up" {
+@test "noble-binary-ocserv passes arm64 libllhttp debs to sbuild as extra packages" {
   setup_noble_repo
-  install_fake_http_python_and_sbuild
+  install_fake_noble_binary_sbuild
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv"
   mkdir -p "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo"
   touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc"
-  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/Packages"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp9.2_7.3.0_arm64.deb"
+  touch "${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp-dev_7.3.0_arm64.deb"
 
   run bash -c "cd '${NOBLE_REPO}' && TARGET_ARCH=arm64 PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
   [ "${status}" -eq 0 ]
-  grep -Fq -- "--arch=arm64" "${NOBLE_REPO}/sbuild-args"
   assert_sbuild_common_args "${NOBLE_REPO}/sbuild-args" arm64
-  grep -Fq -- "deb [trusted=yes] http://127.0.0.1:43123/ ./" "${NOBLE_REPO}/sbuild-args"
-  grep -Fq -- "--bind" "${NOBLE_REPO}/http-server-args"
-  grep -Fq -- "127.0.0.1" "${NOBLE_REPO}/http-server-args"
-  server_pid="$(cat "${NOBLE_REPO}/http-server-pid")"
-  if kill -0 "${server_pid}" 2>/dev/null; then
-    echo "HTTP server still running: ${server_pid}" >&2
-    return 1
-  fi
+  grep -Fxq -- "--extra-package=${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp9.2_7.3.0_arm64.deb" "${NOBLE_REPO}/sbuild-args"
+  grep -Fxq -- "--extra-package=${NOBLE_REPO}/build/ubuntu/noble/arm64/repo/libllhttp-dev_7.3.0_arm64.deb" "${NOBLE_REPO}/sbuild-args"
+  [ "$(tail -n 1 "${NOBLE_REPO}/sbuild-args")" = "${NOBLE_REPO}/build/ubuntu/noble/arm64/source/ocserv/ocserv_1.5.0-1~ubuntu24.04.1.dsc" ]
+}
+
+@test "noble-binary-ocserv requires the libllhttp debs from noble-repo" {
+  setup_noble_repo
+  install_fake_noble_binary_sbuild
+  create_ocserv_dsc_and_repo
+  rm "${NOBLE_REPO}/build/ubuntu/noble/amd64/repo/libllhttp-dev_7.3.0_amd64.deb"
+
+  run bash -c "cd '${NOBLE_REPO}' && PATH='${FAKEBIN}:${PATH}' bash scripts/noble-build-binary-ocserv.sh"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"run noble-repo first"* ]]
+  [ ! -e "${NOBLE_REPO}/sbuild-args" ]
 }
