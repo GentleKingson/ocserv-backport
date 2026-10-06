@@ -339,8 +339,7 @@ Pull request CI runs only static checks, lock verification, unit tests, and
 stub orchestration tests.
 
 Pull request CI does not create an sbuild chroot, run the Docker smoke test, or
-build or upload binary `.deb` files. Changes limited to `docs/**` usually do
-not trigger this PR CI; trigger the workflow manually when needed.
+build or upload binary `.deb` files.
 
 The `ci.yml` workflow verifies the source package build path on a weekly
 schedule. It can also run manually with `target=source-package` or `target=all`.
