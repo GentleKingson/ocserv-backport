@@ -19,6 +19,7 @@ setup_entrypoint_repo() {
   ENTRY_REPO="$(mktemp -d)"
   mkdir -p "${ENTRY_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${ENTRY_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_pipeline.sh" "${ENTRY_REPO}/scripts/_pipeline.sh"
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${ENTRY_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${ENTRY_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/trixie-env.sh" "${ENTRY_REPO}/scripts/trixie-env.sh"
