@@ -58,7 +58,7 @@ jobs:
       }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install check dependencies
         run: |
@@ -121,7 +121,7 @@ jobs:
             ca-certificates \
             git
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install source package dependencies
         run: |
@@ -175,7 +175,7 @@ jobs:
             ca-certificates \
             git
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install source package dependencies
         run: |
