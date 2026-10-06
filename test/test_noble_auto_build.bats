@@ -11,6 +11,7 @@ setup() {
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${AUTO_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
+  cp "${REPO_ROOT}/scripts/_auto_build.sh" "${AUTO_REPO}/scripts/_auto_build.sh"
   cp "${REPO_ROOT}/scripts/noble-env.sh" "${AUTO_REPO}/scripts/noble-env.sh"
   if [[ -f "${REPO_ROOT}/scripts/noble-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
@@ -409,11 +410,15 @@ if [[ -n "\${FAKE_APT_FAIL_COMMAND:-}" && "\${FAKE_APT_FAIL_COMMAND}" == "\${1:-
 fi
 case "\${1:-}" in
   remove)
-    expected="remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc"
-    if [[ "\$*" != "\${expected}" ]]; then
-      echo "unexpected docker conflict package remove: \$*" >&2
-      exit 99
-    fi
+    shift
+    [[ "\${1:-}" == "-y" ]] || { echo "unexpected docker conflict package remove: \$*" >&2; exit 99; }
+    shift
+    for package in "\$@"; do
+      case " docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc " in
+        *" \${package} "*) ;;
+        *) echo "unexpected docker conflict package remove: \${package}" >&2; exit 99 ;;
+      esac
+    done
     exit 0
     ;;
   update)
@@ -1551,7 +1556,7 @@ SH
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Docker CE"* ]]
-  [[ "${output}" == *"Do not mix Ubuntu docker.io/containerd with Docker CE/containerd.io"* ]]
+  [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
   grep -Fq -- "docker.io" "${AUTO_REPO}/dpkg-query-calls"
   [[ "${output}" != *"unexpected host command"* ]]
   [ ! -e "${AUTO_REPO}/sudo-calls" ]
@@ -1575,7 +1580,10 @@ SH
     run_auto_isolated --provision
 
   [ "${status}" -eq 0 ]
-  grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc" "${AUTO_REPO}/apt-get-calls"
+  # Only installed conflicting packages are removed; none are installed here.
+  if grep -Fq -- " remove " "${AUTO_REPO}/apt-get-calls"; then
+    false
+  fi
   grep -Fq -- "apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y --no-install-recommends ca-certificates curl" "${AUTO_REPO}/apt-get-calls"
   docker_install_call="$(grep -F -- "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "${AUTO_REPO}/apt-get-calls")"
   [[ "${docker_install_call}" == *"apt-get -q=1 -o=Dpkg::Use-Pty=0 install -y"* ]]
@@ -1639,5 +1647,5 @@ SH
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"containerd.io : Conflicts: containerd"* ]]
-  [[ "${output}" == *"Do not mix Ubuntu docker.io/containerd with Docker CE/containerd.io"* ]]
+  [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
 }
