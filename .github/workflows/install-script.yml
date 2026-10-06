@@ -1,0 +1,152 @@
+---
+name: install-script
+
+# Checks the one-line installer (install.sh) from the README:
+#   lint  - bash syntax, ShellCheck and the Bats unit tests;
+#   e2e   - install.sh from this commit in booted systemd containers for
+#           Debian 13 and Ubuntu 24.04 on amd64 and arm64, run twice;
+#   readme-command - the exact README command (install.sh from main) on the
+#           Ubuntu 24.04 runner itself, after changes reach main, weekly and
+#           after each release.
+# Every install must leave ocserv.service enabled and not running.
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'scripts/install-e2e-test.sh'
+      - 'scripts/_common.sh'
+      - 'test/test_install.bats'
+      - 'README.md'
+      - '.github/workflows/install-script.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'scripts/install-e2e-test.sh'
+      - 'scripts/_common.sh'
+      - 'test/test_install.bats'
+      - 'README.md'
+      - '.github/workflows/install-script.yml'
+  # A release published with GITHUB_TOKEN starts no release event, so follow
+  # the release workflow instead.
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release tag to install (empty for the latest release)
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    install-script-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    # Only a published release (a tag push that succeeded) is worth testing.
+    if: >-
+      ${{
+        github.event_name != 'workflow_run' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push'
+        )
+      }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bats shellcheck
+
+      - name: Bash syntax
+        run: bash -n install.sh scripts/install-e2e-test.sh
+
+      - name: ShellCheck
+        run: shellcheck -x install.sh scripts/install-e2e-test.sh
+
+      - name: Unit tests
+        run: make install-test
+
+  e2e:
+    needs: lint
+    name: e2e (${{ matrix.image }}, ${{ matrix.platform.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - debian:trixie
+          - ubuntu:24.04
+        platform:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install and verify in a systemd container
+        env:
+          IMAGE: ${{ matrix.image }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "${RELEASE:-}" ]]; then
+            args+=(--release "${RELEASE}")
+          fi
+          scripts/install-e2e-test.sh "${IMAGE}" "${args[@]}"
+
+  readme-command:
+    needs: lint
+    if: ${{ github.event_name != 'pull_request' }}
+    name: readme-command (${{ matrix.platform.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run the README install command
+        run: |
+          set -euo pipefail
+          pattern='^curl -fsSL https://raw\.githubusercontent\.com/'
+          pattern+='[^ ]+/install\.sh \| sudo bash$'
+          command="$(grep -E "${pattern}" README.md)"
+          [[ "$(wc -l <<< "${command}")" -eq 1 ]] || {
+            echo "::error::README must contain exactly one install command"
+            exit 1
+          }
+          echo "${command}"
+          bash -euo pipefail -c "${command}"
+
+      - name: Check ocserv is enabled and not running
+        run: |
+          set -euo pipefail
+          dpkg-query -W -f='${Version} ${Architecture}\n' ocserv \
+            | tee /dev/stderr | grep -F '~ubuntu24.04.'
+          enabled="$(systemctl is-enabled ocserv.service)"
+          active="$(systemctl is-active ocserv.service || true)"
+          echo "is-enabled: ${enabled}, is-active: ${active}"
+          [[ "${enabled}" == enabled ]]
+          [[ "${active}" == inactive ]]

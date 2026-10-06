@@ -34,6 +34,7 @@ DIRECTLY_INVOKED_SCRIPTS=(
   noble-build-binary-ocserv.sh
   noble-lint-package.sh
   noble-smoke-test.sh
+  install-e2e-test.sh
 )
 
 @test "every Makefile-invoked script is executable in the git index" {
