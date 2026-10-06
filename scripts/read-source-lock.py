@@ -8,6 +8,8 @@ from typing import NoReturn
 
 import yaml
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class StrictSafeLoader(yaml.SafeLoader):
     """SafeLoader variant that rejects duplicate mapping keys at every level."""
@@ -266,7 +268,7 @@ def _build_parser() -> argparse.ArgumentParser:
     group.add_argument("--lock", help="path to <source>/<version>.yaml")
     group.add_argument(
         "--source",
-        help="source name (resolves source-lock/<source>/<version>.yaml)",
+        help="source name (resolves <repo>/source-lock/<source>/<version>.yaml)",
     )
     parser.add_argument(
         "--debian-version",
@@ -287,6 +289,7 @@ def _resolve_lock_path(
     if args.debian_version is None:
         parser.error("--source requires --debian-version")
     return os.path.join(
+        REPO_ROOT,
         "source-lock",
         args.source,
         f"{args.debian_version}.yaml",

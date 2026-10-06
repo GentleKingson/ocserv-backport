@@ -54,9 +54,8 @@ validate_artifact_basenames() {
 # exactly 3 whitespace-separated fields. Records not matching the pipeline-wide
 # safe-basename rule are also rejected.
 parse_dsc_full() {
-  local dsc_path="$1"
-  local tmp; tmp="$(mktemp)"
-  awk '
+  local dsc_path="$1" parsed
+  parsed="$(awk '
     function bad(msg) { print msg > "/dev/stderr"; exit 1 }
     function safe_name(nm) {
       if (nm == "" || nm == "." || nm == "..") return 0
@@ -110,8 +109,8 @@ parse_dsc_full() {
         printf "%s\t%s\t%s\n", nm, files_name[nm], csum_sha[nm]
       }
     }
-  ' "${dsc_path}" > "${tmp}" || { rm -f "${tmp}"; return 1; }
-  cat "${tmp}"; rm -f "${tmp}"
+  ' "${dsc_path}")" || return 1
+  printf '%s\n' "${parsed}"
 }
 
 # dsc_artifacts_match_lock <dsc_path>
