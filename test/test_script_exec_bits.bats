@@ -26,6 +26,7 @@ DIRECTLY_INVOKED_SCRIPTS=(
   trixie-auto-build.sh
   trixie-source-package-ci.sh
   noble-build.sh
+  noble-source-package-ci.sh
   noble-auto-build.sh
   noble-fetch-source.sh
   noble-rewrap-changelog.sh
