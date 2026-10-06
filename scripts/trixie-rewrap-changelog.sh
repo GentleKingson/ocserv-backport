@@ -5,14 +5,14 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_common.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-SOURCE_VERSION="1.5.0-1"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
+BACKPORT_VERSION="${OCSERV_VERSION}"
+SOURCE_VERSION="${OCSERV_DEBIAN_VERSION}"
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
 
-SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${BACKPORT_VERSION%%-*}"   # 1.5.0-1~debian13.1 -> 1.5.0
+SRCDIR="${TARGET_SOURCE_ROOT}/ocserv-${OCSERV_UPSTREAM_VERSION}"
 [[ -d "${SRCDIR}" ]] || die "missing source tree: ${SRCDIR}"
 cd "${SRCDIR}"
 

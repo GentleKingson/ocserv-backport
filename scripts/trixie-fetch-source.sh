@@ -18,8 +18,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
 SOURCE_ROOT="${TARGET_SOURCE_ROOT}"
-UPSTREAM_VERSION="1.5.0"
-SOURCE_VERSION="1.5.0-1"
+UPSTREAM_VERSION="${OCSERV_UPSTREAM_VERSION}"
+SOURCE_VERSION="${OCSERV_DEBIAN_VERSION}"
 LOCK_TSV="${REPO_ROOT}/source-lock/ocserv/${SOURCE_VERSION}.lock.tsv"
 TMP_ROOT=""
 

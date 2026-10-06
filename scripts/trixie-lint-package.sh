@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_common.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
+BACKPORT_VERSION="${OCSERV_VERSION}"
 
 cd -- "${REPO_ROOT}"
 CHANGES="${TARGET_BUILD_ROOT_REL}/binary/ocserv_${BACKPORT_VERSION}_${TARGET_ARCH}.changes"

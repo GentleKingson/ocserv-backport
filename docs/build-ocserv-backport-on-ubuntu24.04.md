@@ -200,8 +200,8 @@ sudo sbuild-update -udcar noble-arm64
 ## Version variables
 
 The Noble scripts keep Debian source package versions separate from Ubuntu
-backport versions. Default versions come from the `Makefile` and Noble build
-scripts:
+backport versions. All version defaults live in `scripts/_versions.sh`; the
+Noble versions default to values derived from the Debian versions:
 
 ```text
 NODE_UNDICI_DEBIAN_VERSION=7.3.0+dfsg1+~cs24.12.11-1

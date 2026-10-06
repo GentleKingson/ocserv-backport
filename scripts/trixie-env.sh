@@ -21,9 +21,11 @@ reject_legacy_trixie_env() {
 
 reject_legacy_trixie_env
 
+TRIXIE_ENV_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/_versions.sh
+. "${TRIXIE_ENV_DIR}/_versions.sh"
 TARGET_FAMILY="${TARGET_FAMILY:-debian}"
 TARGET_SUITE="${TARGET_SUITE:-trixie}"
-TRIXIE_ENV_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/_target_arch.sh
 . "${TRIXIE_ENV_DIR}/_target_arch.sh"

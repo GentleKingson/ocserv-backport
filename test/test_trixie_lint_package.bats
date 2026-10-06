@@ -10,6 +10,7 @@ setup() {
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${LINT_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${LINT_REPO}/scripts/_target_paths.sh"
   [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${LINT_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${LINT_REPO}/scripts/_versions.sh"
   cp "${REPO_ROOT}/scripts/trixie-lint-package.sh" "${LINT_REPO}/scripts/trixie-lint-package.sh"
   touch "${LINT_REPO}/build/debian/trixie/amd64/binary/ocserv_1.5.0-1~debian13.1_amd64.changes"
   cat > "${FAKEBIN}/lintian" <<SH

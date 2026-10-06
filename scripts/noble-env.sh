@@ -2,13 +2,11 @@
 # Shared Noble backport defaults and path helpers. Source this file.
 set -euo pipefail
 
-: "${NODE_UNDICI_DEBIAN_VERSION:=7.3.0+dfsg1+~cs24.12.11-1}"
-: "${NODE_UNDICI_NOBLE_VERSION:=${NODE_UNDICI_DEBIAN_VERSION}}"
-OCSERV_DEBIAN_VERSION="${OCSERV_DEBIAN_VERSION:-1.5.0-1}"
-OCSERV_NOBLE_VERSION="${OCSERV_NOBLE_VERSION:-1.5.0-1~ubuntu24.04.1}"
+NOBLE_ENV_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/_versions.sh
+. "${NOBLE_ENV_DIR}/_versions.sh"
 TARGET_FAMILY="${TARGET_FAMILY:-ubuntu}"
 TARGET_SUITE="${TARGET_SUITE:-${TARGET_DISTRIBUTION:-noble}}"
-NOBLE_ENV_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/_target_arch.sh
 . "${NOBLE_ENV_DIR}/_target_arch.sh"
@@ -42,8 +40,6 @@ export NOBLE_NATIVE_ARCH
 . "${NOBLE_ENV_DIR}/_target_paths.sh"
 TARGET_DISTRIBUTION="${TARGET_SUITE}"
 
-export NODE_UNDICI_DEBIAN_VERSION NODE_UNDICI_NOBLE_VERSION
-export OCSERV_DEBIAN_VERSION OCSERV_NOBLE_VERSION
 export TARGET_DISTRIBUTION TARGET_ARCH
 
 NOBLE_SBUILD_CHROOT="${TARGET_DISTRIBUTION}-${TARGET_ARCH}"
