@@ -14,7 +14,7 @@ setup() {
     cp "${REPO_ROOT}/scripts/_versions.sh" "${BIN_REPO}/scripts/_versions.sh"
   fi
   mkdir -p "${BIN_REPO}/build/debian/trixie/amd64/source"
-  : > "${BIN_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.1.dsc"
+  : > "${BIN_REPO}/build/debian/trixie/amd64/source/ocserv_1.5.0-1~debian13.2.dsc"
 
   cat > "${FAKEBIN}/dpkg" <<'SH'
 #!/usr/bin/env bash
@@ -33,13 +33,13 @@ for arg in "$@"; do
 done
 echo "Installing build dependencies"
 printf 'compile line\nfatal: undefined reference to gnutls_init\n' \
-  > "${build_dir}/ocserv_1.5.0-1~debian13.1_amd64.build"
+  > "${build_dir}/ocserv_1.5.0-1~debian13.2_amd64.build"
 if [[ "${FAKE_SBUILD_STATUS:-0}" != 0 ]]; then
   echo "E: Build failure (dpkg-buildpackage died)"
   exit "${FAKE_SBUILD_STATUS}"
 fi
 for ext in deb changes buildinfo; do
-  : > "${build_dir}/ocserv_1.5.0-1~debian13.1_amd64.${ext}"
+  : > "${build_dir}/ocserv_1.5.0-1~debian13.2_amd64.${ext}"
 done
 SH
   chmod +x "${FAKEBIN}/dpkg" "${FAKEBIN}/sbuild"
@@ -64,7 +64,7 @@ run_binary() {
   run_binary FAKE_SBUILD_STATUS=42 SBUILD_LOG_TAIL_LINES=1
   [ "${status}" -eq 42 ]
   [[ "${output}" == *"E: Build failure (dpkg-buildpackage died)"* ]]
-  [[ "${output}" == *"latest sbuild build log:"*"ocserv_1.5.0-1~debian13.1_amd64.build"* ]]
+  [[ "${output}" == *"latest sbuild build log:"*"ocserv_1.5.0-1~debian13.2_amd64.build"* ]]
   [[ "${output}" == *"fatal: undefined reference to gnutls_init"* ]]
   [[ "${output}" != *"compile line"* ]]
 }

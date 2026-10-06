@@ -7,7 +7,7 @@ OCSERV_DEBIAN_VERSION="${OCSERV_DEBIAN_VERSION:-1.5.0-1}"
 
 # Backport revision: bump it to rebuild the same Debian source as a new
 # release that apt sees as an upgrade.
-BACKPORT_REVISION="${BACKPORT_REVISION:-1}"
+BACKPORT_REVISION="${BACKPORT_REVISION:-2}"
 
 # Backport versions written to debian/changelog.
 OCSERV_VERSION="${OCSERV_VERSION:-${OCSERV_DEBIAN_VERSION}~debian13.${BACKPORT_REVISION}}"

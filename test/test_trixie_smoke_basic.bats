@@ -38,7 +38,7 @@ teardown_smoke_repo() {
 
 write_deb() {
   local target_arch="${TARGET_ARCH:-amd64}"
-  local path="${SMOKE_REPO}/build/debian/trixie/${target_arch}/binary/${1:-ocserv_1.5.0-1~debian13.1_${target_arch}.deb}"
+  local path="${SMOKE_REPO}/build/debian/trixie/${target_arch}/binary/${1:-ocserv_1.5.0-1~debian13.2_${target_arch}.deb}"
   printf 'fake deb\n' > "${path}"
 }
 
@@ -48,7 +48,7 @@ install_fake_dpkg_deb() {
 field="$3"
 case "$field" in
   Package) echo ocserv ;;
-  Version) echo 1.5.0-1~debian13.1 ;;
+  Version) echo 1.5.0-1~debian13.2 ;;
   Architecture) echo amd64 ;;
   *) exit 2 ;;
 esac
@@ -122,22 +122,22 @@ run_smoke() {
   args="$(cat "${SMOKE_REPO}/docker-args")"
   teardown_smoke_repo
   [ "${status}" -eq 0 ]
-  [[ "${args}" == *"ocserv_1.5.0-1~debian13.1_amd64.deb"* ]]
-  [[ "${args}" == *"1.5.0-1~debian13.1"* ]]
+  [[ "${args}" == *"ocserv_1.5.0-1~debian13.2_amd64.deb"* ]]
+  [[ "${args}" == *"1.5.0-1~debian13.2"* ]]
   [[ "${args}" == *"amd64"* ]]
 }
 
 @test "smoke-basic supports arm64 target deb while ignoring architecture independent debs" {
   TARGET_ARCH=arm64 setup_smoke_repo
   TARGET_ARCH=arm64 write_deb
-  printf 'fake all deb\n' > "${SMOKE_REPO}/build/debian/trixie/arm64/binary/ocserv-data_1.5.0-1~debian13.1_all.deb"
+  printf 'fake all deb\n' > "${SMOKE_REPO}/build/debian/trixie/arm64/binary/ocserv-data_1.5.0-1~debian13.2_all.deb"
   install_fake_docker
   cat > "${FAKEBIN}/dpkg-deb" <<'SH'
 #!/usr/bin/env bash
 field="$3"
 case "$field" in
   Package) echo ocserv ;;
-  Version) echo 1.5.0-1~debian13.1 ;;
+  Version) echo 1.5.0-1~debian13.2 ;;
   Architecture) echo arm64 ;;
   *) exit 2 ;;
 esac
@@ -149,7 +149,7 @@ SH
   teardown_smoke_repo
 
   [ "${status}" -eq 0 ]
-  [[ "${args}" == *"ocserv_1.5.0-1~debian13.1_arm64.deb"* ]]
+  [[ "${args}" == *"ocserv_1.5.0-1~debian13.2_arm64.deb"* ]]
   [[ "${args}" == *"arm64"* ]]
 }
 

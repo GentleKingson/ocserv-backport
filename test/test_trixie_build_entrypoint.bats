@@ -199,7 +199,7 @@ assert_status() {
   run_build_direct
   assert_status 0
   versions="$(make_versions)"
-  [ "${versions}" = "1.5.0-1~debian13.1" ]
+  [ "${versions}" = "1.5.0-1~debian13.2" ]
 }
 
 @test "trixie env rejects legacy Debian environment variables" {
@@ -219,7 +219,7 @@ assert_status() {
   run_make_build
   assert_status 0
   versions="$(make_versions)"
-  [ "${versions}" = "1.5.0-1~debian13.1" ]
+  [ "${versions}" = "1.5.0-1~debian13.2" ]
 }
 
 @test "make trixie-build preserves an OCSERV_VERSION override" {

@@ -20,8 +20,8 @@ fake_deb() {
 fake_build_artifacts() {
   local arch
   for arch in amd64 arm64; do
-    fake_deb "debian-trixie-build-${arch}/build/debian/trixie/${arch}/binary/ocserv_2.0.0-1~debian13.1_${arch}.deb"
-    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/ocserv/ocserv_2.0.0-1~ubuntu24.04.1_${arch}.deb"
+    fake_deb "debian-trixie-build-${arch}/build/debian/trixie/${arch}/binary/ocserv_2.0.0-1~debian13.2_${arch}.deb"
+    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/ocserv/ocserv_2.0.0-1~ubuntu24.04.2_${arch}.deb"
   done
 }
 
@@ -34,8 +34,8 @@ fake_build_artifacts() {
 @test "release preflight prints versions for a tag matching upstream" {
   run scripts/release-preflight.sh 2.0.0
   [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "ocserv_debian13=2.0.0-1~debian13.1" ]
-  [ "${lines[1]}" = "ocserv_noble=2.0.0-1~ubuntu24.04.1" ]
+  [ "${lines[0]}" = "ocserv_debian13=2.0.0-1~debian13.2" ]
+  [ "${lines[1]}" = "ocserv_noble=2.0.0-1~ubuntu24.04.2" ]
   [ "${#lines[@]}" -eq 2 ]
 }
 
@@ -56,13 +56,13 @@ fake_build_artifacts() {
 }
 
 @test "release preflight rejects ocserv versions that are already published" {
-  printf '%s\n' SHA256SUMS ocserv_2.0.0-1.ubuntu24.04.1_arm64.deb \
+  printf '%s\n' SHA256SUMS ocserv_2.0.0-1.ubuntu24.04.2_arm64.deb \
     > "${WORK}/published"
   run scripts/release-preflight.sh 2.0.0-2 "${WORK}/published"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"ocserv 2.0.0-1~ubuntu24.04.1 is already published"* ]]
+  [[ "${output}" == *"ocserv 2.0.0-1~ubuntu24.04.2 is already published"* ]]
 
-  run env BACKPORT_REVISION=2 \
+  run env BACKPORT_REVISION=3 \
     scripts/release-preflight.sh 2.0.0-2 "${WORK}/published"
   [ "${status}" -eq 0 ]
 }
@@ -74,10 +74,10 @@ fake_build_artifacts() {
   run bash -c "cd '${WORK}/release' && LC_ALL=C ls"
   [ "${output}" = "$(printf '%s\n' \
     SHA256SUMS \
-    ocserv_2.0.0-1.debian13.1_amd64.deb \
-    ocserv_2.0.0-1.debian13.1_arm64.deb \
-    ocserv_2.0.0-1.ubuntu24.04.1_amd64.deb \
-    ocserv_2.0.0-1.ubuntu24.04.1_arm64.deb)" ]
+    ocserv_2.0.0-1.debian13.2_amd64.deb \
+    ocserv_2.0.0-1.debian13.2_arm64.deb \
+    ocserv_2.0.0-1.ubuntu24.04.2_amd64.deb \
+    ocserv_2.0.0-1.ubuntu24.04.2_arm64.deb)" ]
   run bash -c "cd '${WORK}/release' && sha256sum -c SHA256SUMS"
   [ "${status}" -eq 0 ]
 }
@@ -87,16 +87,16 @@ fake_build_artifacts() {
   rm -rf "${WORK}/artifacts/ubuntu-noble-build-arm64"
   run scripts/release-collect-assets.sh "${WORK}/artifacts" "${WORK}/release"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"expected exactly one"*"ocserv_2.0.0-1~ubuntu24.04.1_arm64.deb, found 0"* ]]
+  [[ "${output}" == *"expected exactly one"*"ocserv_2.0.0-1~ubuntu24.04.2_arm64.deb, found 0"* ]]
 }
 
 @test "release collect fails when a package has an unexpected version" {
   fake_build_artifacts
-  mv "${WORK}/artifacts/debian-trixie-build-amd64/build/debian/trixie/amd64/binary/ocserv_2.0.0-1~debian13.1_amd64.deb" \
-    "${WORK}/artifacts/debian-trixie-build-amd64/build/debian/trixie/amd64/binary/ocserv_1.9.0-1~debian13.1_amd64.deb"
+  mv "${WORK}/artifacts/debian-trixie-build-amd64/build/debian/trixie/amd64/binary/ocserv_2.0.0-1~debian13.2_amd64.deb" \
+    "${WORK}/artifacts/debian-trixie-build-amd64/build/debian/trixie/amd64/binary/ocserv_1.9.0-1~debian13.2_amd64.deb"
   run scripts/release-collect-assets.sh "${WORK}/artifacts" "${WORK}/release"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"ocserv_2.0.0-1~debian13.1_amd64.deb, found 0"* ]]
+  [[ "${output}" == *"ocserv_2.0.0-1~debian13.2_amd64.deb, found 0"* ]]
 }
 
 @test "release workflow builds both distributions on tag push and publishes" {
@@ -125,12 +125,12 @@ fake_build_artifacts() {
 }
 
 @test "release notes render the template with the packaged versions" {
-  run env TAG=2.0.0 OCSERV_DEBIAN13=2.0.0-1~debian13.1 \
-    OCSERV_NOBLE=2.0.0-1~ubuntu24.04.1 scripts/release-render-notes.sh
+  run env TAG=2.0.0 OCSERV_DEBIAN13=2.0.0-1~debian13.2 \
+    OCSERV_NOBLE=2.0.0-1~ubuntu24.04.2 scripts/release-render-notes.sh
   [ "${status}" -eq 0 ]
   [[ "${output}" == "## Packages"* ]]
-  [[ "${output}" == *'`2.0.0-1~debian13.1`'* ]]
-  [[ "${output}" == *'`2.0.0-1~ubuntu24.04.1`'* ]]
+  [[ "${output}" == *'`2.0.0-1~debian13.2`'* ]]
+  [[ "${output}" == *'`2.0.0-1~ubuntu24.04.2`'* ]]
   [[ "${output}" == *"sha256sum -c --ignore-missing SHA256SUMS"* ]]
   [[ "${output}" != *'${'* ]]
 }

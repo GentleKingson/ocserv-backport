@@ -175,7 +175,7 @@ source_ci_file() {
   run_source_ci
   versions="$(source_ci_versions)"
   [ "${status}" -eq 0 ]
-  [ "${versions}" = "1.5.0-1~debian13.1" ]
+  [ "${versions}" = "1.5.0-1~debian13.2" ]
 }
 
 @test "source CI preserves an OCSERV_VERSION override" {
