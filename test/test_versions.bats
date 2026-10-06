@@ -31,6 +31,13 @@ versions() {
   [ "${lines[3]}" = "1.6.1-2~ubuntu24.04.1" ]
 }
 
+@test "_versions.sh applies BACKPORT_REVISION to both backport versions" {
+  versions BACKPORT_REVISION=2
+  [ "${status}" -eq 0 ]
+  [ "${lines[2]}" = "1.5.0-1~debian13.2" ]
+  [ "${lines[3]}" = "1.5.0-1~ubuntu24.04.2" ]
+}
+
 @test "_versions.sh keeps explicit backport version overrides" {
   versions OCSERV_VERSION=1.5.0-1~bpo13+1 OCSERV_NOBLE_VERSION=1.5.0-1~ubuntu24.04.2
   [ "${status}" -eq 0 ]

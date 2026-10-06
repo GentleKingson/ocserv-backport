@@ -3,6 +3,7 @@ name: debian-trixie-build
 
 "on":
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
