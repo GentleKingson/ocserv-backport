@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
-# shellcheck source=scripts/_noble_sbuild.sh
-. "${SCRIPT_DIR}/_noble_sbuild.sh"
+# shellcheck source=scripts/_sbuild.sh
+. "${SCRIPT_DIR}/_sbuild.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/noble-env.sh
 . "${SCRIPT_DIR}/noble-env.sh"
@@ -52,7 +52,7 @@ rm -f -- "${PKG_BINARY_DIR}"/*
 start_http_repo
 repo_line="deb [trusted=yes] http://127.0.0.1:${HTTP_PORT}/ ./"
 
-run_noble_sbuild \
+run_sbuild \
   --chroot-mode=schroot \
   --chroot="${NOBLE_SBUILD_CHROOT}" \
   -d "${TARGET_DISTRIBUTION}" \

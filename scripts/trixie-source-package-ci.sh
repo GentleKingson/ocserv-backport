@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=scripts/_pipeline.sh
+. "${SCRIPT_DIR}/_pipeline.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
@@ -11,26 +13,13 @@ cd -- "${REPO_ROOT}"
 
 export TARGET_FAMILY TARGET_SUITE TARGET_ARCH
 
-fail() {
-  log "SOURCE-CI FAILED at: $*"
-  exit 1
-}
-
-run_stage() {
-  local number="$1" target="$2"
-  log "== ${number}. ${target} =="
-  if [[ "${target}" == "trixie-fetch-ocserv" ]]; then
-    TRIXIE_SKIP_FETCH_VERIFY_LOCK=1 make "${target}" || fail "${target}"
-  else
-    make "${target}" || fail "${target}"
-  fi
-}
+PIPELINE_FAIL_PREFIX="SOURCE-CI FAILED"
 
 run_stage 1 trixie-verify-locks
 
 rm -rf -- "${TARGET_SOURCE_ROOT}"
 
-run_stage 2 trixie-fetch-ocserv
+run_stage 2 trixie-fetch-ocserv TRIXIE_SKIP_FETCH_VERIFY_LOCK=1
 run_stage 3 trixie-rewrap-ocserv
 run_stage 4 trixie-src-pkg-ocserv
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# sbuild wrapper that keeps the console quiet on success and, on failure,
+# prints sbuild's output plus the tail of the newest build log.
 
-noble_sbuild_build_dir_from_args() {
+sbuild_build_dir_from_args() {
   local arg previous=""
 
   for arg in "$@"; do
@@ -20,9 +22,9 @@ noble_sbuild_build_dir_from_args() {
   done
 }
 
-print_latest_noble_sbuild_log_tail() {
+print_latest_sbuild_log_tail() {
   local build_dir="$1"
-  local latest_log tail_lines
+  local latest_log tail_lines log_path
   local -a logs
 
   [[ -n "${build_dir}" && -d "${build_dir}" ]] || return 0
@@ -33,22 +35,22 @@ print_latest_noble_sbuild_log_tail() {
   [[ "${#logs[@]}" -gt 0 ]] || return 0
 
   latest_log="${logs[0]}"
-  for log in "${logs[@]}"; do
-    if [[ "${log}" -nt "${latest_log}" ]]; then
-      latest_log="${log}"
+  for log_path in "${logs[@]}"; do
+    if [[ "${log_path}" -nt "${latest_log}" ]]; then
+      latest_log="${log_path}"
     fi
   done
 
-  tail_lines="${NOBLE_SBUILD_LOG_TAIL_LINES:-260}"
+  tail_lines="${SBUILD_LOG_TAIL_LINES:-${NOBLE_SBUILD_LOG_TAIL_LINES:-260}}"
   printf '\nlatest sbuild build log: %s\n' "${latest_log}" >&2
   tail -n "${tail_lines}" "${latest_log}" >&2 || true
 }
 
-run_noble_sbuild() {
+run_sbuild() {
   local build_dir log_file status
 
   log_file="$(mktemp)"
-  build_dir="$(noble_sbuild_build_dir_from_args "$@")"
+  build_dir="$(sbuild_build_dir_from_args "$@")"
 
   if sbuild "$@" >"${log_file}" 2>&1; then
     rm -f -- "${log_file}"
@@ -59,6 +61,6 @@ run_noble_sbuild() {
 
   cat "${log_file}" >&2 || true
   rm -f -- "${log_file}"
-  print_latest_noble_sbuild_log_tail "${build_dir}"
+  print_latest_sbuild_log_tail "${build_dir}"
   return "${status}"
 }
