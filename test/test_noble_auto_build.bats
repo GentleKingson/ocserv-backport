@@ -13,6 +13,7 @@ setup() {
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   cp "${REPO_ROOT}/scripts/_auto_build.sh" "${AUTO_REPO}/scripts/_auto_build.sh"
   cp "${REPO_ROOT}/scripts/noble-env.sh" "${AUTO_REPO}/scripts/noble-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${AUTO_REPO}/scripts/_versions.sh"
   if [[ -f "${REPO_ROOT}/scripts/noble-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
   fi

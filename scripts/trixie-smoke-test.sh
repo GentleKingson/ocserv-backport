@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_common.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-BACKPORT_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
 # shellcheck source=scripts/trixie-env.sh
 . "${SCRIPT_DIR}/trixie-env.sh"
+BACKPORT_VERSION="${OCSERV_VERSION}"
 
 read -r -a DOCKER_COMMAND <<< "${TRIXIE_DOCKER_CMD:-docker}"
 [[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "TRIXIE_DOCKER_CMD must not be empty"

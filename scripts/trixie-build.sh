@@ -9,8 +9,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 . "${SCRIPT_DIR}/trixie-env.sh"
 cd -- "${REPO_ROOT}"
 
-OCSERV_VERSION="${OCSERV_VERSION:-1.5.0-1~debian13.1}"
-export OCSERV_VERSION TARGET_FAMILY TARGET_SUITE TARGET_ARCH
+export TARGET_FAMILY TARGET_SUITE TARGET_ARCH
 
 fail() {
   log "BUILD FAILED at: $*"

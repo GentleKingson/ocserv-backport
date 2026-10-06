@@ -9,6 +9,7 @@ setup_smoke_repo() {
   [[ -f "${REPO_ROOT}/scripts/_target_arch.sh" ]] && cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SMOKE_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SMOKE_REPO}/scripts/_target_paths.sh"
   [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${SMOKE_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${SMOKE_REPO}/scripts/_versions.sh"
   cp "${REPO_ROOT}/scripts/trixie-smoke-test.sh" "${SMOKE_REPO}/scripts/trixie-smoke-test.sh"
   FAKEBIN="$(mktemp -d)"
   cat > "${FAKEBIN}/dpkg" <<'SH'
