@@ -317,8 +317,7 @@ Pull request CI runs only static checks, lock verification, unit tests, and
 stub orchestration tests.
 
 Pull request CI does not create an sbuild chroot, run the Docker smoke test, or
-build or upload binary `.deb` files. Changes limited to `docs/**` usually do
-not trigger this PR CI; trigger the workflow manually when needed.
+build or upload binary `.deb` files.
 
 The manual workflow `.github/workflows/ubuntu-noble-build.yml` uses this
 architecture matrix:
