@@ -77,9 +77,8 @@ jobs:
       - name: Build and test Debian Trixie packages
         run: |
           set -euo pipefail
-          printf 'yes\n' \
-            | sudo --preserve-env=TARGET_ARCH \
-              ./scripts/trixie-auto-build.sh --provision
+          sudo --preserve-env=TARGET_ARCH \
+            ./scripts/trixie-auto-build.sh --provision --yes
 
       - name: Stage Debian Trixie artifacts
         if: success()
