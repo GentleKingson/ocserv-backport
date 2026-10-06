@@ -51,6 +51,15 @@ SH
 #!/usr/bin/env bash
 case "$(basename "$0")" in
   dpkg) echo amd64 ;;
+  gpg)
+    if [[ " $* " == *" --show-keys "* ]]; then
+      printf 'pub:-:4096:1:8D81803C0EBFCD88:1487788586:::-:::scESA:::::::23::0:\n'
+      printf 'fpr:::::::::%s:\n' "${FAKE_DOCKER_KEY_FPR:-9DC858229FC7DD38854AE2D88D81803C0EBFCD88}"
+      printf 'sub:-:4096:1:7EA0A9C3F273FCD8:1487792064:::::s:::::::23:\n'
+      printf 'fpr:::::::::D3306A018370199E527AE7997EA0A9C3F273FCD8:\n'
+    fi
+    exit 0
+    ;;
   dpkg-query)
     echo "dpkg-query stub was not replaced" >&2
     exit 99
@@ -1584,6 +1593,31 @@ SH
   grep -Fq -- "Suites: noble" "${docker_source}"
   grep -Fq -- "Signed-By: ${docker_keyring}" "${docker_source}"
   if grep -Eq -- "docker (pull|run)" "${AUTO_REPO}/docker-calls"; then
+    false
+  fi
+}
+
+@test "noble-auto-build --provision rejects a Docker APT key with the wrong fingerprint" {
+  write_os_release ubuntu noble
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/provisioned-debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/apt/keyrings/docker.asc"
+  docker_source="${AUTO_REPO}/apt/sources.list.d/docker.sources"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    NOBLE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    FAKE_DOCKER_KEY_FPR=0000000000000000000000000000000000000000 \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"does not match pinned fingerprint 9DC858229FC7DD38854AE2D88D81803C0EBFCD88"* ]]
+  [[ "${output}" == *"found primary key fingerprints: 0000000000000000000000000000000000000000"* ]]
+  [ ! -e "${docker_keyring}" ]
+  [ ! -e "${docker_source}" ]
+  if grep -Fq -- "docker-ce docker-ce-cli" "${AUTO_REPO}/apt-get-calls"; then
     false
   fi
 }
