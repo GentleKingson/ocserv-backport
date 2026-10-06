@@ -355,6 +355,46 @@ install_docker_ce_packages() {
   fi
 }
 
+# Primary key of the Docker APT repository signing key (docs.docker.com/engine/install).
+DOCKER_APT_KEY_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
+# Print the primary-key fingerprints in a key file, one per line.
+docker_key_primary_fingerprints() {
+  local key_path="$1" line want_fpr=0
+  local -a fields
+
+  while IFS= read -r line; do
+    IFS=':' read -r -a fields <<< "${line}"
+    case "${fields[0]:-}" in
+      pub)
+        want_fpr=1
+        ;;
+      fpr)
+        if [[ "${want_fpr}" -eq 1 ]]; then
+          printf '%s\n' "${fields[9]:-}"
+        fi
+        want_fpr=0
+        ;;
+      *)
+        want_fpr=0
+        ;;
+    esac
+  done < <(dscverify_with_temp_gnupghome gpg --batch --with-colons --show-keys "${key_path}" 2>/dev/null)
+}
+
+# Accept the downloaded key only if it holds exactly the pinned primary key.
+verify_docker_apt_key() {
+  local key_path="$1" fingerprints
+
+  fingerprints="$(docker_key_primary_fingerprints "${key_path}")"
+  if [[ "${fingerprints}" != "${DOCKER_APT_KEY_FINGERPRINT}" ]]; then
+    log "Docker APT key ${key_path} does not match pinned fingerprint ${DOCKER_APT_KEY_FINGERPRINT}"
+    log "found primary key fingerprints: ${fingerprints:-none}"
+    "${SUDO[@]}" rm -f -- "${key_path}"
+    return 1
+  fi
+}
+
 provision_docker_ce() {
   local arch keyring_path source_path keyring_dir source_dir repo_os
 
@@ -372,6 +412,7 @@ provision_docker_ce() {
   "${SUDO[@]}" install -m 0755 -d "${keyring_dir}"
   "${SUDO[@]}" curl -fsSL "https://download.docker.com/linux/${repo_os}/gpg" -o "${keyring_path}"
   "${SUDO[@]}" chmod a+r "${keyring_path}"
+  verify_docker_apt_key "${keyring_path}" || return 1
   "${SUDO[@]}" install -m 0755 -d "${source_dir}"
   write_docker_apt_source "${arch}" "${keyring_path}" "${source_path}"
   apt_quiet update
