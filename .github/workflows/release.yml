@@ -1,0 +1,117 @@
+---
+name: release
+
+"on":
+  push:
+    tags:
+      - '[0-9]*'
+  # Dry run: build and collect the release assets without publishing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ocserv_debian13: ${{ steps.versions.outputs.ocserv_debian13 }}
+      ocserv_noble: ${{ steps.versions.outputs.ocserv_noble }}
+      node_undici_noble: ${{ steps.versions.outputs.node_undici_noble }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check tag against packaged versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" != push ]]; then
+            upstream="$(
+              . scripts/_versions.sh
+              printf '%s' "${OCSERV_UPSTREAM_VERSION}"
+            )"
+            scripts/release-preflight.sh "${upstream}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            > /dev/null 2>&1; then
+            echo "::error::Release ${TAG} already exists."
+            exit 1
+          fi
+          published="${RUNNER_TEMP}/published-assets"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '.[].assets[].name' > "${published}"
+          scripts/release-preflight.sh "${TAG}" "${published}" \
+            >> "${GITHUB_OUTPUT}"
+
+  debian-trixie:
+    needs: preflight
+    uses: ./.github/workflows/debian-trixie-build.yml
+
+  ubuntu-noble:
+    needs: preflight
+    uses: ./.github/workflows/ubuntu-noble-build.yml
+
+  publish:
+    needs: [preflight, debian-trixie, ubuntu-noble]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-build-*64'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          scripts/release-collect-assets.sh \
+            "${RUNNER_TEMP}/artifacts" "${RUNNER_TEMP}/release"
+          ls -l "${RUNNER_TEMP}/release"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release/*
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          OCSERV_DEBIAN13: ${{ needs.preflight.outputs.ocserv_debian13 }}
+          OCSERV_NOBLE: ${{ needs.preflight.outputs.ocserv_noble }}
+          NODE_UNDICI: ${{ needs.preflight.outputs.node_undici_noble }}
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/release-notes.md"
+          cat > "${notes}" <<NOTES
+          ocserv-backport ${TAG} includes amd64 and arm64 ocserv deb
+          packages for Debian Trixie and Ubuntu Noble, and the libllhttp
+          runtime dependency package required on Ubuntu Noble.
+
+          - Debian 13 (trixie): ocserv ${OCSERV_DEBIAN13}
+          - Ubuntu 24.04 (noble): ocserv ${OCSERV_NOBLE}
+          - Ubuntu 24.04 (noble): libllhttp from node-undici ${NODE_UNDICI}
+
+          Verify downloads with \`sha256sum -c SHA256SUMS\`.
+          NOTES
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${TAG}" \
+            --notes-file "${notes}" \
+            --verify-tag \
+            "${RUNNER_TEMP}"/release/*
