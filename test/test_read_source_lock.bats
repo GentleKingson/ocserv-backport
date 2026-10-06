@@ -497,3 +497,12 @@ YAML
   cleanup_lock_tree
   [ "${status}" -eq 1 ]
 }
+
+@test "--source resolves source-lock relative to the repository, not the cwd" {
+  local outside
+  outside="$(mktemp -d)"
+  run bash -c "cd '${outside}' && ${READ_LOCK} --source ocserv --debian-version 1.5.0-1"
+  rm -rf "${outside}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(cat "${REPO_ROOT}/source-lock/ocserv/1.5.0-1.lock.tsv")" ]
+}
