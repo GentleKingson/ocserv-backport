@@ -1,0 +1,30 @@
+---
+changelog:
+  exclude:
+    labels:
+      - release/internal
+  categories:
+    - title: Breaking changes
+      labels:
+        - release/breaking
+    - title: Security
+      labels:
+        - release/security
+    - title: Debian 13 (trixie)
+      labels:
+        - area/debian
+    - title: Ubuntu 24.04 (noble)
+      labels:
+        - area/ubuntu
+    - title: Build & Packaging
+      labels:
+        - area/packaging
+    - title: Documentation
+      labels:
+        - area/docs
+    - title: Dependencies
+      labels:
+        - area/dependencies
+    - title: Other changes
+      labels:
+        - "*"
