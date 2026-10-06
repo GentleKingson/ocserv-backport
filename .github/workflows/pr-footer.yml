@@ -1,0 +1,39 @@
+---
+name: pr-footer
+
+# Strip the Claude Code attribution block that cloud sessions append to pull
+# request bodies. The body is edited with GITHUB_TOKEN, which does not start
+# another run, so the edit does not loop.
+"on":
+  pull_request_target:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  strip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # pull_request_target checks out the base branch, never the PR head.
+      - uses: actions/checkout@v7
+
+      - name: Remove the Claude Code footer from the body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          stripped="$(printf '%s' "${PR_BODY}" | scripts/strip-pr-footer.sh)"
+          if [[ "${stripped}" == "$(printf '%s' "${PR_BODY}")" ]]; then
+            echo "No footer to remove."
+            exit 0
+          fi
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            -f body="${stripped}" > /dev/null
+          echo "Removed the Claude Code footer from #${PR_NUMBER}."
