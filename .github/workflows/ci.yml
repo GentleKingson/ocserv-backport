@@ -3,20 +3,25 @@ name: ci
 
 "on":
   push:
+    branches: [main]
     paths:
       - 'scripts/**'
       - 'test/**'
       - 'source-lock/**'
+      - 'docs/**'
       - 'Makefile'
       - 'README.md'
+      - '.shellcheckrc'
       - '.github/workflows/**'
   pull_request:
     paths:
       - 'scripts/**'
       - 'test/**'
       - 'source-lock/**'
+      - 'docs/**'
       - 'Makefile'
       - 'README.md'
+      - '.shellcheckrc'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
@@ -34,6 +39,11 @@ name: ci
 
 permissions:
   contents: read
+
+concurrency:
+  group: >-
+    ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -55,6 +65,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             bats \
+            python3-pyflakes \
             python3-yaml \
             shellcheck \
             yamllint
@@ -71,6 +82,9 @@ jobs:
 
       - name: Python syntax
         run: python3 -m compileall scripts test
+
+      - name: Python lint
+        run: python3 -m pyflakes scripts/*.py
 
       - name: YAML lint
         run: yamllint .github source-lock
