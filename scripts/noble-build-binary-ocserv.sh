@@ -13,44 +13,22 @@ noble_package_vars ocserv
 
 DSC="${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_NOBLE_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "missing dsc: ${DSC} (run noble-src-pkg-ocserv first)"
-[[ -f "${NOBLE_REPO_DIR}/Packages" ]] || die "missing local repo Packages: ${NOBLE_REPO_DIR}/Packages (run noble-repo first)"
 
-HTTP_PID=""
-HTTP_PORT=""
+# Hand the locally built libllhttp packages to sbuild, which serves them to
+# the build chroot from its own temporary archive.
+shopt -s nullglob
+llhttp_debs=("${NOBLE_REPO_DIR}"/libllhttp9.2_*.deb "${NOBLE_REPO_DIR}"/libllhttp-dev_*.deb)
+shopt -u nullglob
+[[ "${#llhttp_debs[@]}" -eq 2 ]] \
+  || die "expected libllhttp9.2 and libllhttp-dev debs in ${NOBLE_REPO_DIR} (run noble-repo first)"
 
-cleanup_http_repo() {
-  if [[ -n "${HTTP_PID}" ]] && kill -0 "${HTTP_PID}" 2>/dev/null; then
-    kill "${HTTP_PID}" 2>/dev/null || true
-    wait "${HTTP_PID}" 2>/dev/null || true
-  fi
-}
-
-trap cleanup_http_repo EXIT
-trap 'cleanup_http_repo; exit 130' INT
-trap 'cleanup_http_repo; exit 143' TERM
-
-choose_free_port() {
-  python3 - <<'PY'
-import socket
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
-}
-
-start_http_repo() {
-  HTTP_PORT="$(choose_free_port)"
-  python3 -m http.server "${HTTP_PORT}" --bind 127.0.0.1 --directory "${NOBLE_REPO_DIR}" >/tmp/noble-libllhttp-repo."${HTTP_PORT}".log 2>&1 &
-  HTTP_PID="$!"
-  sleep "${NOBLE_HTTP_STARTUP_SLEEP:-1}"
-  kill -0 "${HTTP_PID}" 2>/dev/null || die "failed to start local HTTP repo on 127.0.0.1:${HTTP_PORT}"
-}
+extra_package_args=()
+for deb in "${llhttp_debs[@]}"; do
+  extra_package_args+=("--extra-package=${deb}")
+done
 
 mkdir -p "${PKG_BINARY_DIR}"
 rm -f -- "${PKG_BINARY_DIR}"/*
-
-start_http_repo
-repo_line="deb [trusted=yes] http://127.0.0.1:${HTTP_PORT}/ ./"
 
 run_sbuild \
   --chroot-mode=schroot \
@@ -59,7 +37,7 @@ run_sbuild \
   --arch="${TARGET_ARCH}" \
   --build-dir "${PKG_BINARY_DIR}" \
   --no-run-lintian \
-  --extra-repository="${repo_line}" \
+  "${extra_package_args[@]}" \
   "${DSC}"
 
 DEB="${PKG_BINARY_DIR}/ocserv_${PKG_NOBLE_VERSION}_${TARGET_ARCH}.deb"
