@@ -209,13 +209,14 @@ PY
   grep -Fq -- "image: debian:trixie" "${workflow}"
   grep -Fq -- "actions/checkout@v6" "${workflow}"
   grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
-  grep -Fq -- "Suites: sid" "${workflow}"
-  grep -Fq -- "apt_sid() {" "${workflow}"
-  grep -Fq -- "apt_sid download \\" "${workflow}"
-  grep -Fq -- "debian-keyring" "${workflow}"
-  grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" "${workflow}"
-  grep -Fq -- "GITHUB_ENV" "${workflow}"
+  grep -Fq -- 'scripts/ci-debian-keyrings.sh "${RUNNER_TEMP}/debian-keyrings"' "${workflow}"
+  grep -Fq -- '>> "${GITHUB_ENV}"' "${workflow}"
+  grep -Fq -- "Suites: sid" scripts/ci-debian-keyrings.sh
+  grep -Fq -- "apt_sid download debian-archive-keyring debian-keyring" scripts/ci-debian-keyrings.sh
+  grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" scripts/ci-debian-keyrings.sh
   grep -Fq -- "make trixie-source-ci" "${workflow}"
+  grep -Fq -- "image: ubuntu:24.04" "${workflow}"
+  grep -Fq -- "make noble-source-ci" "${workflow}"
   ! grep -Fq -- "${stage_step}" "${workflow}"
   ! grep -Fq -- "${upload_step}" "${workflow}"
   ! grep -Fq -- "${staging_dir}" "${workflow}"
