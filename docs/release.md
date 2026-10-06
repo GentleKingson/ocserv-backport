@@ -45,6 +45,11 @@ followed by `-` or `.` (`1.5.0-2`, `1.5.0.1`).
    `SHA256SUMS` already use the stored names, so
    `sha256sum -c SHA256SUMS` works on the downloads.
 
+After a tag push publishes the release, the `install-script` workflow
+installs it with the README one-line installer (`install.sh`) on Debian 13
+and Ubuntu 24.04, amd64 and arm64, and checks that `ocserv.service` is
+enabled but not running.
+
 ## Release notes
 
 The release body has three parts, in this order:
