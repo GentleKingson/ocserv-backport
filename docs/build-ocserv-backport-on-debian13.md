@@ -218,7 +218,8 @@ backport version. All version defaults live in `scripts/_versions.sh`:
 
 ```text
 OCSERV_DEBIAN_VERSION=1.5.0-1
-OCSERV_VERSION=1.5.0-1~debian13.1  # defaults to ${OCSERV_DEBIAN_VERSION}~debian13.1
+BACKPORT_REVISION=1
+OCSERV_VERSION=1.5.0-1~debian13.1  # defaults to ${OCSERV_DEBIAN_VERSION}~debian13.${BACKPORT_REVISION}
 
 TARGET_SUITE=trixie
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Debian script when unset
@@ -233,7 +234,10 @@ To build a newer Debian source, add its `source-lock/ocserv/<version>.yaml`
 and `.lock.tsv`, then set `OCSERV_DEBIAN_VERSION` (or change its default in
 `scripts/_versions.sh`); the backport version follows automatically.
 
-Override the local version with an environment variable:
+To rebuild the same Debian source as a new release, bump the
+`BACKPORT_REVISION` default in `scripts/_versions.sh`; it sets the suffix of
+both the Debian and Ubuntu backport versions. Override the local version for a
+single build with an environment variable:
 
 ```bash
 OCSERV_VERSION=1.5.0-1~debian13.2 make trixie-build
