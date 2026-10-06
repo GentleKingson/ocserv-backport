@@ -272,6 +272,22 @@ make noble-lint
 make noble-smoke-basic
 ```
 
+Run only the source package path for both packages:
+
+```bash
+make noble-source-ci
+```
+
+`make noble-source-ci` runs only:
+
+```text
+noble-verify-locks -> noble-fetch-node-undici -> noble-rewrap-node-undici
+  -> noble-src-pkg-node-undici -> noble-fetch-ocserv -> noble-rewrap-ocserv
+  -> noble-src-pkg-ocserv
+```
+
+It does not run sbuild, lintian, or the Docker smoke test.
+
 ## Artifact directories
 
 Noble artifacts are isolated by architecture:
@@ -318,6 +334,10 @@ stub orchestration tests.
 
 Pull request CI does not create an sbuild chroot, run the Docker smoke test, or
 build or upload binary `.deb` files.
+
+The `ci.yml` workflow verifies the Noble source package path on a weekly
+schedule. It can also run manually with `target=source-package` or `target=all`.
+This path runs `make noble-source-ci` in an `ubuntu:24.04` container.
 
 The manual workflow `.github/workflows/ubuntu-noble-build.yml` uses this
 architecture matrix:
