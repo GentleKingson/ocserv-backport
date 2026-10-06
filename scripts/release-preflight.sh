@@ -39,4 +39,3 @@ fi
 
 printf 'ocserv_debian13=%s\n' "${OCSERV_VERSION}"
 printf 'ocserv_noble=%s\n' "${OCSERV_NOBLE_VERSION}"
-printf 'node_undici_noble=%s\n' "${NODE_UNDICI_NOBLE_VERSION}"

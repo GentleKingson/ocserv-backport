@@ -21,7 +21,6 @@ jobs:
     outputs:
       ocserv_debian13: ${{ steps.versions.outputs.ocserv_debian13 }}
       ocserv_noble: ${{ steps.versions.outputs.ocserv_noble }}
-      node_undici_noble: ${{ steps.versions.outputs.node_undici_noble }}
     steps:
       - uses: actions/checkout@v7
 
@@ -94,18 +93,17 @@ jobs:
           TAG: ${{ github.ref_name }}
           OCSERV_DEBIAN13: ${{ needs.preflight.outputs.ocserv_debian13 }}
           OCSERV_NOBLE: ${{ needs.preflight.outputs.ocserv_noble }}
-          NODE_UNDICI: ${{ needs.preflight.outputs.node_undici_noble }}
         run: |
           set -euo pipefail
           notes="${RUNNER_TEMP}/release-notes.md"
           cat > "${notes}" <<NOTES
           ocserv-backport ${TAG} includes amd64 and arm64 ocserv deb
-          packages for Debian Trixie and Ubuntu Noble, and the libllhttp
-          runtime dependency package required on Ubuntu Noble.
+          packages for Debian Trixie and Ubuntu Noble. The Ubuntu Noble
+          package is built with the llhttp copy bundled in ocserv, so it
+          needs no separate libllhttp package.
 
           - Debian 13 (trixie): ocserv ${OCSERV_DEBIAN13}
           - Ubuntu 24.04 (noble): ocserv ${OCSERV_NOBLE}
-          - Ubuntu 24.04 (noble): libllhttp from node-undici ${NODE_UNDICI}
 
           Verify downloads with \`sha256sum -c SHA256SUMS\`.
           NOTES

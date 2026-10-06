@@ -31,9 +31,7 @@ DIRECTLY_INVOKED_SCRIPTS=(
   noble-fetch-source.sh
   noble-rewrap-changelog.sh
   noble-build-source-package.sh
-  noble-build-binary-node-undici.sh
   noble-build-binary-ocserv.sh
-  noble-build-repo.sh
   noble-lint-package.sh
   noble-smoke-test.sh
 )
@@ -65,6 +63,6 @@ DIRECTLY_INVOKED_SCRIPTS=(
   # This is the exact invocation form the Makefile uses. It must not fail with
   # exit 126 (Permission denied). It will exit non-zero on a missing source
   # tree (expected here); we only assert the exec bit is honored.
-  run "${REPO_ROOT}/scripts/noble-rewrap-changelog.sh" node-undici
+  run "${REPO_ROOT}/scripts/noble-rewrap-changelog.sh" ocserv
   [[ "${status}" -ne 126 ]]
 }

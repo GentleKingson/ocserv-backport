@@ -17,13 +17,13 @@ AUTO_BUILD_ENV_PREFIX="NOBLE"
 
 CORE_PACKAGES=(
   git ca-certificates curl gnupg build-essential fakeroot devscripts dpkg-dev
-  debhelper dh-nodejs
+  debhelper
   debian-archive-keyring debian-keyring debian-maintainers sbuild schroot
   debootstrap lintian python3 python3-yaml bats shellcheck
 )
 
 CORE_COMMANDS=(
-  git curl gpg dpkg-buildpackage dscverify dpkg-source dh pkgjs-pjson sbuild schroot
+  git curl gpg dpkg-buildpackage dscverify dpkg-source dh sbuild schroot
   debootstrap lintian python3 bats shellcheck
 )
 
@@ -86,7 +86,4 @@ cd -- "${REPO_ROOT}"
 log "noble-auto-build foundation ready: TARGET_ARCH=${TARGET_ARCH} mirror=${NOBLE_AUTO_BUILD_MIRROR} provision=${PROVISION} sudo=${SUDO_MODE}"
 run_noble_build
 print_build_artifacts noble-auto-build \
-  "${TARGET_BUILD_ROOT}/binary/node-undici/libllhttp9.2_*.deb" \
-  "${TARGET_BUILD_ROOT}/binary/node-undici/libllhttp-dev_*.deb" \
-  "${TARGET_BUILD_ROOT}/binary/ocserv/ocserv_*.deb" \
-  "${TARGET_BUILD_ROOT}/repo/Packages"
+  "${TARGET_BUILD_ROOT}/binary/ocserv/ocserv_*.deb"

@@ -17,7 +17,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/_fetch.sh
 . "${SCRIPT_DIR}/_fetch.sh"
 
-[[ "$#" -eq 1 ]] || die "usage: noble-fetch-source.sh node-undici|ocserv"
+[[ "$#" -eq 1 ]] || die "usage: noble-fetch-source.sh ocserv"
 noble_package_vars "$1"
 
 TMP_ROOT=""

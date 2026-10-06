@@ -35,7 +35,7 @@ run_source_ci() {
   mkdir -p "${CI_REPO}/build/ubuntu/noble/amd64/source" "${CI_REPO}/build/ubuntu/noble/amd64/binary"
   run_source_ci
   [ "${status}" -eq 0 ]
-  [ "$(cat "${CI_REPO}/make-calls")" = $'noble-verify-locks\t\nnoble-fetch-node-undici\t1\nnoble-rewrap-node-undici\t\nnoble-src-pkg-node-undici\t\nnoble-fetch-ocserv\t1\nnoble-rewrap-ocserv\t\nnoble-src-pkg-ocserv\t' ]
+  [ "$(cat "${CI_REPO}/make-calls")" = $'noble-verify-locks\t\nnoble-fetch-ocserv\t1\nnoble-rewrap-ocserv\t\nnoble-src-pkg-ocserv\t' ]
   [ ! -d "${CI_REPO}/build/ubuntu/noble/amd64/source" ]
   [ -d "${CI_REPO}/build/ubuntu/noble/amd64/binary" ]
   [[ "${output}" == *"NOBLE SOURCE-CI PASSED"* ]]

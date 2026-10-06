@@ -17,11 +17,8 @@ run_stage 1 noble-verify-locks
 
 rm -rf -- "${NOBLE_BUILD_ROOT}/source"
 
-run_stage 2 noble-fetch-node-undici NOBLE_SKIP_FETCH_VERIFY_LOCK=1
-run_stage 3 noble-rewrap-node-undici
-run_stage 4 noble-src-pkg-node-undici
-run_stage 5 noble-fetch-ocserv NOBLE_SKIP_FETCH_VERIFY_LOCK=1
-run_stage 6 noble-rewrap-ocserv
-run_stage 7 noble-src-pkg-ocserv
+run_stage 2 noble-fetch-ocserv NOBLE_SKIP_FETCH_VERIFY_LOCK=1
+run_stage 3 noble-rewrap-ocserv
+run_stage 4 noble-src-pkg-ocserv
 
 log "NOBLE SOURCE-CI PASSED: source package build completed."

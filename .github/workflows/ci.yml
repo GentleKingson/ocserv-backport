@@ -189,7 +189,6 @@ jobs:
             debian-archive-keyring \
             debian-keyring \
             devscripts \
-            dh-nodejs \
             dpkg-dev \
             fakeroot \
             gnupg \
