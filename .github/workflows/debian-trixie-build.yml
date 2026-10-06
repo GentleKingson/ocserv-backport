@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload Debian Trixie artifacts
         if: success()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: debian-trixie-build-${{ matrix.arch }}
           if-no-files-found: error
@@ -139,7 +139,7 @@ jobs:
 
       - name: Upload Debian Trixie build logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: debian-trixie-build-logs-${{ matrix.arch }}
           if-no-files-found: warn
