@@ -6,7 +6,7 @@
 # 126) at the affected target. bats invokes scripts via "bash scripts/...", so
 # the exec bit is invisible to every other test; this guard closes that gap.
 #
-# Sourced library helpers (_noble_sbuild.sh, noble-env.sh, _common.sh, _dsc.sh)
+# Sourced library helpers (_noble_sbuild.sh, noble-env.sh, _common.sh, _dsc.sh, _fetch.sh)
 # are NOT invoked directly and are intentionally excluded; they stay 100644.
 load helpers/bats-helper.bash
 
