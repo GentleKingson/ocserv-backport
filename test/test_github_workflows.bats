@@ -37,8 +37,8 @@ setup() {
   grep -Fq -- '${{ runner.temp }}/ubuntu-noble-artifacts/**' "${workflow}"
   grep -Fq -- 'ubuntu-noble-build-${{ matrix.arch }}' "${workflow}"
   grep -Fq -- 'ubuntu-noble-build-logs-${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- "actions/checkout@v6" "${workflow}"
-  grep -Fq -- "actions/upload-artifact@v6" "${workflow}"
+  grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
+  grep -Eq -- "actions/upload-artifact@v[0-9]+" "${workflow}"
 }
 
 @test "Dependabot keeps GitHub Actions versions current" {
@@ -46,8 +46,18 @@ setup() {
 }
 
 @test "GitHub workflows use Node 24 action majors" {
-  ! grep -R -Fq -- "actions/checkout@v4" .github/workflows
-  ! grep -R -Fq -- "actions/upload-artifact@v4" .github/workflows
+  local ref major
+
+  while read -r ref; do
+    major="${ref##*@v}"
+    [ "${major}" -ge 6 ] || {
+      echo "outdated action major: ${ref}" >&2
+      return 1
+    }
+  done < <(
+    grep -RhoE -- "actions/(checkout|upload-artifact)@v[0-9]+" \
+      .github/workflows
+  )
 }
 
 @test "manual Debian Trixie build workflow matches documented contract" {
@@ -83,8 +93,8 @@ setup() {
   grep -Fq -- "if: always()" "${workflow}"
   grep -Fq -- "if-no-files-found: warn" "${workflow}"
   grep -Fq -- "if-no-files-found: error" "${workflow}"
-  grep -Fq -- "actions/checkout@v6" "${workflow}"
-  grep -Fq -- "actions/upload-artifact@v6" "${workflow}"
+  grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
+  grep -Eq -- "actions/upload-artifact@v[0-9]+" "${workflow}"
 }
 
 @test "YAML files checked by CI stay within yamllint line length" {
@@ -207,7 +217,7 @@ PY
   grep -Fq -- "inputs.target == 'source-package'" "${workflow}"
   grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
   grep -Fq -- "image: debian:trixie" "${workflow}"
-  grep -Fq -- "actions/checkout@v6" "${workflow}"
+  grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
   grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
   grep -Fq -- 'scripts/ci-debian-keyrings.sh "${RUNNER_TEMP}/debian-keyrings"' "${workflow}"
   grep -Fq -- '>> "${GITHUB_ENV}"' "${workflow}"
