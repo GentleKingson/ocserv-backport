@@ -19,11 +19,12 @@ setup_noble_repo() {
   NOBLE_REPO="$(mktemp -d)"
   mkdir -p "${NOBLE_REPO}/scripts"
   cp "${REPO_ROOT}/scripts/_common.sh" "${NOBLE_REPO}/scripts/_common.sh"
+  cp "${REPO_ROOT}/scripts/_pipeline.sh" "${NOBLE_REPO}/scripts/_pipeline.sh"
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${NOBLE_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${NOBLE_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dsc.sh" "${NOBLE_REPO}/scripts/_dsc.sh"
-  if [[ -f "${REPO_ROOT}/scripts/_noble_sbuild.sh" ]]; then
-    cp "${REPO_ROOT}/scripts/_noble_sbuild.sh" "${NOBLE_REPO}/scripts/_noble_sbuild.sh"
+  if [[ -f "${REPO_ROOT}/scripts/_sbuild.sh" ]]; then
+    cp "${REPO_ROOT}/scripts/_sbuild.sh" "${NOBLE_REPO}/scripts/_sbuild.sh"
   fi
   if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
