@@ -20,6 +20,7 @@ setup_source_ci_repo() {
   cp "${REPO_ROOT}/scripts/_target_arch.sh" "${SOURCE_CI_REPO}/scripts/_target_arch.sh"
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${SOURCE_CI_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/trixie-env.sh" "${SOURCE_CI_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${SOURCE_CI_REPO}/scripts/_versions.sh"
   cp "${REPO_ROOT}/scripts/trixie-source-package-ci.sh" "${SOURCE_CI_REPO}/scripts/trixie-source-package-ci.sh"
   cp "${REPO_ROOT}/Makefile" "${SOURCE_CI_REPO}/Makefile"
   SYSTEM_MAKE="$(command -v make)"

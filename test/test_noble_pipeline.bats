@@ -27,6 +27,7 @@ setup_noble_repo() {
   fi
   if [[ -f "${REPO_ROOT}/scripts/noble-env.sh" ]]; then
     cp "${REPO_ROOT}/scripts/noble-env.sh" "${NOBLE_REPO}/scripts/noble-env.sh"
+    cp "${REPO_ROOT}/scripts/_versions.sh" "${NOBLE_REPO}/scripts/_versions.sh"
   fi
   if [[ -d "${REPO_ROOT}/packaging" ]]; then
     cp -R "${REPO_ROOT}/packaging" "${NOBLE_REPO}/packaging"
@@ -747,6 +748,7 @@ SH
 
   [ "${status}" -eq 0 ]
   grep -Fq -- "sudo docker run --rm" "${NOBLE_REPO}/sudo-calls"
+  grep -Fq -- " bash ocserv_1.5.0-1~ubuntu24.04.1_amd64.deb 1.5.0-1~ubuntu24.04.1 amd64 1.5.0" "${NOBLE_REPO}/sudo-calls"
   [ ! -e "${NOBLE_REPO}/docker-calls" ]
 }
 

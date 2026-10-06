@@ -214,20 +214,24 @@ sudo sbuild-update -udcar trixie-arm64-sbuild
 ## Version variables
 
 The Debian scripts keep Debian source package identity separate from the local
-backport version. The default local version comes from the `Makefile` and
-Debian build scripts:
+backport version. All version defaults live in `scripts/_versions.sh`:
 
 ```text
-OCSERV_VERSION=1.5.0-1~debian13.1
+OCSERV_DEBIAN_VERSION=1.5.0-1
+OCSERV_VERSION=1.5.0-1~debian13.1  # defaults to ${OCSERV_DEBIAN_VERSION}~debian13.1
 
 TARGET_SUITE=trixie
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Debian script when unset
 ```
 
-`OCSERV_VERSION` is used for `debian/changelog` and the final Debian trixie
-build artifacts. Debian source package identity is defined by the locked
-`ocserv 1.5.0-1` entry in `source-lock/`. Do not put the `~debian13.*` local
-backport version in `source-lock` paths.
+`OCSERV_DEBIAN_VERSION` selects the locked Debian source in `source-lock/` and
+the unpacked `ocserv-<upstream>` tree. `OCSERV_VERSION` is used for
+`debian/changelog` and the final Debian trixie build artifacts. Do not put the
+`~debian13.*` local backport version in `source-lock` paths.
+
+To build a newer Debian source, add its `source-lock/ocserv/<version>.yaml`
+and `.lock.tsv`, then set `OCSERV_DEBIAN_VERSION` (or change its default in
+`scripts/_versions.sh`); the backport version follows automatically.
 
 Override the local version with an environment variable:
 

@@ -13,6 +13,7 @@ setup() {
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   cp "${REPO_ROOT}/scripts/_auto_build.sh" "${AUTO_REPO}/scripts/_auto_build.sh"
   [[ -f "${REPO_ROOT}/scripts/trixie-env.sh" ]] && cp "${REPO_ROOT}/scripts/trixie-env.sh" "${AUTO_REPO}/scripts/trixie-env.sh"
+  cp "${REPO_ROOT}/scripts/_versions.sh" "${AUTO_REPO}/scripts/_versions.sh"
   if [[ -f "${REPO_ROOT}/scripts/trixie-auto-build.sh" ]]; then
     cp "${REPO_ROOT}/scripts/trixie-auto-build.sh" "${AUTO_REPO}/scripts/trixie-auto-build.sh"
   fi
