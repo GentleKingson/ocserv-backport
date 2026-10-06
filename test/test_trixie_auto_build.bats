@@ -80,7 +80,15 @@ case "$(basename "$0")" in
         ;;
     esac
     ;;
-  gpg) exit 0 ;;
+  gpg)
+    if [[ " $* " == *" --show-keys "* ]]; then
+      printf 'pub:-:4096:1:8D81803C0EBFCD88:1487788586:::-:::scESA:::::::23::0:\n'
+      printf 'fpr:::::::::%s:\n' "${FAKE_DOCKER_KEY_FPR:-9DC858229FC7DD38854AE2D88D81803C0EBFCD88}"
+      printf 'sub:-:4096:1:7EA0A9C3F273FCD8:1487792064:::::s:::::::23:\n'
+      printf 'fpr:::::::::D3306A018370199E527AE7997EA0A9C3F273FCD8:\n'
+    fi
+    exit 0
+    ;;
   sbuild) echo "trixie-${TARGET_ARCH:-amd64}-sbuild" ;;
   schroot) echo "chroot:trixie-${TARGET_ARCH:-amd64}-sbuild" ;;
   docker)
@@ -929,6 +937,29 @@ run_auto_isolated() {
   grep -Fxq -- "systemctl enable --now docker" "${AUTO_REPO}/systemctl-calls"
   grep -Fxq -- "systemctl enable --now containerd" "${AUTO_REPO}/systemctl-calls"
   grep -Fxq -- "make trixie-build TRIXIE_DOCKER_CMD=sudo docker" "${AUTO_REPO}/make-calls"
+}
+
+@test "trixie-auto-build --provision rejects a Docker APT key with the wrong fingerprint" {
+  write_os_release debian trixie
+  install_minimal_valid_fakebin
+  allow_fake_provision_commands
+  install_fake_successful_make
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  docker_keyring="${AUTO_REPO}/docker.asc"
+  docker_source="${AUTO_REPO}/docker.sources"
+  : > "${keyring}"
+
+  DSCVERIFY_KEYRING_PATHS="${keyring}" \
+    TRIXIE_AUTO_BUILD_DOCKER_KEYRING_PATH="${docker_keyring}" \
+    TRIXIE_AUTO_BUILD_DOCKER_SOURCE_PATH="${docker_source}" \
+    FAKE_DOCKER_KEY_FPR=0000000000000000000000000000000000000000 \
+    run_auto_isolated --provision
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"does not match pinned fingerprint 9DC858229FC7DD38854AE2D88D81803C0EBFCD88"* ]]
+  [ ! -e "${docker_keyring}" ]
+  [ ! -e "${docker_source}" ]
+  [ ! -e "${AUTO_REPO}/make-calls" ]
 }
 
 @test "trixie-auto-build Docker CE source uses host architecture under non-native override" {
