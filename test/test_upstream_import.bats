@@ -29,7 +29,14 @@ for arg in "$@"; do [[ "${prev}" == "--output" ]] && dest="${arg}"; prev="${arg}
 cp -- "${RELEASE_DIR}/${url##*/}" "${dest}"
 SH
   printf '#!/usr/bin/env bash\nexit 0\n' > "${WORK}/bin/dpkg-source"
-  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "${WORK}/dch-args"\n' > "${WORK}/bin/dch"
+  printf 'ocserv (1.5.0-1) unstable; urgency=medium\n\n  * Old.\n\n -- Old <old@example.invalid>  Mon, 01 Jan 2024 00:00:00 +0000\n' \
+    > "${WORK}/packaging/debian/changelog"
+  cat > "${WORK}/bin/dch" <<'SH'
+#!/usr/bin/env bash
+printf "%s\n" "$@" > "${WORK}/dch-args"
+{ printf 'ocserv (x) unstable; urgency=medium\n\n  * New.\n\n -- New <new@example.invalid>  %s\n\n' "$(date -R)"; cat debian/changelog; } > c
+mv c debian/changelog
+SH
   printf '#!/usr/bin/env bash\necho 1.5.0-1\n' > "${WORK}/bin/dpkg-parsechangelog"
   chmod +x "${WORK}/bin/"*
 }
@@ -65,6 +72,11 @@ teardown() {
   [ -f "${WORK}/staging/ocserv-9.9.9/debian/upstream/signing-key.asc" ]
   cmp "${WORK}/release/ocserv-9.9.9.tar.xz" "${WORK}/staging/ocserv_9.9.9.orig.tar.xz"
   grep -qx -- 9.9.9-0local1 "${WORK}/dch-args"
+  sigtime="$(gpg --batch --status-fd 1 --verify "${WORK}/release/ocserv-9.9.9.tar.xz.sig" \
+    "${WORK}/release/ocserv-9.9.9.tar.xz" 2>/dev/null | awk '$2 == "VALIDSIG" { print $5 }')"
+  grep '^ -- ' "${WORK}/staging/ocserv-9.9.9/debian/changelog" > "${WORK}/trailers"
+  [ "$(sed -n 1p "${WORK}/trailers")" = " -- New <new@example.invalid>  $(LC_ALL=C date -u -R -d "@${sigtime}")" ]
+  [ "$(sed -n 2p "${WORK}/trailers")" = " -- Old <old@example.invalid>  Mon, 01 Jan 2024 00:00:00 +0000" ]
 }
 
 @test "upstream import rejects a tarball that does not match the lock" {

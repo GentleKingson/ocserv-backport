@@ -65,9 +65,11 @@ verify_upstream_signature() {
     || die "cannot read upstream signing key: ${key_asc}"
   status="$(GNUPGHOME="${workdir}/gnupg" gpgv --status-fd 1 --keyring "${keyring}" "${sig}" "${file}" 2>/dev/null)" \
     || die "upstream signature verification failed for ${file##*/}"
-  # VALIDSIG ends with the primary key fingerprint of the signing key.
-  awk -v fpr="${UPSTREAM_SIGNER_FPR}" '$1 == "[GNUPG:]" && $2 == "VALIDSIG" && $NF == fpr { ok = 1 } END { exit !ok }' \
-    <<< "${status}" || die "upstream signature is not from pinned key ${UPSTREAM_SIGNER_FPR}"
+  # VALIDSIG carries the signature time and ends with the primary key
+  # fingerprint of the signing key.
+  UPSTREAM_SIGNATURE_TIME="$(awk -v fpr="${UPSTREAM_SIGNER_FPR}" \
+    '$1 == "[GNUPG:]" && $2 == "VALIDSIG" && $NF == fpr { print $5; ok = 1 } END { exit !ok }' <<< "${status}")" \
+    || die "upstream signature is not from pinned key ${UPSTREAM_SIGNER_FPR}"
   log "upstream signature OK: ${file##*/} signed by ${UPSTREAM_SIGNER_FPR}"
 }
 
@@ -103,7 +105,12 @@ import_upstream_release() {
     # A released distribution keeps the next dch from merging into this entry.
     DEBEMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}" DEBFULLNAME="${MAINTAINER_NAME:-Thehkus Admin}" \
       dch --preserve --distribution unstable --force-distribution -v "${debian_version}" \
-      "Local import of upstream ${source} ${version} (signed by ${UPSTREAM_SIGNER_FPR}), packaged with Debian ${packaging_version} debian/; not an official Debian upload."
+      "Local import of upstream ${source} ${version} (signed by ${UPSTREAM_SIGNER_FPR}), packaged with Debian ${packaging_version} debian/; not an official Debian upload." \
+      || exit 1
+    # Date the entry at the upstream signature so the backport entry added
+    # right after it gets a strictly newer date (lintian
+    # latest-changelog-entry-without-new-date).
+    sed -i "0,/^ -- /s/^\( -- .*>  \).*/\1$(LC_ALL=C date -u -R -d "@${UPSTREAM_SIGNATURE_TIME}")/" debian/changelog
   ) || die "upstream import failed for ${source} ${version}"
   log "imported upstream ${source} ${version} as ${debian_version}"
 }
