@@ -8,8 +8,9 @@ them as a GitHub Release named after the tag.
 
 1. Make sure `main` has the versions you want to ship in
    `scripts/_versions.sh`.
-   - New Debian source: add its `source-lock/` files and update
-     `OCSERV_DEBIAN_VERSION`; reset `BACKPORT_REVISION` to `1`.
+   - New Debian source: add its `source-lock/` files and set both
+     `OCSERV_DEBIAN_VERSION` and `OCSERV_PACKAGING_VERSION` to it; reset
+     `BACKPORT_REVISION` to `1`.
    - New upstream release Debian has not packaged: add
      `source-lock/ocserv/upstream-<version>.tsv` (tarball and signature
      size/sha256, full signer fingerprint), set `OCSERV_DEBIAN_VERSION` to
@@ -21,12 +22,13 @@ them as a GitHub Release named after the tag.
 2. Tag the commit and push the tag:
 
    ```bash
-   git tag 1.5.0-2
-   git push origin 1.5.0-2
+   git tag 1.6.0
+   git push origin 1.6.0
    ```
 
-The tag must be the upstream ocserv version (`1.5.0`) or start with it
-followed by `-` or `.` (`1.5.0-2`, `1.5.0.1`).
+The tag must be the upstream ocserv version (`1.6.0`) or start with it
+followed by `-` or `.` (`1.6.0-2`, `1.6.0.1`). Always use a new tag; never
+reuse or move the tag of an already published release.
 
 ## What the workflow does
 
@@ -104,12 +106,14 @@ creates the release.
 ## When a build fails
 
 No release is created. Fix the problem, then delete the tag and push it again
-on the fixed commit:
+on the fixed commit. Do this only for the tag of the failed run, whose release
+does not exist; check with `gh release view <tag>` first. Never delete or move
+the tag of a published release such as `1.5.0-2`.
 
 ```bash
-git push origin :refs/tags/1.5.0-2
-git tag -f 1.5.0-2 <fixed-commit>
-git push origin 1.5.0-2
+git push origin :refs/tags/1.6.0
+git tag -f 1.6.0 <fixed-commit>
+git push origin 1.6.0
 ```
 
 For a failure that is not caused by the code (for example a runner problem),

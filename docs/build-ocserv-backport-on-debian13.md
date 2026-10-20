@@ -226,8 +226,9 @@ TARGET_SUITE=trixie
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Debian script when unset
 ```
 
-`OCSERV_DEBIAN_VERSION` selects the locked Debian source in `source-lock/` and
-the unpacked `ocserv-<upstream>` tree. `OCSERV_VERSION` is used for
+`OCSERV_PACKAGING_VERSION` selects the locked Debian source in `source-lock/`;
+`OCSERV_DEBIAN_VERSION` is the Debian version being built and names the
+unpacked `ocserv-<upstream>` tree. `OCSERV_VERSION` is used for
 `debian/changelog` and the final Debian trixie build artifacts. Do not put the
 `~debian13.*` local backport version in `source-lock` paths.
 
@@ -242,7 +243,8 @@ entry. Once Debian ships 1.6.0, add its lock and set both variables to that
 Debian version.
 
 To build a newer Debian source, add its `source-lock/ocserv/<version>.yaml`
-and `.lock.tsv`, then set `OCSERV_DEBIAN_VERSION` (or change its default in
+and `.lock.tsv`, then set both `OCSERV_DEBIAN_VERSION` and
+`OCSERV_PACKAGING_VERSION` to that version (or change their defaults in
 `scripts/_versions.sh`); the backport version follows automatically.
 
 To rebuild the same Debian source as a new release, bump the
