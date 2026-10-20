@@ -86,6 +86,13 @@ log "noble-smoke-basic: container install and package assertions"
   if ldd /usr/sbin/ocserv | grep -i "libllhttp"; then
     exit 1
   fi
+
+  # Build options Debian enables: PAM, RADIUS and OIDC in ocserv, seccomp in
+  # the worker. A missing library means the feature was silently built out.
+  for lib in libpam.so libradcli.so libcjose.so libcurl-gnutls.so; do
+    ldd /usr/sbin/ocserv | grep -F "${lib}"
+  done
+  ldd /usr/sbin/ocserv-worker | grep -F libseccomp.so
 ' bash "${deb_name}" "${OCSERV_NOBLE_VERSION}" "${TARGET_ARCH}" "${PKG_UPSTREAM_VERSION}"
 
 log "noble-smoke-basic: OK"

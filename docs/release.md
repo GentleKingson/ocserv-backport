@@ -10,6 +10,11 @@ them as a GitHub Release named after the tag.
    `scripts/_versions.sh`.
    - New Debian source: add its `source-lock/` files and update
      `OCSERV_DEBIAN_VERSION`; reset `BACKPORT_REVISION` to `1`.
+   - New upstream release Debian has not packaged: add
+     `source-lock/ocserv/upstream-<version>.tsv` (tarball and signature
+     size/sha256, full signer fingerprint), set `OCSERV_DEBIAN_VERSION` to
+     `<version>-0local1` and keep `OCSERV_PACKAGING_VERSION` on the locked
+     Debian source; reset `BACKPORT_REVISION` to `1`.
    - Rebuild of an already released Debian source: increase
      `BACKPORT_REVISION` (for example `1` -> `2`), so the packages become
      `~debian13.2` and `~ubuntu24.04.2` and apt treats them as an upgrade.
