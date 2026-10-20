@@ -66,9 +66,9 @@ The release body has three parts, in this order:
 2. `.github/release-notes/template.md`, rendered by
    `scripts/release-render-notes.sh` with `${TAG}`, `${OCSERV_DEBIAN13}` and
    `${OCSERV_NOBLE}` replaced by the tag and the packaged versions.
-3. The list of merged pull requests that `gh release create --generate-notes`
-   produces. [`.github/release.yml`](../.github/release.yml) groups them by
-   label:
+3. The list of merged pull requests from GitHub's generate-notes API, with
+   its "by @author" credits removed.
+   [`.github/release.yml`](../.github/release.yml) groups them by label:
 
    | Category | Label |
    | --- | --- |
