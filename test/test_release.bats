@@ -5,7 +5,8 @@ setup() {
   cd "${REPO_ROOT}" || return
   WORK="$(mktemp -d)"
   export OCSERV_DEBIAN_VERSION=2.0.0-1
-  unset OCSERV_VERSION OCSERV_NOBLE_VERSION BACKPORT_REVISION
+  unset OCSERV_VERSION OCSERV_NOBLE_VERSION
+  export BACKPORT_REVISION=2
 }
 
 teardown() {

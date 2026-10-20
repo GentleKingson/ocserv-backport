@@ -13,6 +13,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_dscverify.sh"
 # shellcheck source=scripts/_fetch.sh
 . "${SCRIPT_DIR}/_fetch.sh"
+# shellcheck source=scripts/_upstream_import.sh
+. "${SCRIPT_DIR}/_upstream_import.sh"
 
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/trixie-env.sh
@@ -20,7 +22,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 SOURCE_ROOT="${TARGET_SOURCE_ROOT}"
 UPSTREAM_VERSION="${OCSERV_UPSTREAM_VERSION}"
 SOURCE_VERSION="${OCSERV_DEBIAN_VERSION}"
-LOCK_TSV="${REPO_ROOT}/source-lock/ocserv/${SOURCE_VERSION}.lock.tsv"
+PACKAGING_VERSION="${OCSERV_PACKAGING_VERSION}"
+LOCK_TSV="${REPO_ROOT}/source-lock/ocserv/${PACKAGING_VERSION}.lock.tsv"
 TMP_ROOT=""
 
 cleanup_fetch_tmp() {
@@ -53,7 +56,7 @@ main() {
   [[ -z "${!legacy_source_var:-}" ]] || die "legacy source mode environment variable is no longer supported; fetch is pool-only"
 
   verify_source_lock_unless_internal_skip
-  read_lock_tsv "${LOCK_TSV}" "${SOURCE_VERSION}"
+  read_lock_tsv "${LOCK_TSV}" "${PACKAGING_VERSION}"
 
   mkdir -p "${TARGET_BUILD_ROOT}"
   TMP_ROOT="$(mktemp -d "${TARGET_BUILD_ROOT}/.fetch-tmp.XXXXXX")"
@@ -78,8 +81,14 @@ main() {
   dscverify_cmd "${dsc}" || die "dscverify failed for ${META_DSC_NAME}"
   # The signature and payload hashes are verified above with locked hashes and
   # dscverify keyrings; dpkg-source cannot use the CI-refreshed keyring list.
-  dpkg-source --no-check -x "${dsc}" "${staging}/ocserv-${UPSTREAM_VERSION}" \
+  local packaging_tree="${staging}/ocserv-${PACKAGING_VERSION%-*}"
+  dpkg-source --no-check -x "${dsc}" "${packaging_tree}" \
     || die "dpkg-source -x failed for ${META_DSC_NAME}"
+  if [[ "${PACKAGING_VERSION}" != "${SOURCE_VERSION}" ]]; then
+    import_upstream_release "${packaging_tree}" "${staging}" \
+      "${REPO_ROOT}/source-lock/ocserv/upstream-${UPSTREAM_VERSION}.tsv" \
+      ocserv "${UPSTREAM_VERSION}" "${SOURCE_VERSION}"
+  fi
 
   install_source_tree "${staging}/ocserv-${UPSTREAM_VERSION}" "${SOURCE_ROOT}/ocserv-${UPSTREAM_VERSION}"
   install_orig_tarballs "${staging}" "${SOURCE_ROOT}"

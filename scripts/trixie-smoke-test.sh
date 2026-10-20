@@ -42,6 +42,7 @@ log "trixie-smoke-basic: container install and package assertions"
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"
+  expected_upstream="$4"
 
   apt-get update -qq
   apt-get install -y -qq "${deb}"
@@ -53,7 +54,7 @@ log "trixie-smoke-basic: container install and package assertions"
 
   test -x /usr/sbin/ocserv
   test -x /usr/bin/occtl
-  ocserv --version >/dev/null
+  ocserv --version 2>&1 | grep -F "${expected_upstream}"
   if ! occtl --version >/dev/null 2>&1; then
     occtl --help >/dev/null
   fi
@@ -65,9 +66,16 @@ log "trixie-smoke-basic: container install and package assertions"
     exit 1
   fi
 
+  # Build options Debian enables: PAM, RADIUS and OIDC in ocserv, seccomp in
+  # the worker. A missing library means the feature was silently built out.
+  for lib in libpam.so libradcli.so libcjose.so libcurl-gnutls.so; do
+    ldd /usr/sbin/ocserv | grep -F "${lib}"
+  done
+  ldd /usr/sbin/ocserv-worker | grep -F libseccomp.so
+
   test -f /lib/systemd/system/ocserv.service || test -f /usr/lib/systemd/system/ocserv.service
   test -f /etc/ocserv/ocserv.conf || test -f /usr/share/doc/ocserv/ocserv.conf
   test -d /usr/share/doc/ocserv
-' bash "${deb_name}" "${BACKPORT_VERSION}" "${TARGET_ARCH}"
+' bash "${deb_name}" "${BACKPORT_VERSION}" "${TARGET_ARCH}" "${OCSERV_UPSTREAM_VERSION}"
 
 log "trixie-smoke-basic: OK"

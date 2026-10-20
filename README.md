@@ -23,7 +23,7 @@ sudo systemctl start ocserv
 ```
 
 To install a specific release, pass its tag:
-`curl -fsSL <url> | sudo bash -s -- --release 1.5.0-2`.
+`curl -fsSL <url> | sudo bash -s -- --release 1.6.0`.
 
 ## Build Guides
 
