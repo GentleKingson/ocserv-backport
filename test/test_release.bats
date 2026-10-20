@@ -158,7 +158,9 @@ fake_build_artifacts() {
   workflow=".github/workflows/release.yml"
 
   grep -Fq -- "scripts/release-render-notes.sh" "${workflow}"
-  grep -Fq -- "--generate-notes" "${workflow}"
+  grep -Fq -- "releases/generate-notes" "${workflow}"
+  grep -Fq -- "s/ by @[^ ]+ in / in /" "${workflow}"
+  [ "$(grep -Fc -- "--generate-notes" "${workflow}")" -eq 0 ]
   grep -Fq -- "name: release-notes" "${workflow}"
   grep -Fq -- "- release/internal" .github/release.yml
   grep -Fq -- '- "*"' .github/release.yml

@@ -110,12 +110,16 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # The rendered notes come first; GitHub appends the PR list grouped
-          # by the labels in .github/release.yml.
+          # The rendered notes come first, then GitHub's PR list grouped by the
+          # labels in .github/release.yml, without its "by @author" credits.
+          notes="${RUNNER_TEMP}/release-notes.md"
+          printf '\n' >> "${notes}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="${TAG}" --jq .body \
+            | sed -E 's/ by @[^ ]+ in / in /' >> "${notes}"
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${TAG}" \
-            --notes-file "${RUNNER_TEMP}/release-notes.md" \
-            --generate-notes \
+            --notes-file "${notes}" \
             --verify-tag \
             "${RUNNER_TEMP}"/release/*
