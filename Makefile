@@ -100,5 +100,5 @@ install-test: ## Run install.sh unit tests
 	bats test/test_install.bats
 
 INSTALL_E2E_IMAGE ?= debian:trixie
-install-e2e: ## Run install.sh in a systemd container (INSTALL_E2E_IMAGE=debian:trixie|ubuntu:24.04)
+install-e2e: ## Run install.sh in a systemd container (INSTALL_E2E_IMAGE=debian:trixie|ubuntu:24.04|ubuntu:26.04)
 	scripts/install-e2e-test.sh $(INSTALL_E2E_IMAGE)

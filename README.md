@@ -8,7 +8,7 @@ packages, and validates them for local release preparation.
 
 ## Install
 
-On Debian 13 (trixie) or Ubuntu 24.04 (noble), amd64 or arm64:
+On Debian 13 (trixie), Ubuntu 24.04 (noble) or Ubuntu 26.04 (resolute), amd64 or arm64:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/GentleKingson/ocserv-backport/main/install.sh | sudo bash

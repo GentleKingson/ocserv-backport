@@ -5,7 +5,7 @@
 # left as it was. A second run checks that re-running the installer is safe.
 #
 # Usage: install-e2e-test.sh <image> [install.sh options...]
-#   image: debian:trixie or ubuntu:24.04
+#   image: debian:trixie, ubuntu:24.04 or ubuntu:26.04
 #
 # INSTALL_E2E_DOCKER_CMD overrides the docker command (default: docker).
 # INSTALL_E2E_RUN_ARGS adds docker run arguments, for example a proxy or a
@@ -75,14 +75,22 @@ run_installer() {
 check_installed() {
   "${DOCKER[@]}" exec "${container}" bash -euc '
     case "$(. /etc/os-release && echo "${ID}:${VERSION_ID}")" in
-      debian:13) suffix="~debian13." ;;
-      ubuntu:24.04) suffix="~ubuntu24.04." ;;
+      debian:13) suffixes=("~debian13.") ;;
+      ubuntu:24.04) suffixes=("~ubuntu24.04.") ;;
+      ubuntu:26.04) suffixes=("~ubuntu26.04." "~ubuntu24.04.") ;;
       *) echo "unexpected os" >&2; exit 1 ;;
     esac
     version="$(dpkg-query -W -f="\${Version}" ocserv)"
     arch="$(dpkg-query -W -f="\${Architecture}" ocserv)"
     echo "installed ocserv ${version} ${arch}"
-    [[ "${version}" == *"${suffix}"* ]] || { echo "not a backport build: ${version}" >&2; exit 1; }
+    matched=0
+    for suffix in "${suffixes[@]}"; do
+      if [[ "${version}" == *"${suffix}"* ]]; then
+        matched=1
+        break
+      fi
+    done
+    ((matched == 1)) || { echo "not a backport build: ${version}" >&2; exit 1; }
     [[ "${arch}" == "$(dpkg --print-architecture)" ]]
 
     test -x /usr/sbin/ocserv
