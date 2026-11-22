@@ -85,15 +85,15 @@ log "${TARGET_SUITE}-smoke-basic: container install and package assertions"
     cat /tmp/ocserv-config-test >&2
     echo "ocserv config test command exists, but the default smoke config did not pass" >&2
   fi
-  if ldd /usr/sbin/ocserv | grep -i "not found"; then
+  if ldd /usr/sbin/ocserv /usr/sbin/ocserv-worker | grep -i "not found"; then
     exit 1
   fi
   if [ "${bundled_llhttp}" = "1" ]; then
-    if ldd /usr/sbin/ocserv | grep -i "libllhttp"; then
+    if ldd /usr/sbin/ocserv /usr/sbin/ocserv-worker | grep -i "libllhttp"; then
       exit 1
     fi
   else
-    ldd /usr/sbin/ocserv | grep -F "libllhttp"
+    ldd /usr/sbin/ocserv-worker | grep -F "libllhttp"
   fi
 
   # Build options Debian enables: PAM, RADIUS and OIDC in ocserv, seccomp in
