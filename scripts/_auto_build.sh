@@ -289,7 +289,7 @@ docker_repo_os() {
     debian:trixie)
       printf '%s\n' "debian"
       ;;
-    ubuntu:noble)
+    ubuntu:noble|ubuntu:resolute)
       printf '%s\n' "ubuntu"
       ;;
     *)

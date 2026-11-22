@@ -282,9 +282,9 @@ verify_source_lock_calls() {
 }
 
 @test "noble fetch unpacks with no-check after explicit dscverify validation" {
-  grep -Fq -- 'dscverify_cmd "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
-  grep -Fq -- 'dpkg-source --no-check -x "${dsc}"' "${REPO_ROOT}/scripts/noble-fetch-source.sh"
-  ! grep -Fq -- "dpkg-source --require-valid-signature" "${REPO_ROOT}/scripts/noble-fetch-source.sh"
+  grep -Fq -- 'dscverify_cmd "${dsc}"' "${REPO_ROOT}/scripts/ubuntu-fetch-source.sh"
+  grep -Fq -- 'dpkg-source --no-check -x "${dsc}"' "${REPO_ROOT}/scripts/ubuntu-fetch-source.sh"
+  ! grep -Fq -- "dpkg-source --require-valid-signature" "${REPO_ROOT}/scripts/ubuntu-fetch-source.sh"
 }
 
 @test "fetch fails on dsc size mismatch before installing source tree" {

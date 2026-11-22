@@ -3,41 +3,74 @@ load helpers/bats-helper.bash
 
 setup() {
   cd "${REPO_ROOT}" || return
+  WORK=""
 }
 
-@test "manual Ubuntu Noble build workflow matches documented contract" {
-  workflow=".github/workflows/ubuntu-noble-build.yml"
+teardown() {
+  if [[ -n "${WORK:-}" ]]; then
+    rm -rf -- "${WORK}"
+  fi
+}
+
+assert_build_workflow_contract() {
+  local workflow="$1" slug="$2" auto_script="$3" target_root="$4" runner_base="$5"
 
   [ -f "${workflow}" ]
 
   grep -Fq -- "workflow_dispatch:" "${workflow}"
+  grep -Fq -- "workflow_call:" "${workflow}"
+  grep -Fq -- "name: ${slug}-\${{ matrix.arch }}" "${workflow}"
   grep -Fq -- "strategy:" "${workflow}"
   grep -Fq -- "fail-fast: false" "${workflow}"
   grep -Fq -- "matrix:" "${workflow}"
   grep -Fq -- "arch: amd64" "${workflow}"
-  grep -Fq -- "runner: ubuntu-24.04" "${workflow}"
+  grep -Fq -- "runner: ${runner_base}" "${workflow}"
   grep -Fq -- "arch: arm64" "${workflow}"
-  grep -Fq -- "runner: ubuntu-24.04-arm" "${workflow}"
+  grep -Fq -- "runner: ${runner_base}-arm" "${workflow}"
   grep -Fq -- 'runs-on: ${{ matrix.runner }}' "${workflow}"
   grep -Fq -- "timeout-minutes: 240" "${workflow}"
   grep -Fq -- 'TARGET_ARCH: ${{ matrix.arch }}' "${workflow}"
+  grep -Fq -- "scripts/ci-ensure-disk-space.sh" "${workflow}"
   grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
-  grep -Fq -- "./scripts/noble-auto-build.sh --provision" "${workflow}"
-  grep -Fq -- "Stage Ubuntu Noble artifacts" "${workflow}"
-  grep -Fq -- 'staging="${RUNNER_TEMP}/ubuntu-noble-artifacts"' "${workflow}"
-  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
-  grep -Fq -- 'build/ubuntu/noble/${TARGET_ARCH}' "${workflow}"
-  grep -Fq -- 'find "${target_root}/source/ocserv"' "${workflow}"
-  grep -Fq -- 'find "${target_root}/binary/ocserv"' "${workflow}"
-  ! grep -Fq -- 'node-undici' "${workflow}"
-  ! grep -Fq -- '"${target_root}/repo"' "${workflow}"
-  ! grep -Fq -- 'cp -a "${target_root}/source"' "${workflow}"
-  ! grep -Fq -- 'cp -a "${target_root}/binary"' "${workflow}"
-  grep -Fq -- '${{ runner.temp }}/ubuntu-noble-artifacts/**' "${workflow}"
-  grep -Fq -- 'ubuntu-noble-build-${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- 'ubuntu-noble-build-logs-${{ matrix.arch }}' "${workflow}"
+  grep -Fq -- "./scripts/${auto_script} --provision --yes" "${workflow}"
+  grep -Fq -- "scripts/ci-stage-build-artifacts.sh" "${workflow}"
+  grep -Fq -- "\"${target_root}/\${TARGET_ARCH}\"" "${workflow}"
+  grep -Fq -- "name: ${slug}-\${{ matrix.arch }}" "${workflow}"
+  grep -Fq -- "scripts/ci-prepare-build-logs.sh" "${workflow}"
+  grep -Fq -- "\"${target_root}\"" "${workflow}"
+  grep -Fq -- "name: ${slug}-logs-\${{ matrix.arch }}" "${workflow}"
+  [ "$(grep -Fc -- "if: always()" "${workflow}")" -eq 2 ]
+  grep -Fq -- "if-no-files-found: error" "${workflow}"
+  grep -Fq -- "if-no-files-found: warn" "${workflow}"
   grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
   grep -Eq -- "actions/upload-artifact@v[0-9]+" "${workflow}"
+}
+
+@test "Ubuntu Noble build workflow matches aligned build contract" {
+  assert_build_workflow_contract \
+    .github/workflows/ubuntu-noble-build.yml \
+    ubuntu-noble-build \
+    noble-auto-build.sh \
+    build/ubuntu/noble \
+    ubuntu-24.04
+}
+
+@test "Ubuntu Resolute build workflow matches aligned build contract" {
+  assert_build_workflow_contract \
+    .github/workflows/ubuntu-resolute-build.yml \
+    ubuntu-resolute-build \
+    resolute-auto-build.sh \
+    build/ubuntu/resolute \
+    ubuntu-26.04
+}
+
+@test "Debian Trixie build workflow matches aligned build contract" {
+  assert_build_workflow_contract \
+    .github/workflows/debian-trixie-build.yml \
+    debian-trixie-build \
+    trixie-auto-build.sh \
+    build/debian/trixie \
+    ubuntu-24.04
 }
 
 @test "Dependabot keeps GitHub Actions versions current" {
@@ -45,55 +78,26 @@ setup() {
 }
 
 @test "GitHub workflows use Node 24 action majors" {
-  local ref major
+  local ref action major min_major
 
   while read -r ref; do
+    action="${ref%@v*}"
     major="${ref##*@v}"
-    [ "${major}" -ge 6 ] || {
-      echo "outdated action major: ${ref}" >&2
+    case "${action}" in
+      actions/checkout | actions/upload-artifact) min_major=6 ;;
+      actions/download-artifact) min_major=7 ;;
+      *)
+        echo "unmapped action in Node 24 guard: ${ref}" >&2
+        return 1
+        ;;
+    esac
+    [ "${major}" -ge "${min_major}" ] || {
+      echo "outdated action major: ${ref} (need >= v${min_major})" >&2
       return 1
     }
   done < <(
-    grep -RhoE -- "actions/(checkout|upload-artifact)@v[0-9]+" \
-      .github/workflows
+    grep -RhoE -- "actions/[a-zA-Z0-9_-]+@v[0-9]+" .github/workflows | sort -u
   )
-}
-
-@test "manual Debian Trixie build workflow matches documented contract" {
-  workflow=".github/workflows/debian-trixie-build.yml"
-
-  [ -f "${workflow}" ]
-
-  grep -Fq -- "workflow_dispatch:" "${workflow}"
-  grep -Fq -- "strategy:" "${workflow}"
-  grep -Fq -- "fail-fast: false" "${workflow}"
-  grep -Fq -- "matrix:" "${workflow}"
-  grep -Fq -- "arch: amd64" "${workflow}"
-  grep -Fq -- "runner: ubuntu-24.04" "${workflow}"
-  grep -Fq -- "arch: arm64" "${workflow}"
-  grep -Fq -- "runner: ubuntu-24.04-arm" "${workflow}"
-  grep -Fq -- 'runs-on: ${{ matrix.runner }}' "${workflow}"
-  grep -Fq -- 'name: debian-trixie-build-${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- "timeout-minutes: 240" "${workflow}"
-  grep -Fq -- 'TARGET_ARCH: ${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- "sudo --preserve-env=TARGET_ARCH \\" "${workflow}"
-  grep -Fq -- "./scripts/trixie-auto-build.sh --provision" "${workflow}"
-  grep -Fq -- "Stage Debian Trixie artifacts" "${workflow}"
-  grep -Fq -- 'staging="${RUNNER_TEMP}/debian-trixie-artifacts"' "${workflow}"
-  grep -Fq -- 'rm -rf "${staging}"' "${workflow}"
-  grep -Fq -- 'build/debian/trixie/${TARGET_ARCH}' "${workflow}"
-  grep -Fq -- 'find "${target_root}/source"' "${workflow}"
-  grep -Fq -- 'find "${target_root}/binary"' "${workflow}"
-  ! grep -Fq -- 'cp -a "${target_root}/source"' "${workflow}"
-  ! grep -Fq -- 'cp -a "${target_root}/binary"' "${workflow}"
-  grep -Fq -- '${{ runner.temp }}/debian-trixie-artifacts/**' "${workflow}"
-  grep -Fq -- 'debian-trixie-build-${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- 'debian-trixie-build-logs-${{ matrix.arch }}' "${workflow}"
-  grep -Fq -- "if: always()" "${workflow}"
-  grep -Fq -- "if-no-files-found: warn" "${workflow}"
-  grep -Fq -- "if-no-files-found: error" "${workflow}"
-  grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
-  grep -Eq -- "actions/upload-artifact@v[0-9]+" "${workflow}"
 }
 
 @test "YAML files checked by CI stay within yamllint line length" {
@@ -119,87 +123,56 @@ PY
   }
 }
 
-@test "manual Ubuntu Noble build workflow delegates Debian keyring refresh to script" {
-  workflow=".github/workflows/ubuntu-noble-build.yml"
-
-  ! grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
-  ! grep -Fq -- "debian:sid" "${workflow}"
-  ! grep -Fq -- "DSCVERIFY_KEYRING_PATHS" "${workflow}"
-  ! grep -Fq -- "GITHUB_ENV" "${workflow}"
+@test "CI helper scripts are executable" {
+  local script
+  for script in \
+    scripts/ci-debian-keyrings.sh \
+    scripts/ci-ensure-disk-space.sh \
+    scripts/ci-stage-build-artifacts.sh \
+    scripts/ci-prepare-build-logs.sh; do
+    [ -x "${script}" ]
+  done
 }
 
-@test "manual Ubuntu Noble build workflow conditionally frees runner disk space" {
-  workflow=".github/workflows/ubuntu-noble-build.yml"
+@test "ci-stage-build-artifacts stages ocserv source and binary outputs" {
+  WORK="$(mktemp -d)"
+  mkdir -p "${WORK}/build/ubuntu/noble/amd64/source" \
+    "${WORK}/build/ubuntu/noble/amd64/binary"
+  : > "${WORK}/build/ubuntu/noble/amd64/source/ocserv_1.6.0-0local1~ubuntu24.04.1.dsc"
+  : > "${WORK}/build/ubuntu/noble/amd64/source/ocserv_1.6.0.orig.tar.xz"
+  : > "${WORK}/build/ubuntu/noble/amd64/source/unrelated.txt"
+  : > "${WORK}/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.deb"
+  : > "${WORK}/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.changes"
+  : > "${WORK}/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.build"
 
-  grep -Fq -- "Ensure enough runner disk space" "${workflow}"
-  ! grep -Fq -- "Free runner disk space" "${workflow}"
-  grep -Fq -- "min_free_gib=8" "${workflow}"
-  grep -Fq -- 'df -h / "$GITHUB_WORKSPACE" /tmp' "${workflow}"
-  grep -Fq -- "df --output=avail /" "${workflow}"
-  grep -Fq -- 'tr -d '"'"'[:space:]'"'"'' "${workflow}"
-  grep -Fq -- '[[ "${avail_kb}" =~ ^[0-9]+$ ]]' "${workflow}"
-  grep -Fq -- "if (( avail_kb < min_free_kb )); then" "${workflow}"
-  grep -Fq -- "::error::Insufficient free disk" "${workflow}"
-  grep -Fq -- "/usr/share/dotnet" "${workflow}"
-  grep -Fq -- "/usr/local/lib/android" "${workflow}"
-  grep -Fq -- "/usr/local/share/boost" "${workflow}"
-  grep -Fq -- "/usr/local/.ghcup" "${workflow}"
-  grep -Fq -- "/opt/ghc" "${workflow}"
-  grep -Fq -- "/opt/hostedtoolcache/CodeQL" "${workflow}"
-  grep -Fq -- "docker system prune -af || true" "${workflow}"
+  run bash -c "cd '${WORK}' && '${REPO_ROOT}/scripts/ci-stage-build-artifacts.sh' build/ubuntu/noble/amd64 '${WORK}/staged'"
+  [ "${status}" -eq 0 ]
+  [ -f "${WORK}/staged/build/ubuntu/noble/amd64/source/ocserv_1.6.0-0local1~ubuntu24.04.1.dsc" ]
+  [ -f "${WORK}/staged/build/ubuntu/noble/amd64/source/ocserv_1.6.0.orig.tar.xz" ]
+  [ ! -e "${WORK}/staged/build/ubuntu/noble/amd64/source/unrelated.txt" ]
+  [ -f "${WORK}/staged/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.deb" ]
+  [ -f "${WORK}/staged/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.changes" ]
+  [ ! -e "${WORK}/staged/build/ubuntu/noble/amd64/binary/ocserv_1.6.0-0local1~ubuntu24.04.1_amd64.build" ]
 }
 
-@test "manual Ubuntu Noble build workflow sanitizes failure logs before upload" {
-  workflow=".github/workflows/ubuntu-noble-build.yml"
+@test "ci-prepare-build-logs copies logs and sanitizes colons" {
+  WORK="$(mktemp -d)"
+  mkdir -p "${WORK}/build/ubuntu/noble/amd64/binary"
+  printf 'log\n' > "${WORK}/build/ubuntu/noble/amd64/binary/ocserv_1:1.6.0_amd64.build"
+  printf 'ignore\n' > "${WORK}/build/ubuntu/noble/amd64/binary/ocserv_1.6.0_amd64.deb"
 
-  grep -Fq -- "Prepare Ubuntu Noble build logs" "${workflow}"
-  grep -Fq -- 'upload_dir="${RUNNER_TEMP}/noble-upload-logs"' "${workflow}"
-  grep -Fq -- "noble-upload-logs" "${workflow}"
-  grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
-  grep -Fq -- '${{ runner.temp }}/noble-upload-logs/**' "${workflow}"
-  grep -Fq -- "find build/ubuntu/noble" "${workflow}"
-  ! grep -Fq -- "build/noble/**/*.build" "${workflow}"
-  ! grep -Fq -- "find build/noble" "${workflow}"
+  run bash -c "cd '${WORK}' && '${REPO_ROOT}/scripts/ci-prepare-build-logs.sh' build/ubuntu/noble '${WORK}/logs'"
+  [ "${status}" -eq 0 ]
+  [ -f "${WORK}/logs/build/ubuntu/noble/amd64/binary/ocserv_1_1.6.0_amd64.build" ]
+  [ ! -e "${WORK}/logs/build/ubuntu/noble/amd64/binary/ocserv_1.6.0_amd64.deb" ]
 }
 
-@test "manual Debian Trixie build workflow conditionally frees runner disk space" {
-  workflow=".github/workflows/debian-trixie-build.yml"
-
-  grep -Fq -- "Ensure enough runner disk space" "${workflow}"
-  grep -Fq -- "min_free_gib=8" "${workflow}"
-  grep -Fq -- 'df -h / "$GITHUB_WORKSPACE" /tmp' "${workflow}"
-  grep -Fq -- "df --output=avail /" "${workflow}"
-  grep -Fq -- "docker system prune -af || true" "${workflow}"
-  grep -Fq -- "::error::Insufficient free disk" "${workflow}"
-}
-
-@test "manual Debian Trixie build workflow sanitizes failure logs before upload" {
-  workflow=".github/workflows/debian-trixie-build.yml"
-
-  grep -Fq -- "Prepare Debian Trixie build logs" "${workflow}"
-  grep -Fq -- 'upload_dir="${RUNNER_TEMP}/debian-trixie-upload-logs"' "${workflow}"
-  grep -Fq -- "safe_name=\"\${rel//:/_}\"" "${workflow}"
-  grep -Fq -- '${{ runner.temp }}/debian-trixie-upload-logs/**' "${workflow}"
-  grep -Fq -- "find build/debian/trixie" "${workflow}"
-  ! grep -Fq -- "build/**/*.build" "${workflow}"
-}
-
-@test "primary CI runs source package verification without artifacts" {
+@test "primary CI runs checks and scheduled source package matrix" {
   workflow=".github/workflows/ci.yml"
-  removed_workflow=".github/workflows/source-ci"
-  removed_workflow+=".yml"
-  stage_step="Stage source package"
-  stage_step+=" artifacts"
-  upload_step="Upload source package"
-  upload_step+=" artifacts"
-  staging_dir="source-package"
-  staging_dir+="-artifacts"
-  artifact_name="ocserv-source"
-  artifact_name+="-package"
 
   [ -f "${workflow}" ]
-  [ ! -f "${removed_workflow}" ]
 
+  grep -Fq -- "'.github/**'" "${workflow}"
   grep -Fq -- "workflow_dispatch:" "${workflow}"
   grep -Fq -- "schedule:" "${workflow}"
   grep -Fq -- "cron: '23 3 * * 1'" "${workflow}"
@@ -209,46 +182,30 @@ PY
   grep -Fq -- "type: choice" "${workflow}"
   grep -Fq -- "source-package" "${workflow}"
   grep -Fq -- "all" "${workflow}"
-  grep -Fq -- "github.event_name == 'push'" "${workflow}"
-  grep -Fq -- "github.event_name == 'pull_request'" "${workflow}"
-  grep -Fq -- "github.event_name == 'schedule'" "${workflow}"
-  grep -Fq -- "inputs.target == 'checks'" "${workflow}"
-  grep -Fq -- "inputs.target == 'source-package'" "${workflow}"
-  grep -Fq -- "TARGET_ARCH: amd64" "${workflow}"
+  grep -Fq -- "make test" "${workflow}"
+  ! grep -Fq -- "ci-script-test" "${workflow}"
   grep -Fq -- "image: debian:trixie" "${workflow}"
-  grep -Eq -- "actions/checkout@v[0-9]+" "${workflow}"
-  grep -Fq -- "Refresh Debian source verification keyrings" "${workflow}"
+  grep -Fq -- "target: trixie-source-ci" "${workflow}"
+  grep -Fq -- "image: ubuntu:24.04" "${workflow}"
+  grep -Fq -- "target: noble-source-ci" "${workflow}"
+  grep -Fq -- "image: ubuntu:26.04" "${workflow}"
+  grep -Fq -- "target: resolute-source-ci" "${workflow}"
   grep -Fq -- 'scripts/ci-debian-keyrings.sh "${RUNNER_TEMP}/debian-keyrings"' "${workflow}"
   grep -Fq -- '>> "${GITHUB_ENV}"' "${workflow}"
-  grep -Fq -- "Suites: sid" scripts/ci-debian-keyrings.sh
-  grep -Fq -- "apt_sid download debian-archive-keyring debian-keyring" scripts/ci-debian-keyrings.sh
-  grep -Fq -- "DSCVERIFY_KEYRING_PATHS=" scripts/ci-debian-keyrings.sh
-  grep -Fq -- "make trixie-source-ci" "${workflow}"
-  grep -Fq -- "image: ubuntu:24.04" "${workflow}"
-  grep -Fq -- "make noble-source-ci" "${workflow}"
-  ! grep -Fq -- "${stage_step}" "${workflow}"
-  ! grep -Fq -- "${upload_step}" "${workflow}"
-  ! grep -Fq -- "${staging_dir}" "${workflow}"
-  ! grep -Fq -- "${artifact_name}" "${workflow}"
-}
-
-@test "primary CI watches every GitHub workflow file" {
-  old_source_workflow=".github/workflows/source-ci"
-  old_source_workflow+=".yml"
-
-  grep -Fq -- "'.github/workflows/**'" .github/workflows/ci.yml
-  ! grep -Fq -- "'${old_source_workflow}'" .github/workflows/ci.yml
 }
 
 @test "README is a concise project entrypoint" {
   grep -Fq -- "# ocserv-backport" README.md
-  grep -Fq -- "Multi-version ocserv backport build and validation pipelines for Debian 13 and" README.md
-  grep -Fq -- "Ubuntu 24.04." README.md
+  grep -Fq -- "Debian 13" README.md
+  grep -Fq -- "Ubuntu 24.04" README.md
+  grep -Fq -- "Ubuntu 26.04" README.md
   grep -Fq -- "## Build Guides" README.md
   grep -Fq -- "[Build on Debian 13](docs/build-ocserv-backport-on-debian13.md)" README.md
   grep -Fq -- "[Build on Ubuntu 24.04](docs/build-ocserv-backport-on-ubuntu24.04.md)" README.md
+  grep -Fq -- "[Build on Ubuntu 26.04](docs/build-ocserv-backport-on-ubuntu26.04.md)" README.md
   [ -f docs/build-ocserv-backport-on-debian13.md ]
   [ -f docs/build-ocserv-backport-on-ubuntu24.04.md ]
+  [ -f docs/build-ocserv-backport-on-ubuntu26.04.md ]
 }
 
 @test "README does not duplicate workflow or command reference details" {

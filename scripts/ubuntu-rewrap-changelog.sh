@@ -5,11 +5,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/noble-env.sh
-. "${SCRIPT_DIR}/noble-env.sh"
+# shellcheck source=scripts/ubuntu-env.sh
+. "${SCRIPT_DIR}/ubuntu-env.sh"
 
-[[ "$#" -eq 1 ]] || die "usage: noble-rewrap-changelog.sh ocserv"
-noble_package_vars "$1"
+[[ "$#" -eq 1 ]] || die "usage: ubuntu-rewrap-changelog.sh ocserv"
+ubuntu_package_vars "$1"
 
 MAINTAINER_NAME="${MAINTAINER_NAME:-Thehkus Admin}"
 MAINTAINER_EMAIL="${MAINTAINER_EMAIL:-master@thehkus.com}"
@@ -26,14 +26,15 @@ control_build_depends_has() {
   ' "${control}" | grep -Eq -- "(^|[[:space:],])${dep}([[:space:],(]|$)"
 }
 
-ensure_ocserv_noble_build_deps() {
+ensure_ocserv_ubuntu_build_deps() {
   local control="debian/control"
 
   [[ "${PKG_SOURCE}" == "ocserv" ]] || return 0
+  [[ "${UBUNTU_ADD_LIBSSL_DEV}" == "1" ]] || return 0
   [[ -f "${control}" ]] || die "missing packaging control file: ${PKG_SOURCE_TREE}/${control}"
 
   if control_build_depends_has "${control}" "libssl-dev"; then
-    log "Noble ocserv libssl-dev build dependency already present"
+    log "${UBUNTU_SUITE_LABEL} ocserv libssl-dev build dependency already present"
     return 0
   fi
   control_build_depends_has "${control}" "libcjose-dev" \
@@ -46,15 +47,16 @@ ensure_ocserv_noble_build_deps() {
   ' "${control}"
   control_build_depends_has "${control}" "libssl-dev" \
     || die "failed to add libssl-dev to ocserv Build-Depends"
-  log "Noble ocserv libssl-dev build dependency installed"
+  log "${UBUNTU_SUITE_LABEL} ocserv libssl-dev build dependency installed"
 }
 
-# Noble has no libllhttp package, so build against the llhttp copy that ships
-# in the ocserv upstream tarball (src/llhttp) instead of the system library.
-ensure_ocserv_noble_bundled_llhttp() {
+# Suites without a system libllhttp package (e.g. Noble) build against the
+# llhttp copy bundled in the ocserv upstream tarball (src/llhttp).
+ensure_ocserv_ubuntu_bundled_llhttp() {
   local control="debian/control" rules="debian/rules"
 
   [[ "${PKG_SOURCE}" == "ocserv" ]] || return 0
+  [[ "${UBUNTU_BUNDLED_LLHTTP}" == "1" ]] || return 0
   [[ -f "${control}" ]] || die "missing packaging control file: ${PKG_SOURCE_TREE}/${control}"
   [[ -f "${rules}" ]] || die "missing packaging rules file: ${PKG_SOURCE_TREE}/${rules}"
   [[ -f "src/llhttp/llhttp.c" ]] || die "missing bundled llhttp source: ${PKG_SOURCE_TREE}/src/llhttp/llhttp.c"
@@ -81,14 +83,16 @@ ensure_ocserv_noble_bundled_llhttp() {
     die "failed to remove libllhttp-dev from ocserv Build-Depends"
   fi
 
-  log "Noble ocserv configured to build with bundled llhttp"
+  log "${UBUNTU_SUITE_LABEL} ocserv configured to build with bundled llhttp"
 }
 
-ensure_ocserv_noble_sysusers_syntax() {
+# Suites running systemd < 256 (e.g. Noble) do not recognize sysusers "u!".
+ensure_ocserv_ubuntu_sysusers_syntax() {
   local file changed=0
   local -a sysusers_files=()
 
   [[ "${PKG_SOURCE}" == "ocserv" ]] || return 0
+  [[ "${UBUNTU_DOWNGRADE_SYSUSERS}" == "1" ]] || return 0
 
   shopt -s nullglob
   sysusers_files=(debian/*.sysusers debian/*.sysusers.in)
@@ -101,7 +105,7 @@ ensure_ocserv_noble_sysusers_syntax() {
     fi
   done
 
-  [[ "${changed}" -ne 1 ]] || log "Noble ocserv sysusers syntax adjusted"
+  [[ "${changed}" -ne 1 ]] || log "${UBUNTU_SUITE_LABEL} ocserv sysusers syntax adjusted"
 }
 
 rewrite_same_version_changelog_distribution() {
@@ -123,35 +127,35 @@ current_distribution="$(dpkg-parsechangelog -SDistribution)"
 export DEBEMAIL="${MAINTAINER_EMAIL}"
 export DEBFULLNAME="${MAINTAINER_NAME}"
 
-if [[ "${PKG_NOBLE_VERSION}" == "${PKG_DEBIAN_VERSION}" ]]; then
+if [[ "${PKG_UBUNTU_VERSION}" == "${PKG_DEBIAN_VERSION}" ]]; then
   [[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
     || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
   if [[ "${current_distribution}" == "${TARGET_DISTRIBUTION}" ]]; then
-    die "changelog already rewrapped to ${PKG_NOBLE_VERSION} for ${TARGET_DISTRIBUTION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
+    die "changelog already rewrapped to ${PKG_UBUNTU_VERSION} for ${TARGET_DISTRIBUTION}; rerun ${TARGET_SUITE}-fetch-${PKG_SOURCE} before rewrap"
   fi
-  ensure_ocserv_noble_build_deps
-  ensure_ocserv_noble_bundled_llhttp
-  ensure_ocserv_noble_sysusers_syntax
+  ensure_ocserv_ubuntu_build_deps
+  ensure_ocserv_ubuntu_bundled_llhttp
+  ensure_ocserv_ubuntu_sysusers_syntax
   rewrite_same_version_changelog_distribution
 else
-  if [[ "${current_version}" == "${PKG_NOBLE_VERSION}" ]]; then
-    die "changelog already rewrapped to ${PKG_NOBLE_VERSION}; rerun noble-fetch-${PKG_SOURCE} before rewrap"
+  if [[ "${current_version}" == "${PKG_UBUNTU_VERSION}" ]]; then
+    die "changelog already rewrapped to ${PKG_UBUNTU_VERSION}; rerun ${TARGET_SUITE}-fetch-${PKG_SOURCE} before rewrap"
   fi
   [[ "${current_version}" == "${PKG_DEBIAN_VERSION}" ]] \
     || die "unexpected changelog version ${current_version}; expected ${PKG_DEBIAN_VERSION}"
-  ensure_ocserv_noble_build_deps
-  ensure_ocserv_noble_bundled_llhttp
-  ensure_ocserv_noble_sysusers_syntax
+  ensure_ocserv_ubuntu_build_deps
+  ensure_ocserv_ubuntu_bundled_llhttp
+  ensure_ocserv_ubuntu_sysusers_syntax
   dch --distribution "${TARGET_DISTRIBUTION}" --force-distribution \
       --force-bad-version \
-      -v "${PKG_NOBLE_VERSION}" \
-      "Backport ${PKG_SOURCE} ${PKG_DEBIAN_VERSION} for Ubuntu 24.04 Noble."
+      -v "${PKG_UBUNTU_VERSION}" \
+      "Backport ${PKG_SOURCE} ${PKG_DEBIAN_VERSION} for ${UBUNTU_DESCRIPTION}."
 fi
 
 new_version="$(dpkg-parsechangelog -SVersion)"
 new_distribution="$(dpkg-parsechangelog -SDistribution)"
-[[ "${new_version}" == "${PKG_NOBLE_VERSION}" ]] \
-  || die "changelog version ${new_version} != ${PKG_NOBLE_VERSION}"
+[[ "${new_version}" == "${PKG_UBUNTU_VERSION}" ]] \
+  || die "changelog version ${new_version} != ${PKG_UBUNTU_VERSION}"
 [[ "${new_distribution}" == "${TARGET_DISTRIBUTION}" ]] \
   || die "changelog distribution ${new_distribution} != ${TARGET_DISTRIBUTION}"
 

@@ -29,7 +29,7 @@ esac
 if [[ -n "${published}" ]]; then
   [[ -f "${published}" ]] || die "missing published asset list: ${published}"
   # GitHub stores release asset names with "~" replaced by ".".
-  for version in "${OCSERV_VERSION}" "${OCSERV_NOBLE_VERSION}"; do
+  for version in "${OCSERV_VERSION}" "${OCSERV_NOBLE_VERSION}" "${OCSERV_RESOLUTE_VERSION}"; do
     prefix="ocserv_${version//\~/.}_"
     if grep -Fq -- "${prefix}" "${published}"; then
       die "ocserv ${version} is already published; bump BACKPORT_REVISION in scripts/_versions.sh"
@@ -39,3 +39,4 @@ fi
 
 printf 'ocserv_debian13=%s\n' "${OCSERV_VERSION}"
 printf 'ocserv_noble=%s\n' "${OCSERV_NOBLE_VERSION}"
+printf 'ocserv_resolute=%s\n' "${OCSERV_RESOLUTE_VERSION}"

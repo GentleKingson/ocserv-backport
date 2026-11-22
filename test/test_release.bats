@@ -5,7 +5,7 @@ setup() {
   cd "${REPO_ROOT}" || return
   WORK="$(mktemp -d)"
   export OCSERV_DEBIAN_VERSION=2.0.0-1
-  unset OCSERV_VERSION OCSERV_NOBLE_VERSION
+  unset OCSERV_VERSION OCSERV_NOBLE_VERSION OCSERV_RESOLUTE_VERSION
   export BACKPORT_REVISION=2
 }
 
@@ -22,7 +22,8 @@ fake_build_artifacts() {
   local arch
   for arch in amd64 arm64; do
     fake_deb "debian-trixie-build-${arch}/build/debian/trixie/${arch}/binary/ocserv_2.0.0-1~debian13.2_${arch}.deb"
-    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/ocserv/ocserv_2.0.0-1~ubuntu24.04.2_${arch}.deb"
+    fake_deb "ubuntu-noble-build-${arch}/build/ubuntu/noble/${arch}/binary/ocserv_2.0.0-1~ubuntu24.04.2_${arch}.deb"
+    fake_deb "ubuntu-resolute-build-${arch}/build/ubuntu/resolute/${arch}/binary/ocserv_2.0.0-1~ubuntu26.04.2_${arch}.deb"
   done
 }
 
@@ -37,7 +38,8 @@ fake_build_artifacts() {
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "ocserv_debian13=2.0.0-1~debian13.2" ]
   [ "${lines[1]}" = "ocserv_noble=2.0.0-1~ubuntu24.04.2" ]
-  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[2]}" = "ocserv_resolute=2.0.0-1~ubuntu26.04.2" ]
+  [ "${#lines[@]}" -eq 3 ]
 }
 
 @test "release preflight accepts suffixed tags of the upstream version" {
@@ -57,18 +59,18 @@ fake_build_artifacts() {
 }
 
 @test "release preflight rejects ocserv versions that are already published" {
-  printf '%s\n' SHA256SUMS ocserv_2.0.0-1.ubuntu24.04.2_arm64.deb \
+  printf '%s\n' SHA256SUMS ocserv_2.0.0-1.ubuntu26.04.2_arm64.deb \
     > "${WORK}/published"
   run scripts/release-preflight.sh 2.0.0-2 "${WORK}/published"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"ocserv 2.0.0-1~ubuntu24.04.2 is already published"* ]]
+  [[ "${output}" == *"ocserv 2.0.0-1~ubuntu26.04.2 is already published"* ]]
 
   run env BACKPORT_REVISION=3 \
     scripts/release-preflight.sh 2.0.0-2 "${WORK}/published"
   [ "${status}" -eq 0 ]
 }
 
-@test "release collect picks the four ocserv packages and writes checksums" {
+@test "release collect picks the six ocserv packages and writes checksums" {
   fake_build_artifacts
   run scripts/release-collect-assets.sh "${WORK}/artifacts" "${WORK}/release"
   [ "${status}" -eq 0 ]
@@ -78,17 +80,19 @@ fake_build_artifacts() {
     ocserv_2.0.0-1.debian13.2_amd64.deb \
     ocserv_2.0.0-1.debian13.2_arm64.deb \
     ocserv_2.0.0-1.ubuntu24.04.2_amd64.deb \
-    ocserv_2.0.0-1.ubuntu24.04.2_arm64.deb)" ]
+    ocserv_2.0.0-1.ubuntu24.04.2_arm64.deb \
+    ocserv_2.0.0-1.ubuntu26.04.2_amd64.deb \
+    ocserv_2.0.0-1.ubuntu26.04.2_arm64.deb)" ]
   run bash -c "cd '${WORK}/release' && sha256sum -c SHA256SUMS"
   [ "${status}" -eq 0 ]
 }
 
 @test "release collect fails when an architecture is missing" {
   fake_build_artifacts
-  rm -rf "${WORK}/artifacts/ubuntu-noble-build-arm64"
+  rm -rf "${WORK}/artifacts/ubuntu-resolute-build-arm64"
   run scripts/release-collect-assets.sh "${WORK}/artifacts" "${WORK}/release"
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"expected exactly one"*"ocserv_2.0.0-1~ubuntu24.04.2_arm64.deb, found 0"* ]]
+  [[ "${output}" == *"expected exactly one"*"ocserv_2.0.0-1~ubuntu26.04.2_arm64.deb, found 0"* ]]
 }
 
 @test "release collect fails when a package has an unexpected version" {
@@ -100,19 +104,22 @@ fake_build_artifacts() {
   [[ "${output}" == *"ocserv_2.0.0-1~debian13.2_amd64.deb, found 0"* ]]
 }
 
-@test "release workflow builds both distributions on tag push and publishes" {
+@test "release workflow builds all distributions on tag push and publishes" {
   workflow=".github/workflows/release.yml"
 
   grep -Fq -- "tags:" "${workflow}"
   grep -Fq -- "uses: ./.github/workflows/debian-trixie-build.yml" "${workflow}"
   grep -Fq -- "uses: ./.github/workflows/ubuntu-noble-build.yml" "${workflow}"
-  grep -Fq -- "needs: [preflight, debian-trixie, ubuntu-noble]" "${workflow}"
+  grep -Fq -- "uses: ./.github/workflows/ubuntu-resolute-build.yml" "${workflow}"
+  grep -Fq -- "needs: [preflight, debian-trixie, ubuntu-noble, ubuntu-resolute]" "${workflow}"
   grep -Fq -- "contents: write" "${workflow}"
   grep -Fq -- "scripts/release-preflight.sh" "${workflow}"
   grep -Fq -- "scripts/release-collect-assets.sh" "${workflow}"
+  grep -Fq -- "pattern: '*-build-a*64'" "${workflow}"
   grep -Fq -- "gh release create" "${workflow}"
   grep -Fq -- "workflow_call:" .github/workflows/debian-trixie-build.yml
   grep -Fq -- "workflow_call:" .github/workflows/ubuntu-noble-build.yml
+  grep -Fq -- "workflow_call:" .github/workflows/ubuntu-resolute-build.yml
 }
 
 @test "release workflow dry run skips publishing" {
@@ -120,6 +127,8 @@ fake_build_artifacts() {
 
   grep -Fq -- "workflow_dispatch:" "${workflow}"
   grep -Fq -- 'if [[ "${GITHUB_EVENT_NAME}" != push ]]; then' "${workflow}"
+  grep -Fq -- 'tag: ${{ steps.versions.outputs.tag }}' "${workflow}"
+  grep -Fq -- 'TAG: ${{ needs.preflight.outputs.tag }}' "${workflow}"
   grep -Fq -- "name: release-assets" "${workflow}"
   awk '/- name: Publish GitHub release/{getline; print}' "${workflow}" \
     | grep -Fq -- "if: github.event_name == 'push'"
@@ -127,31 +136,34 @@ fake_build_artifacts() {
 
 @test "release notes render the template with the packaged versions" {
   run env TAG=2.0.0 OCSERV_DEBIAN13=2.0.0-1~debian13.2 \
-    OCSERV_NOBLE=2.0.0-1~ubuntu24.04.2 scripts/release-render-notes.sh
+    OCSERV_NOBLE=2.0.0-1~ubuntu24.04.2 OCSERV_RESOLUTE=2.0.0-1~ubuntu26.04.2 \
+    scripts/release-render-notes.sh
   [ "${status}" -eq 0 ]
   [[ "${output}" == "## Packages"* ]]
   [[ "${output}" == *'`2.0.0-1~debian13.2`'* ]]
   [[ "${output}" == *'`2.0.0-1~ubuntu24.04.2`'* ]]
+  [[ "${output}" == *'`2.0.0-1~ubuntu26.04.2`'* ]]
+  [[ "${output}" == *"--release 2.0.0"* ]]
   [[ "${output}" == *"sha256sum -c --ignore-missing SHA256SUMS"* ]]
   [[ "${output}" != *'${'* ]]
 }
 
 @test "release notes put a per-tag notes file before the template" {
   mkdir -p "${WORK}/notes"
-  printf '%s\n' '## Packages' '${OCSERV_NOBLE}' > "${WORK}/notes/template.md"
+  printf '%s\n' '## Packages' '${OCSERV_NOBLE}' '${OCSERV_RESOLUTE}' > "${WORK}/notes/template.md"
   printf '%s\n' '## Upgrade notes' 'Restart ocserv.' > "${WORK}/notes/2.0.0-2.md"
-  run env TAG=2.0.0-2 OCSERV_DEBIAN13=d OCSERV_NOBLE=n \
+  run env TAG=2.0.0-2 OCSERV_DEBIAN13=d OCSERV_NOBLE=n OCSERV_RESOLUTE=r \
     scripts/release-render-notes.sh "${WORK}/notes"
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf '%s\n' '## Upgrade notes' 'Restart ocserv.' '' \
-    '## Packages' 'n')" ]
+    '## Packages' 'n' 'r')" ]
 }
 
 @test "release notes fail without the packaged versions" {
-  run env -u OCSERV_NOBLE TAG=2.0.0 OCSERV_DEBIAN13=d \
+  run env -u OCSERV_RESOLUTE TAG=2.0.0 OCSERV_DEBIAN13=d OCSERV_NOBLE=n \
     scripts/release-render-notes.sh
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"OCSERV_NOBLE must be set"* ]]
+  [[ "${output}" == *"OCSERV_RESOLUTE must be set"* ]]
 }
 
 @test "release workflow appends generated notes grouped by labels" {

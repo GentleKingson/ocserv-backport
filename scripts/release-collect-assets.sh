@@ -6,7 +6,8 @@
 #
 # For each of amd64 and arm64 exactly one file is expected for:
 #   build/debian/trixie/<arch>/binary/ocserv_<OCSERV_VERSION>_<arch>.deb
-#   build/ubuntu/noble/<arch>/binary/ocserv/ocserv_<OCSERV_NOBLE_VERSION>_<arch>.deb
+#   build/ubuntu/noble/<arch>/binary/ocserv_<OCSERV_NOBLE_VERSION>_<arch>.deb
+#   build/ubuntu/resolute/<arch>/binary/ocserv_<OCSERV_RESOLUTE_VERSION>_<arch>.deb
 # Output names replace "~" with "." to match what GitHub stores, so the
 # checksums file verifies the files users download.
 set -euo pipefail
@@ -41,7 +42,8 @@ rm -f -- "${out}"/*.deb "${out}/SHA256SUMS"
 
 for arch in ${RELEASE_ARCHES}; do
   collect_one "*/build/debian/trixie/${arch}/binary/*" "ocserv_${OCSERV_VERSION}_${arch}.deb"
-  collect_one "*/build/ubuntu/noble/${arch}/binary/ocserv/*" "ocserv_${OCSERV_NOBLE_VERSION}_${arch}.deb"
+  collect_one "*/build/ubuntu/noble/${arch}/binary/*" "ocserv_${OCSERV_NOBLE_VERSION}_${arch}.deb"
+  collect_one "*/build/ubuntu/resolute/${arch}/binary/*" "ocserv_${OCSERV_RESOLUTE_VERSION}_${arch}.deb"
 done
 
 (

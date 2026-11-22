@@ -352,8 +352,7 @@ build/debian/trixie/${TARGET_ARCH}/keyrings/debian/
 
 ## GitHub Actions
 
-Pull request CI runs only static checks, lock verification, unit tests, and
-stub orchestration tests.
+Pull request CI runs only static checks, lock verification, and unit tests.
 
 Pull request CI does not create an sbuild chroot, run the Docker smoke test, or
 build or upload binary `.deb` files.
@@ -379,9 +378,9 @@ arm64 -> ubuntu-24.04-arm
 
 The fixed check names for the two jobs are `debian-trixie-build-amd64` and
 `debian-trixie-build-arm64`. The workflow uses
-`scripts/trixie-auto-build.sh --provision` on GitHub-hosted runners to prepare
-the trixie sbuild environment, run the full Debian binary build, lintian, and
-Docker smoke validation, and upload build artifacts.
+`scripts/trixie-auto-build.sh --provision --yes` on GitHub-hosted runners to
+prepare the trixie sbuild environment, run the full Debian binary build,
+lintian, and Docker smoke validation, and upload build artifacts.
 
 On success, the artifact names are `debian-trixie-build-amd64` and
 `debian-trixie-build-arm64`. The log artifact names are

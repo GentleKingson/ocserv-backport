@@ -7,8 +7,8 @@ name: install-script
 #           Debian 13, Ubuntu 24.04 and Ubuntu 26.04 on amd64 and arm64,
 #           run twice;
 #   readme-command - the exact README command (install.sh from main) on the
-#           Ubuntu 24.04 runner itself, after changes reach main, weekly and
-#           after each release.
+#           Ubuntu 24.04 and 26.04 runners themselves, after changes reach
+#           main, weekly and after each release.
 # Every install must leave ocserv.service enabled and not running.
 "on":
   push:
@@ -17,7 +17,9 @@ name: install-script
       - 'install.sh'
       - 'scripts/install-e2e-test.sh'
       - 'scripts/_common.sh'
+      - 'test/helpers/bats-helper.bash'
       - 'test/test_install.bats'
+      - 'Makefile'
       - 'README.md'
       - '.github/workflows/install-script.yml'
   pull_request:
@@ -25,7 +27,9 @@ name: install-script
       - 'install.sh'
       - 'scripts/install-e2e-test.sh'
       - 'scripts/_common.sh'
+      - 'test/helpers/bats-helper.bash'
       - 'test/test_install.bats'
+      - 'Makefile'
       - 'README.md'
       - '.github/workflows/install-script.yml'
   # A release published with GITHUB_TOKEN starts no release event, so follow
@@ -115,16 +119,20 @@ jobs:
   readme-command:
     needs: lint
     if: ${{ github.event_name != 'pull_request' }}
-    name: readme-command (${{ matrix.platform.arch }})
+    name: readme-command (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.platform.runner }}
+        include:
+          - runner: ubuntu-24.04
+            version_pattern: '~ubuntu24\.04\.'
+          - runner: ubuntu-24.04-arm
+            version_pattern: '~ubuntu24\.04\.'
+          - runner: ubuntu-26.04
+            version_pattern: '~ubuntu2[46]\.04\.'
+          - runner: ubuntu-26.04-arm
+            version_pattern: '~ubuntu2[46]\.04\.'
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -143,10 +151,12 @@ jobs:
           bash -euo pipefail -c "${command}"
 
       - name: Check ocserv is enabled and not running
+        env:
+          VERSION_PATTERN: ${{ matrix.version_pattern }}
         run: |
           set -euo pipefail
           dpkg-query -W -f='${Version} ${Architecture}\n' ocserv \
-            | tee /dev/stderr | grep -F '~ubuntu24.04.'
+            | tee /dev/stderr | grep -Eq "${VERSION_PATTERN}"
           enabled="$(systemctl is-enabled ocserv.service)"
           active="$(systemctl is-active ocserv.service || true)"
           echo "is-enabled: ${enabled}, is-active: ${active}"

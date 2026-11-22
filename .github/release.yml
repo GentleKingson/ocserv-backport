@@ -13,7 +13,7 @@ changelog:
     - title: Debian 13 (trixie)
       labels:
         - area/debian
-    - title: Ubuntu 24.04 (noble)
+    - title: Ubuntu (24.04 / 26.04)
       labels:
         - area/ubuntu
     - title: Build & Packaging

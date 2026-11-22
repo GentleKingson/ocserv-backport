@@ -12,11 +12,11 @@ setup() {
   cp "${REPO_ROOT}/scripts/_target_paths.sh" "${AUTO_REPO}/scripts/_target_paths.sh"
   cp "${REPO_ROOT}/scripts/_dscverify.sh" "${AUTO_REPO}/scripts/_dscverify.sh"
   cp "${REPO_ROOT}/scripts/_auto_build.sh" "${AUTO_REPO}/scripts/_auto_build.sh"
-  cp "${REPO_ROOT}/scripts/noble-env.sh" "${AUTO_REPO}/scripts/noble-env.sh"
+  cp "${REPO_ROOT}/scripts/ubuntu-env.sh" "${AUTO_REPO}/scripts/ubuntu-env.sh"
   cp "${REPO_ROOT}/scripts/_versions.sh" "${AUTO_REPO}/scripts/_versions.sh"
-  if [[ -f "${REPO_ROOT}/scripts/noble-auto-build.sh" ]]; then
-    cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
-  fi
+  cp "${REPO_ROOT}/scripts/ubuntu-auto-build.sh" "${AUTO_REPO}/scripts/ubuntu-auto-build.sh"
+  cp "${REPO_ROOT}/scripts/noble-auto-build.sh" "${AUTO_REPO}/scripts/noble-auto-build.sh"
+  cp "${REPO_ROOT}/scripts/resolute-auto-build.sh" "${AUTO_REPO}/scripts/resolute-auto-build.sh"
 }
 
 teardown() {
@@ -587,9 +587,9 @@ if [[ "\$*" != "noble-build" ]]; then
   exit 99
 fi
 /bin/mkdir -p \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary"
 /usr/bin/touch \
-  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv/ocserv_1.5.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb"
+  "${AUTO_REPO}/build/ubuntu/noble/\${TARGET_ARCH:?TARGET_ARCH not exported}/binary/ocserv_1.5.0_\${TARGET_ARCH:?TARGET_ARCH not exported}.deb"
 SH
   chmod +x "${FAKEBIN}/make"
 }
@@ -692,8 +692,8 @@ run_noble_env_with_arch_tools() {
     cd "$1" || exit
     shift
     unset TARGET_ARCH
-    . scripts/noble-env.sh
-    printf "%s\t%s\t%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+    . scripts/ubuntu-env.sh
+    printf "%s\t%s\t%s\n" "${TARGET_ARCH}" "${UBUNTU_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
   ' _ "${AUTO_REPO}"
 }
 
@@ -739,11 +739,11 @@ run_noble_env_with_arch_tools() {
   run env "PATH=${FAKEBIN}" FAKE_DPKG_ARCH=amd64 /bin/bash -c '
     cd "$1" || exit
     TARGET_ARCH=x86_64
-    . scripts/noble-env.sh
-    printf "first=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+    . scripts/ubuntu-env.sh
+    printf "first=%s/%s/%s\n" "${TARGET_ARCH}" "${UBUNTU_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
     TARGET_ARCH=aarch64
-    . scripts/noble-env.sh
-    printf "second=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+    . scripts/ubuntu-env.sh
+    printf "second=%s/%s/%s\n" "${TARGET_ARCH}" "${UBUNTU_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
   ' _ "${AUTO_REPO}"
 
   [ "${status}" -eq 0 ]
@@ -756,13 +756,13 @@ run_noble_env_with_arch_tools() {
   run env "PATH=${FAKEBIN}" FAKE_DPKG_ARCH=amd64 /bin/bash -c '
     cd "$1" || exit
     TARGET_ARCH=aarch64
-    . scripts/noble-env.sh
+    . scripts/ubuntu-env.sh
     warn_if_non_native_target
     warn_if_non_native_target
     TARGET_ARCH=x86_64
-    . scripts/noble-env.sh
+    . scripts/ubuntu-env.sh
     warn_if_non_native_target
-    printf "final=%s/%s/%s\n" "${TARGET_ARCH}" "${NOBLE_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
+    printf "final=%s/%s/%s\n" "${TARGET_ARCH}" "${UBUNTU_NATIVE_ARCH}" "${TARGET_BUILD_ROOT_REL}"
   ' _ "${AUTO_REPO}"
 
   [ "${status}" -eq 0 ]
@@ -1058,7 +1058,7 @@ run_noble_env_with_arch_tools() {
 
   [ "${status}" -eq 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_1.5.0_amd64.deb"* ]]
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv_1.5.0_amd64.deb"* ]]
   [[ "${output}" != *"libllhttp"* ]]
 }
 
@@ -1074,7 +1074,7 @@ run_noble_env_with_arch_tools() {
 
   [ "${status}" -ne 0 ]
   grep -Fxq -- "make noble-build NOBLE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
-  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv/ocserv_*.deb"* ]]
+  [[ "${output}" == *"expected artifact not found: ${AUTO_REPO}/build/ubuntu/noble/amd64/binary/ocserv_*.deb"* ]]
 }
 
 @test "noble-auto-build default mode reports missing sbuild group commands" {
@@ -1643,4 +1643,55 @@ SH
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"containerd.io : Conflicts: containerd"* ]]
   [[ "${output}" == *"Do not mix distro Docker packages with Docker CE/containerd.io"* ]]
+}
+
+@test "resolute-auto-build --help prints Resolute usage" {
+  write_os_release ubuntu resolute
+  install_minimal_valid_fakebin
+  run env "PATH=${FAKEBIN}:${PATH}" "RESOLUTE_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release" \
+    bash -c 'cd "$1" || exit; bash scripts/resolute-auto-build.sh --help' _ "${AUTO_REPO}"
+  [ "${status}" -eq 0 ]
+  grep -Fq -- "Usage: scripts/resolute-auto-build.sh [--provision] [--yes]" <<<"${output}"
+  grep -Fq -- "Ubuntu 26.04 Resolute" <<<"${output}"
+}
+
+@test "resolute-auto-build default mode runs resolute-build and prints artifacts" {
+  write_os_release ubuntu resolute
+  install_minimal_valid_fakebin
+  install_fake_docker_info_sequence 0
+  cat > "${FAKEBIN}/sbuild" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  --list-chroots) echo "resolute-\${TARGET_ARCH:?}" ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/schroot" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  -l|--list) echo "chroot:resolute-\${TARGET_ARCH:?}" ;;
+  -c) [[ "\${2:-}" == "resolute-\${TARGET_ARCH:?}" ]] ;;
+  *) exit 99 ;;
+esac
+SH
+  cat > "${FAKEBIN}/make" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'make %s RESOLUTE_DOCKER_CMD=%s\n' "\$*" "\${RESOLUTE_DOCKER_CMD:-}" >> "${AUTO_REPO}/make-calls"
+[[ "\$*" == "resolute-build" ]]
+/bin/mkdir -p "${AUTO_REPO}/build/ubuntu/resolute/\${TARGET_ARCH:?}/binary"
+/usr/bin/touch "${AUTO_REPO}/build/ubuntu/resolute/\${TARGET_ARCH:?}/binary/ocserv_1.5.0_\${TARGET_ARCH:?}.deb"
+SH
+  chmod +x "${FAKEBIN}/sbuild" "${FAKEBIN}/schroot" "${FAKEBIN}/make"
+  keyring="${AUTO_REPO}/debian-keyring.gpg"
+  : > "${keyring}"
+
+  run env "PATH=${FAKEBIN}" \
+    "RESOLUTE_AUTO_BUILD_OS_RELEASE_PATH=${AUTO_REPO}/os-release" \
+    "DSCVERIFY_KEYRING_PATHS=${keyring}" \
+    /bin/bash -c 'cd "$1" || exit; /bin/bash scripts/resolute-auto-build.sh' _ "${AUTO_REPO}"
+
+  [ "${status}" -eq 0 ]
+  grep -Fxq -- "make resolute-build RESOLUTE_DOCKER_CMD=docker" "${AUTO_REPO}/make-calls"
+  [[ "${output}" == *"${AUTO_REPO}/build/ubuntu/resolute/amd64/binary/ocserv_1.5.0_amd64.deb"* ]]
 }

@@ -11,6 +11,10 @@ name: pr-footer
 permissions:
   contents: read
 
+concurrency:
+  group: pr-footer-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   strip:
     runs-on: ubuntu-latest
@@ -25,15 +29,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
-          stripped="$(printf '%s' "${PR_BODY}" | scripts/strip-pr-footer.sh)"
-          if [[ "${stripped}" == "$(printf '%s' "${PR_BODY}")" ]]; then
+          body_file="${RUNNER_TEMP}/pr-body.txt"
+          stripped_file="${RUNNER_TEMP}/pr-body-stripped.txt"
+          jq -r '.pull_request.body // ""' "${GITHUB_EVENT_PATH}" \
+            > "${body_file}"
+          scripts/strip-pr-footer.sh < "${body_file}" > "${stripped_file}"
+          if cmp -s "${body_file}" "${stripped_file}"; then
             echo "No footer to remove."
             exit 0
           fi
-          gh api --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
-            -f body="${stripped}" > /dev/null
+          jq -Rs '{body: sub("\n$"; "")}' < "${stripped_file}" \
+            | gh api --method PATCH \
+                "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+                --input - > /dev/null
           echo "Removed the Claude Code footer from #${PR_NUMBER}."

@@ -61,9 +61,11 @@ strip() {
   local workflow=".github/workflows/pr-footer.yml"
   grep -Fq -- "pull_request_target:" "${workflow}"
   grep -Fq -- "types: [opened, edited]" "${workflow}"
+  grep -Fq -- "concurrency:" "${workflow}"
   grep -Fq -- "pull-requests: write" "${workflow}"
   grep -Fq -- "scripts/strip-pr-footer.sh" "${workflow}"
-  grep -Fq -- 'PR_BODY: ${{ github.event.pull_request.body }}' "${workflow}"
+  grep -Fq -- 'GITHUB_EVENT_PATH' "${workflow}"
+  grep -Fq -- '--input -' "${workflow}"
   ! grep -Fq -- "ref: \${{ github.event.pull_request.head" "${workflow}"
   ! grep -Eq -- 'run:.*\$\{\{ *github\.event\.pull_request\.body' "${workflow}"
 }

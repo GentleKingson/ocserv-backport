@@ -5,17 +5,19 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/noble-env.sh
-. "${SCRIPT_DIR}/noble-env.sh"
-noble_package_vars ocserv
+# shellcheck source=scripts/ubuntu-env.sh
+. "${SCRIPT_DIR}/ubuntu-env.sh"
+ubuntu_package_vars ocserv
 
-read -r -a DOCKER_COMMAND <<< "${NOBLE_DOCKER_CMD:-docker}"
-[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "NOBLE_DOCKER_CMD must not be empty"
+suite_docker_var="${UBUNTU_ENV_PREFIX}_DOCKER_CMD"
+docker_cmd_spec="${!suite_docker_var:-${UBUNTU_DOCKER_CMD:-docker}}"
+read -r -a DOCKER_COMMAND <<< "${docker_cmd_spec}"
+[[ "${#DOCKER_COMMAND[@]}" -gt 0 ]] || die "${suite_docker_var} must not be empty"
 
 if [[ "${1:-}" == "basic" ]]; then
   shift
 fi
-[[ "$#" -eq 0 ]] || die "usage: noble-smoke-test.sh"
+[[ "$#" -eq 0 ]] || die "usage: ubuntu-smoke-test.sh"
 
 shopt -s nullglob
 ocserv_debs=("${PKG_BINARY_DIR}"/ocserv_*_"${TARGET_ARCH}".deb)
@@ -29,31 +31,34 @@ version="$(dpkg-deb -f "${DEB}" Version)"
 arch="$(dpkg-deb -f "${DEB}" Architecture)"
 depends="$(dpkg-deb -f "${DEB}" Depends)"
 [[ "${pkg}" == "ocserv" ]] || die "deb Package ${pkg} != ocserv"
-[[ "${version}" == "${OCSERV_NOBLE_VERSION}" ]] || die "deb Version ${version} != ${OCSERV_NOBLE_VERSION}"
+[[ "${version}" == "${PKG_UBUNTU_VERSION}" ]] || die "deb Version ${version} != ${PKG_UBUNTU_VERSION}"
 [[ "${arch}" == "${TARGET_ARCH}" ]] || die "deb Architecture ${arch} != ${TARGET_ARCH}"
-# ocserv is built with its bundled llhttp; Noble has no libllhttp package.
-[[ "${depends}" != *"libllhttp"* ]] || die "ocserv Depends unexpectedly includes libllhttp: ${depends}"
+if [[ "${UBUNTU_BUNDLED_LLHTTP}" == "1" ]]; then
+  # ocserv is built with its bundled llhttp; this suite has no libllhttp package.
+  [[ "${depends}" != *"libllhttp"* ]] || die "ocserv Depends unexpectedly includes libllhttp: ${depends}"
+fi
 
 host_arch="unavailable"
 if command -v dpkg >/dev/null 2>&1; then
   host_arch="$(dpkg --print-architecture 2>/dev/null || printf 'unavailable')"
 fi
-log "noble-smoke-basic: host dpkg architecture: ${host_arch}"
+log "${TARGET_SUITE}-smoke-basic: host dpkg architecture: ${host_arch}"
 
 binary_dir="$(cd -- "${PKG_BINARY_DIR}" && pwd)"
 deb_name="$(basename "${DEB}")"
 
-log "noble-smoke-basic: container install and package assertions"
+log "${TARGET_SUITE}-smoke-basic: container install and package assertions"
 # shellcheck disable=SC2016
-"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" ubuntu:24.04 bash -euxc '
+"${DOCKER_COMMAND[@]}" run --rm -v "${binary_dir}:/deb:ro" "${UBUNTU_DOCKER_IMAGE}" bash -euxc '
   deb="/deb/$1"
   expected_version="$2"
   expected_arch="$3"
   expected_upstream="$4"
+  bundled_llhttp="$5"
 
   apt-get update -qq
   apt-get install -s -y "${deb}" | tee /tmp/ocserv-install-plan
-  if grep -q "libllhttp" /tmp/ocserv-install-plan; then
+  if [ "${bundled_llhttp}" = "1" ] && grep -q "libllhttp" /tmp/ocserv-install-plan; then
     exit 1
   fi
   apt-get install -y -qq "${deb}"
@@ -83,8 +88,12 @@ log "noble-smoke-basic: container install and package assertions"
   if ldd /usr/sbin/ocserv | grep -i "not found"; then
     exit 1
   fi
-  if ldd /usr/sbin/ocserv | grep -i "libllhttp"; then
-    exit 1
+  if [ "${bundled_llhttp}" = "1" ]; then
+    if ldd /usr/sbin/ocserv | grep -i "libllhttp"; then
+      exit 1
+    fi
+  else
+    ldd /usr/sbin/ocserv | grep -F "libllhttp"
   fi
 
   # Build options Debian enables: PAM, RADIUS and OIDC in ocserv, seccomp in
@@ -93,6 +102,6 @@ log "noble-smoke-basic: container install and package assertions"
     ldd /usr/sbin/ocserv | grep -F "${lib}"
   done
   ldd /usr/sbin/ocserv-worker | grep -F libseccomp.so
-' bash "${deb_name}" "${OCSERV_NOBLE_VERSION}" "${TARGET_ARCH}" "${PKG_UPSTREAM_VERSION}"
+' bash "${deb_name}" "${PKG_UBUNTU_VERSION}" "${TARGET_ARCH}" "${PKG_UPSTREAM_VERSION}" "${UBUNTU_BUNDLED_LLHTTP}"
 
-log "noble-smoke-basic: OK"
+log "${TARGET_SUITE}-smoke-basic: OK"

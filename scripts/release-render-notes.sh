@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Render the release notes header to stdout. GitHub appends the generated
-# list of merged pull requests (see .github/release.yml) when publishing.
+# Render the release notes header to stdout. The release workflow appends the
+# merged PR list from GitHub's generate-notes API (grouped by .github/release.yml)
+# when publishing.
 #
 # Usage: TAG=<tag> OCSERV_DEBIAN13=<version> OCSERV_NOBLE=<version> \
-#          release-render-notes.sh [notes-dir]
+#          OCSERV_RESOLUTE=<version> release-render-notes.sh [notes-dir]
 #
 # Output order:
 #   1. <notes-dir>/<tag>.md, if present: hand-written highlights, upgrade notes
 #      or known issues for this release only.
-#   2. <notes-dir>/template.md with ${TAG}, ${OCSERV_DEBIAN13} and
-#      ${OCSERV_NOBLE} substituted.
+#   2. <notes-dir>/template.md with ${TAG}, ${OCSERV_DEBIAN13},
+#      ${OCSERV_NOBLE} and ${OCSERV_RESOLUTE} substituted.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +21,7 @@ notes_dir="${1:-${SCRIPT_DIR}/../.github/release-notes}"
 template="${notes_dir}/template.md"
 [[ -f "${template}" ]] || die "missing release notes template: ${template}"
 
-for var in TAG OCSERV_DEBIAN13 OCSERV_NOBLE; do
+for var in TAG OCSERV_DEBIAN13 OCSERV_NOBLE OCSERV_RESOLUTE; do
   [[ -n "${!var:-}" ]] || die "${var} must be set"
 done
 
@@ -36,5 +37,6 @@ fi
   body="${body//'${TAG}'/${TAG}}"
   body="${body//'${OCSERV_DEBIAN13}'/${OCSERV_DEBIAN13}}"
   body="${body//'${OCSERV_NOBLE}'/${OCSERV_NOBLE}}"
+  body="${body//'${OCSERV_RESOLUTE}'/${OCSERV_RESOLUTE}}"
   printf '%s\n' "${body}"
 }

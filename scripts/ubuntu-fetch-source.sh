@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Fetch a locked Debian source package into the Noble target source dir.
+# Fetch a locked Debian source package into the Ubuntu target source dir.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/noble-env.sh
-. "${SCRIPT_DIR}/noble-env.sh"
+# shellcheck source=scripts/ubuntu-env.sh
+. "${SCRIPT_DIR}/ubuntu-env.sh"
 # shellcheck source=scripts/_dsc.sh
 . "${SCRIPT_DIR}/_dsc.sh"
 # shellcheck source=scripts/_lock_tsv.sh
@@ -19,8 +19,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/_upstream_import.sh
 . "${SCRIPT_DIR}/_upstream_import.sh"
 
-[[ "$#" -eq 1 ]] || die "usage: noble-fetch-source.sh ocserv"
-noble_package_vars "$1"
+[[ "$#" -eq 1 ]] || die "usage: ubuntu-fetch-source.sh ocserv"
+ubuntu_package_vars "$1"
 
 TMP_ROOT=""
 cleanup_fetch_tmp() {
@@ -28,7 +28,8 @@ cleanup_fetch_tmp() {
 }
 
 verify_source_lock_unless_internal_skip() {
-  if [[ "${NOBLE_SKIP_FETCH_VERIFY_LOCK:-}" == "1" ]]; then
+  local suite_skip_var="${UBUNTU_ENV_PREFIX}_SKIP_FETCH_VERIFY_LOCK"
+  if [[ "${UBUNTU_SKIP_FETCH_VERIFY_LOCK:-}" == "1" || "${!suite_skip_var:-}" == "1" ]]; then
     return 0
   fi
   "${SCRIPT_DIR}/verify-source-lock.sh"
@@ -54,8 +55,8 @@ main() {
   verify_source_lock_unless_internal_skip
   read_lock_tsv "${PKG_LOCK_TSV}" "${PKG_PACKAGING_VERSION}" "${PKG_SOURCE}"
 
-  mkdir -p "${NOBLE_BUILD_ROOT}"
-  TMP_ROOT="$(mktemp -d "${NOBLE_BUILD_ROOT}/.fetch-${PKG_SOURCE}.XXXXXX")"
+  mkdir -p "${UBUNTU_BUILD_ROOT}"
+  TMP_ROOT="$(mktemp -d "${UBUNTU_BUILD_ROOT}/.fetch-${PKG_SOURCE}.XXXXXX")"
   trap cleanup_fetch_tmp EXIT
   local staging="${TMP_ROOT}/staging"
   mkdir -p "${staging}"

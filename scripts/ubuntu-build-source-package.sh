@@ -5,15 +5,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/_common.sh
 . "${SCRIPT_DIR}/_common.sh"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=scripts/noble-env.sh
-. "${SCRIPT_DIR}/noble-env.sh"
+# shellcheck source=scripts/ubuntu-env.sh
+. "${SCRIPT_DIR}/ubuntu-env.sh"
 # shellcheck source=scripts/_dsc.sh
 . "${SCRIPT_DIR}/_dsc.sh"
 
-[[ "$#" -eq 1 ]] || die "usage: noble-build-source-package.sh ocserv"
-noble_package_vars "$1"
+[[ "$#" -eq 1 ]] || die "usage: ubuntu-build-source-package.sh ocserv"
+ubuntu_package_vars "$1"
 
-[[ -d "${PKG_SOURCE_TREE}" ]] || die "missing rewrapped source tree: ${PKG_SOURCE_TREE} (run noble-rewrap-${PKG_SOURCE} first)"
+[[ -d "${PKG_SOURCE_TREE}" ]] || die "missing rewrapped source tree: ${PKG_SOURCE_TREE} (run ${TARGET_SUITE}-rewrap-${PKG_SOURCE} first)"
 
 print_source_package_host_dependency_guidance() {
   local apt_prefix=""
@@ -22,7 +22,7 @@ print_source_package_host_dependency_guidance() {
     apt_prefix="sudo "
   fi
 
-  printf 'Install Noble source package host dependencies with:\n' >&2
+  printf 'Install %s source package host dependencies with:\n' "${UBUNTU_SUITE_LABEL}" >&2
   printf '  %sapt-get update\n' "${apt_prefix}" >&2
   printf '  %sapt-get install -y --no-install-recommends debhelper\n' "${apt_prefix}" >&2
 }
@@ -44,10 +44,10 @@ ensure_source_package_host_commands() {
   fi
 }
 
-ensure_source_package_host_commands || die "missing Noble source package host dependencies"
+ensure_source_package_host_commands || die "missing ${UBUNTU_SUITE_LABEL} source package host dependencies"
 
 shopt -s nullglob
-old_artifacts=("${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_NOBLE_VERSION}"*)
+old_artifacts=("${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_UBUNTU_VERSION}"*)
 shopt -u nullglob
 if [[ "${#old_artifacts[@]}" -gt 0 ]]; then
   rm -f -- "${old_artifacts[@]}"
@@ -56,8 +56,8 @@ fi
 cd "${PKG_SOURCE_TREE}"
 dpkg-buildpackage -S -d -us -uc
 
-DSC="${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_NOBLE_VERSION}.dsc"
+DSC="${PKG_SOURCE_ROOT}/${PKG_SOURCE}_${PKG_UBUNTU_VERSION}.dsc"
 [[ -f "${DSC}" ]] || die "expected dsc not found: ${DSC}"
-validate_dsc_metadata "${DSC}" "${PKG_SOURCE}" "${PKG_NOBLE_VERSION}" \
+validate_dsc_metadata "${DSC}" "${PKG_SOURCE}" "${PKG_UBUNTU_VERSION}" \
   || die "generated dsc metadata mismatch: ${DSC}"
 log "source package: ${DSC}"

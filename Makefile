@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 # Package version defaults live in scripts/_versions.sh; override them from
 # the environment or the make command line.
-export OCSERV_VERSION OCSERV_DEBIAN_VERSION OCSERV_NOBLE_VERSION
+export OCSERV_VERSION OCSERV_DEBIAN_VERSION OCSERV_NOBLE_VERSION OCSERV_RESOLUTE_VERSION
 TARGET_DISTRIBUTION ?= noble
 export TARGET_DISTRIBUTION TARGET_ARCH
 
@@ -13,10 +13,6 @@ help: ## Show supported targets
 .PHONY: test
 test: ## Run Bats test suite
 	bats test/
-
-.PHONY: ci-script-test
-ci-script-test: ## Run stubbed Trixie build-entrypoint orchestration tests
-	bats test/test_trixie_build_entrypoint.bats test/test_trixie_source_ci.bats
 
 .PHONY: trixie-verify-locks
 trixie-verify-locks: ## Verify source-lock YAML files match generated TSV projections
@@ -55,45 +51,71 @@ trixie-auto-build: ## Run the Debian Trixie host auto-build pipeline
 trixie-source-ci: ## Run the real Debian Trixie source-package CI pipeline
 	scripts/trixie-source-package-ci.sh
 
-.PHONY: noble-build
+.PHONY: noble-build noble-source-ci noble-auto-build noble-verify-locks
+.PHONY: noble-fetch-ocserv noble-rewrap-ocserv noble-src-pkg-ocserv
+.PHONY: noble-binary-ocserv noble-lint noble-smoke-basic
 noble-build: ## Run the Ubuntu 24.04 Noble local backport pipeline
-	scripts/noble-build.sh
+	TARGET_SUITE=noble scripts/ubuntu-build.sh
 
-.PHONY: noble-source-ci
 noble-source-ci: ## Run the real Ubuntu Noble source-package CI pipeline
-	scripts/noble-source-package-ci.sh
+	TARGET_SUITE=noble scripts/ubuntu-source-package-ci.sh
 
-.PHONY: noble-auto-build
 noble-auto-build: ## Run the Ubuntu 24.04 Noble host auto-build pipeline
 	scripts/noble-auto-build.sh
 
-.PHONY: noble-verify-locks
 noble-verify-locks: ## Verify ocserv source locks
 	scripts/verify-source-lock.sh
 
-.PHONY: noble-fetch-ocserv
 noble-fetch-ocserv: ## Fetch locked Debian ocserv source for Noble
-	scripts/noble-fetch-source.sh ocserv
+	TARGET_SUITE=noble scripts/ubuntu-fetch-source.sh ocserv
 
-.PHONY: noble-rewrap-ocserv
 noble-rewrap-ocserv: ## Rewrite ocserv changelog to the Noble backport version
-	scripts/noble-rewrap-changelog.sh ocserv
+	TARGET_SUITE=noble scripts/ubuntu-rewrap-changelog.sh ocserv
 
-.PHONY: noble-src-pkg-ocserv
 noble-src-pkg-ocserv: ## Build ocserv Noble source package
-	scripts/noble-build-source-package.sh ocserv
+	TARGET_SUITE=noble scripts/ubuntu-build-source-package.sh ocserv
 
-.PHONY: noble-binary-ocserv
 noble-binary-ocserv: ## Build ocserv Noble binary package (bundled llhttp) with sbuild
-	scripts/noble-build-binary-ocserv.sh
+	TARGET_SUITE=noble scripts/ubuntu-build-binary-ocserv.sh
 
-.PHONY: noble-lint
 noble-lint: ## Run lintian on the generated Noble ocserv .changes
-	scripts/noble-lint-package.sh
+	TARGET_SUITE=noble scripts/ubuntu-lint-package.sh
 
-.PHONY: noble-smoke-basic
 noble-smoke-basic: ## Install and inspect the local Noble ocserv .deb in a noble container
-	scripts/noble-smoke-test.sh
+	TARGET_SUITE=noble scripts/ubuntu-smoke-test.sh
+
+.PHONY: resolute-build resolute-source-ci resolute-auto-build resolute-verify-locks
+.PHONY: resolute-fetch-ocserv resolute-rewrap-ocserv resolute-src-pkg-ocserv
+.PHONY: resolute-binary-ocserv resolute-lint resolute-smoke-basic
+resolute-build: ## Run the Ubuntu 26.04 Resolute local backport pipeline
+	TARGET_SUITE=resolute scripts/ubuntu-build.sh
+
+resolute-source-ci: ## Run the real Ubuntu Resolute source-package CI pipeline
+	TARGET_SUITE=resolute scripts/ubuntu-source-package-ci.sh
+
+resolute-auto-build: ## Run the Ubuntu 26.04 Resolute host auto-build pipeline
+	scripts/resolute-auto-build.sh
+
+resolute-verify-locks: ## Verify ocserv source locks
+	scripts/verify-source-lock.sh
+
+resolute-fetch-ocserv: ## Fetch locked Debian ocserv source for Resolute
+	TARGET_SUITE=resolute scripts/ubuntu-fetch-source.sh ocserv
+
+resolute-rewrap-ocserv: ## Rewrite ocserv changelog to the Resolute backport version
+	TARGET_SUITE=resolute scripts/ubuntu-rewrap-changelog.sh ocserv
+
+resolute-src-pkg-ocserv: ## Build ocserv Resolute source package
+	TARGET_SUITE=resolute scripts/ubuntu-build-source-package.sh ocserv
+
+resolute-binary-ocserv: ## Build ocserv Resolute binary package with sbuild
+	TARGET_SUITE=resolute scripts/ubuntu-build-binary-ocserv.sh
+
+resolute-lint: ## Run lintian on the generated Resolute ocserv .changes
+	TARGET_SUITE=resolute scripts/ubuntu-lint-package.sh
+
+resolute-smoke-basic: ## Install and inspect the local Resolute ocserv .deb in a resolute container
+	TARGET_SUITE=resolute scripts/ubuntu-smoke-test.sh
 
 .PHONY: install-test install-e2e
 install-test: ## Run install.sh unit tests

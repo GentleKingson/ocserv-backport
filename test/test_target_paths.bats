@@ -43,6 +43,17 @@ run_target_paths() {
   [ "${lines[7]}" = "${REPO_ROOT}/build/ubuntu/noble/arm64/keyrings/debian" ]
 }
 
+@test "target paths compute Ubuntu Resolute amd64 roots" {
+  run_target_paths ubuntu resolute amd64
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[1]}" = "build/ubuntu/resolute/amd64" ]
+  [ "${lines[2]}" = "${REPO_ROOT}/build/ubuntu/resolute/amd64" ]
+  [ "${lines[3]}" = "${REPO_ROOT}/build/ubuntu/resolute/amd64/source" ]
+  [ "${lines[4]}" = "${REPO_ROOT}/build/ubuntu/resolute/amd64/binary" ]
+  [ "${lines[7]}" = "${REPO_ROOT}/build/ubuntu/resolute/amd64/keyrings/debian" ]
+}
+
 @test "target paths canonicalize explicit REPO_ROOT override" {
   TARGET_PATHS_TMP="$(mktemp -d)"
   mkdir -p "${TARGET_PATHS_TMP}/repo/subdir"

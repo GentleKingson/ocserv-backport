@@ -304,21 +304,21 @@ dependency, and the smoke test fails if one appears.
 Noble artifacts are isolated by architecture:
 
 ```text
-build/ubuntu/noble/${TARGET_ARCH}/source/ocserv/
-build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/source/
+build/ubuntu/noble/${TARGET_ARCH}/binary/
 build/ubuntu/noble/${TARGET_ARCH}/keyrings/debian/
 ```
 
 The final `ocserv` package is located in:
 
 ```text
-build/ubuntu/noble/${TARGET_ARCH}/binary/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/binary/
 ```
 
 Source package artifacts are located in:
 
 ```text
-build/ubuntu/noble/${TARGET_ARCH}/source/ocserv/
+build/ubuntu/noble/${TARGET_ARCH}/source/
 ```
 
 When the automatic build refreshes the Debian source signature verification
@@ -330,8 +330,7 @@ build/ubuntu/noble/${TARGET_ARCH}/keyrings/debian/
 
 ## GitHub Actions
 
-Pull request CI runs only static checks, lock verification, unit tests, and
-stub orchestration tests.
+Pull request CI runs only static checks, lock verification, and unit tests.
 
 Pull request CI does not create an sbuild chroot, run the Docker smoke test, or
 build or upload binary `.deb` files.
@@ -348,9 +347,11 @@ amd64 -> ubuntu-24.04
 arm64 -> ubuntu-24.04-arm
 ```
 
-The workflow uses `scripts/noble-auto-build.sh --provision` on GitHub-hosted
-runners to prepare the Noble sbuild environment, run the full Noble binary
-build, lintian, and Docker smoke validation, and upload build artifacts.
+The fixed check names for the two jobs are `ubuntu-noble-build-amd64` and
+`ubuntu-noble-build-arm64`. The workflow uses
+`scripts/noble-auto-build.sh --provision --yes` on GitHub-hosted runners to
+prepare the Noble sbuild environment, run the full Noble binary build, lintian,
+and Docker smoke validation, and upload build artifacts.
 
 On success, the artifact names are `ubuntu-noble-build-amd64` and
 `ubuntu-noble-build-arm64`. The log artifact names are

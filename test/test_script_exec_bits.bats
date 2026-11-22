@@ -7,7 +7,7 @@
 # the exec bit is invisible to every other test; this guard closes that gap.
 #
 # Sourced library helpers (_common.sh, _versions.sh, _dsc.sh, _fetch.sh,
-# _pipeline.sh, _sbuild.sh, _auto_build.sh, noble-env.sh, trixie-env.sh)
+# _pipeline.sh, _sbuild.sh, _auto_build.sh, ubuntu-env.sh, trixie-env.sh)
 # are NOT invoked directly and are intentionally excluded; they stay 100644.
 load helpers/bats-helper.bash
 
@@ -25,15 +25,17 @@ DIRECTLY_INVOKED_SCRIPTS=(
   trixie-build.sh
   trixie-auto-build.sh
   trixie-source-package-ci.sh
-  noble-build.sh
-  noble-source-package-ci.sh
+  ubuntu-build.sh
+  ubuntu-source-package-ci.sh
+  ubuntu-auto-build.sh
+  ubuntu-fetch-source.sh
+  ubuntu-rewrap-changelog.sh
+  ubuntu-build-source-package.sh
+  ubuntu-build-binary-ocserv.sh
+  ubuntu-lint-package.sh
+  ubuntu-smoke-test.sh
   noble-auto-build.sh
-  noble-fetch-source.sh
-  noble-rewrap-changelog.sh
-  noble-build-source-package.sh
-  noble-build-binary-ocserv.sh
-  noble-lint-package.sh
-  noble-smoke-test.sh
+  resolute-auto-build.sh
   install-e2e-test.sh
 )
 
@@ -60,10 +62,10 @@ DIRECTLY_INVOKED_SCRIPTS=(
   [[ "${failures}" -eq 0 ]]
 }
 
-@test "noble-rewrap-changelog.sh is directly invokable via its shebang" {
+@test "ubuntu-rewrap-changelog.sh is directly invokable via its shebang" {
   # This is the exact invocation form the Makefile uses. It must not fail with
   # exit 126 (Permission denied). It will exit non-zero on a missing source
   # tree (expected here); we only assert the exec bit is honored.
-  run "${REPO_ROOT}/scripts/noble-rewrap-changelog.sh" ocserv
+  run "${REPO_ROOT}/scripts/ubuntu-rewrap-changelog.sh" ocserv
   [[ "${status}" -ne 126 ]]
 }

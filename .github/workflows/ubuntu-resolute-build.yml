@@ -1,0 +1,67 @@
+---
+name: ubuntu-resolute-build
+
+"on":
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-resolute-build:
+    name: ubuntu-resolute-build-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ensure enough runner disk space
+        run: scripts/ci-ensure-disk-space.sh
+
+      - name: Build and test Ubuntu Resolute packages
+        run: |
+          set -euo pipefail
+          sudo --preserve-env=TARGET_ARCH \
+            ./scripts/resolute-auto-build.sh --provision --yes
+
+      - name: Stage Ubuntu Resolute artifacts
+        if: success()
+        run: |
+          scripts/ci-stage-build-artifacts.sh \
+            "build/ubuntu/resolute/${TARGET_ARCH}" \
+            "${RUNNER_TEMP}/ubuntu-resolute-artifacts"
+
+      - name: Upload Ubuntu Resolute artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubuntu-resolute-build-${{ matrix.arch }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/ubuntu-resolute-artifacts/**
+
+      - name: Prepare Ubuntu Resolute build logs
+        if: always()
+        run: |
+          scripts/ci-prepare-build-logs.sh \
+            "build/ubuntu/resolute" \
+            "${RUNNER_TEMP}/ubuntu-resolute-upload-logs"
+
+      - name: Upload Ubuntu Resolute build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubuntu-resolute-build-logs-${{ matrix.arch }}
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/ubuntu-resolute-upload-logs/**

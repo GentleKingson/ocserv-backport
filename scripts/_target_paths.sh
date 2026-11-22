@@ -19,7 +19,7 @@ fi
   || _target_paths_fail "TARGET_ARCH is required"
 
 case "${TARGET_FAMILY}:${TARGET_SUITE}" in
-  debian:trixie|ubuntu:noble)
+  debian:trixie|ubuntu:noble|ubuntu:resolute)
     ;;
   *)
     _target_paths_fail "unsupported target family/suite: ${TARGET_FAMILY}/${TARGET_SUITE}"
