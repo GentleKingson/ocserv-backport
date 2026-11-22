@@ -129,9 +129,9 @@ jobs:
           - runner: ubuntu-24.04-arm
             version_pattern: '~ubuntu24\.04\.'
           - runner: ubuntu-26.04
-            version_pattern: '~ubuntu2[46]\.04\.'
+            version_pattern: '~ubuntu26\.04\.'
           - runner: ubuntu-26.04-arm
-            version_pattern: '~ubuntu2[46]\.04\.'
+            version_pattern: '~ubuntu26\.04\.'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:

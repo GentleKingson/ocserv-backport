@@ -77,7 +77,7 @@ check_installed() {
     case "$(. /etc/os-release && echo "${ID}:${VERSION_ID}")" in
       debian:13) suffixes=("~debian13.") ;;
       ubuntu:24.04) suffixes=("~ubuntu24.04.") ;;
-      ubuntu:26.04) suffixes=("~ubuntu26.04." "~ubuntu24.04.") ;;
+      ubuntu:26.04) suffixes=("~ubuntu26.04.") ;;
       *) echo "unexpected os" >&2; exit 1 ;;
     esac
     version="$(dpkg-query -W -f="\${Version}" ocserv)"
