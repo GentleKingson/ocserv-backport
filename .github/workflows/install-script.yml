@@ -4,7 +4,8 @@ name: install-script
 # Checks the one-line installer (install.sh) from the README:
 #   lint  - bash syntax, ShellCheck and the Bats unit tests;
 #   e2e   - install.sh from this commit in booted systemd containers for
-#           Debian 13 and Ubuntu 24.04 on amd64 and arm64, run twice;
+#           Debian 13, Ubuntu 24.04 and Ubuntu 26.04 on amd64 and arm64,
+#           run twice;
 #   readme-command - the exact README command (install.sh from main) on the
 #           Ubuntu 24.04 runner itself, after changes reach main, weekly and
 #           after each release.
@@ -88,6 +89,7 @@ jobs:
         image:
           - debian:trixie
           - ubuntu:24.04
+          - ubuntu:26.04
         platform:
           - arch: amd64
             runner: ubuntu-24.04

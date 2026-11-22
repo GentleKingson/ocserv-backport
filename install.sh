@@ -10,8 +10,8 @@
 # ocserv: edit /etc/ocserv/ocserv.conf first, then run
 # `systemctl start ocserv`.
 #
-# Supported systems: Debian 13 (trixie) and Ubuntu 24.04 (noble), amd64 and
-# arm64.
+# Supported systems: Debian 13 (trixie), Ubuntu 24.04 (noble) and Ubuntu 26.04
+# (resolute), amd64 and arm64.
 #
 # Pass options through the pipe with `sudo bash -s -- <options>`; see --help.
 # OCSERV_RELEASE, OCSERV_REPO and OCSERV_DOWNLOAD_ONLY=1 set the same options
@@ -47,8 +47,8 @@ usage() {
   cat << 'USAGE'
 Usage: install.sh [--release <tag>] [--repo <owner/repo>] [--download-only]
 
-Install the latest ocserv backport release for Debian 13 or Ubuntu 24.04
-(amd64, arm64) and enable ocserv.service without starting it.
+Install the latest ocserv backport release for Debian 13, Ubuntu 24.04 or
+Ubuntu 26.04 (amd64, arm64) and enable ocserv.service without starting it.
 
   --release <tag>   Install this release instead of the latest.
   --repo <o/r>      Download from another GitHub repository.
@@ -98,7 +98,7 @@ parse_args() {
     || die "invalid release tag: ${OCSERV_RELEASE}"
 }
 
-# Print the asset suffix for this system: debian13 or ubuntu24.04.
+# Print the distribution identifier: debian13, ubuntu24.04 or ubuntu26.04.
 detect_distro() {
   [[ -r "${OS_RELEASE_FILE}" ]] || die "cannot read ${OS_RELEASE_FILE}"
   local id version_id pretty
@@ -115,7 +115,8 @@ detect_distro() {
   case "${id}:${version_id}" in
     debian:13) printf 'debian13\n' ;;
     ubuntu:24.04) printf 'ubuntu24.04\n' ;;
-    *) die "unsupported system: ${pretty}; supported: Debian 13 (trixie), Ubuntu 24.04 (noble)" ;;
+    ubuntu:26.04) printf 'ubuntu26.04\n' ;;
+    *) die "unsupported system: ${pretty}; supported: Debian 13 (trixie), Ubuntu 24.04 (noble), Ubuntu 26.04 (resolute)" ;;
   esac
 }
 
@@ -166,17 +167,29 @@ resolve_release() {
 #   ocserv_1.5.0-1.debian13.2_amd64.deb
 select_asset() {
   local sums="$1" distro="$2" arch="$3"
+  local -a candidates=("${distro}")
+  if [[ "${distro}" == ubuntu26.04 ]]; then
+    candidates+=("ubuntu24.04")
+  fi
+  local candidate name
   local -a matches=()
-  local name
-  while read -r _ name; do
-    name="${name#\*}"
-    if [[ "${name}" == ocserv_*".${distro}."*"_${arch}.deb" ]]; then
-      matches+=("${name}")
+  for candidate in "${candidates[@]}"; do
+    matches=()
+    while read -r _ name; do
+      name="${name#\*}"
+      if [[ "${name}" == ocserv_*".${candidate}."*"_${arch}.deb" ]]; then
+        matches+=("${name}")
+      fi
+    done < "${sums}"
+    if ((${#matches[@]} == 1)); then
+      printf '%s\n' "${matches[0]}"
+      return 0
     fi
-  done < "${sums}"
-  ((${#matches[@]} == 1)) \
-    || die "expected one ocserv package for ${distro} ${arch} in SHA256SUMS, found ${#matches[@]}"
-  printf '%s\n' "${matches[0]}"
+    if ((${#matches[@]} > 1)); then
+      die "expected one ocserv package for ${candidate} ${arch} in SHA256SUMS, found ${#matches[@]}"
+    fi
+  done
+  die "expected one ocserv package for ${distro} ${arch} in SHA256SUMS, found 0"
 }
 
 # Keep maintainer scripts from starting ocserv while the package installs

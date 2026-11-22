@@ -83,7 +83,7 @@ sums() {
   [ "${output}" = "2.0.0-3 me/fork 1" ]
 }
 
-@test "detect_distro maps Debian 13 and Ubuntu 24.04" {
+@test "detect_distro maps Debian 13, Ubuntu 24.04 and Ubuntu 26.04" {
   os_release debian 13 "Debian GNU/Linux 13 (trixie)"
   OS_RELEASE_FILE="${WORK}/os-release" call detect_distro
   [ "${status}" -eq 0 ]
@@ -93,6 +93,11 @@ sums() {
   OS_RELEASE_FILE="${WORK}/os-release" call detect_distro
   [ "${status}" -eq 0 ]
   [ "${output}" = ubuntu24.04 ]
+
+  os_release ubuntu 26.04 "Ubuntu 26.04.1 LTS"
+  OS_RELEASE_FILE="${WORK}/os-release" call detect_distro
+  [ "${status}" -eq 0 ]
+  [ "${output}" = ubuntu26.04 ]
 }
 
 @test "detect_distro rejects other systems" {
@@ -137,6 +142,15 @@ sums() {
   call select_asset "${WORK}/SHA256SUMS" ubuntu24.04 arm64
   [ "${status}" -eq 0 ]
   [ "${output}" = ocserv_2.0.0-1.ubuntu24.04.3_arm64.deb ]
+
+  call select_asset "${WORK}/SHA256SUMS" ubuntu26.04 arm64
+  [ "${status}" -eq 0 ]
+  [ "${output}" = ocserv_2.0.0-1.ubuntu24.04.3_arm64.deb ]
+
+  echo "eeee *ocserv_2.0.0-1.ubuntu26.04.3_arm64.deb" >> "${WORK}/SHA256SUMS"
+  call select_asset "${WORK}/SHA256SUMS" ubuntu26.04 arm64
+  [ "${status}" -eq 0 ]
+  [ "${output}" = ocserv_2.0.0-1.ubuntu26.04.3_arm64.deb ]
 }
 
 @test "select_asset fails unless exactly one package matches" {
@@ -149,6 +163,22 @@ sums() {
   call select_asset "${WORK}/SHA256SUMS" debian13 riscv64
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"found 0"* ]]
+
+  call select_asset "${WORK}/SHA256SUMS" ubuntu26.04 riscv64
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"found 0"* ]]
+
+  echo "ffff  ocserv_2.0.0-1.ubuntu24.04.4_amd64.deb" >> "${WORK}/SHA256SUMS"
+  call select_asset "${WORK}/SHA256SUMS" ubuntu26.04 amd64
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"found 2"* ]]
+
+  sums
+  echo "eeee  ocserv_2.0.0-1.ubuntu26.04.1_amd64.deb" >> "${WORK}/SHA256SUMS"
+  echo "ffff  ocserv_2.0.0-1.ubuntu26.04.2_amd64.deb" >> "${WORK}/SHA256SUMS"
+  call select_asset "${WORK}/SHA256SUMS" ubuntu26.04 amd64
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"found 2"* ]]
 }
 
 @test "resolve_release follows the latest release redirect" {
@@ -227,6 +257,7 @@ sums() {
   grep -Fq -- "make install-test" "${workflow}"
   grep -Fq -- "- debian:trixie" "${workflow}"
   grep -Fq -- "- ubuntu:24.04" "${workflow}"
+  grep -Fq -- "- ubuntu:26.04" "${workflow}"
   grep -Fq -- "runner: ubuntu-24.04-arm" "${workflow}"
   grep -Fq -- 'scripts/install-e2e-test.sh "${IMAGE}"' "${workflow}"
   grep -Fq -- "readme-command:" "${workflow}"

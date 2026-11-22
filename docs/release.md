@@ -53,9 +53,9 @@ reuse or move the tag of an already published release.
    `sha256sum -c SHA256SUMS` works on the downloads.
 
 After a tag push publishes the release, the `install-script` workflow
-installs it with the README one-line installer (`install.sh`) on Debian 13
-and Ubuntu 24.04, amd64 and arm64, and checks that `ocserv.service` is
-enabled but not running.
+installs it with the README one-line installer (`install.sh`) on Debian 13,
+Ubuntu 24.04 and Ubuntu 26.04, amd64 and arm64, and checks that
+`ocserv.service` is enabled but not running.
 
 ## Release notes
 
