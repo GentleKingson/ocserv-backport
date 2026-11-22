@@ -35,6 +35,10 @@ CORE_PACKAGES=(
   debian-archive-keyring debian-keyring debian-maintainers sbuild schroot
   debootstrap lintian python3 python3-yaml bats shellcheck
 )
+if [[ "${TARGET_SUITE}" == "resolute" ]]; then
+  # Ubuntu 26.04 ships sbuild-createchroot in the separate sbuild-schroot package.
+  CORE_PACKAGES+=(sbuild-schroot)
+fi
 
 CORE_COMMANDS=(
   git curl gpg dpkg-buildpackage dscverify dpkg-source dh sbuild schroot

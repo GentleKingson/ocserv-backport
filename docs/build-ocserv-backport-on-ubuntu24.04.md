@@ -204,10 +204,10 @@ Ubuntu backport version. All version defaults live in `scripts/_versions.sh`;
 the Noble version defaults to a value derived from the Debian version:
 
 ```text
-OCSERV_DEBIAN_VERSION=1.6.0-0local1
-OCSERV_PACKAGING_VERSION=1.5.0-1
+OCSERV_DEBIAN_VERSION=1.6.0-3
+OCSERV_PACKAGING_VERSION=1.6.0-3
 BACKPORT_REVISION=1
-OCSERV_NOBLE_VERSION=1.6.0-0local1~ubuntu24.04.1  # defaults to ${OCSERV_DEBIAN_VERSION}~ubuntu24.04.${BACKPORT_REVISION}
+OCSERV_NOBLE_VERSION=1.6.0-3~ubuntu24.04.1  # defaults to ${OCSERV_DEBIAN_VERSION}~ubuntu24.04.${BACKPORT_REVISION}
 
 TARGET_SUITE=noble
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Noble script when unset
@@ -217,16 +217,6 @@ TARGET_ARCH=amd64  # Optional explicit override; auto-detected by the Noble scri
 `OCSERV_PACKAGING_VERSION` selects the `source-lock/` entry and Debian pool downloads.
 `OCSERV_NOBLE_VERSION` is used only for `debian/changelog` and the final Noble build
 artifacts. Do not put `~ubuntu24.04.*` in `source-lock` paths.
-
-Debian has not packaged ocserv 1.6.0 yet, so `OCSERV_DEBIAN_VERSION` is the
-local `1.6.0-0local1` and `OCSERV_PACKAGING_VERSION=1.5.0-1` names the locked
-Debian source whose `debian/` packaging is used. The fetch verifies that
-source with `dscverify`, downloads the upstream tarball and signature pinned
-in `source-lock/ocserv/upstream-1.6.0.tsv`, checks the signature against the
-packaging's `debian/upstream/signing-key.asc` and the pinned signer
-fingerprint, applies `debian/patches` and adds a `1.6.0-0local1` changelog
-entry. Once Debian ships 1.6.0, add its lock and set both variables to that
-Debian version.
 
 If the build host uses non-standard Debian keyring paths, override the default
 candidates with a colon-separated list:

@@ -8,6 +8,7 @@ set -euo pipefail
 
 workdir="${1:-$(mktemp -d)}"
 mkdir -p "${workdir}/lists/partial" "${workdir}/sourceparts"
+: > "${workdir}/status"
 
 cat > "${workdir}/sid.sources" <<'SOURCES'
 Types: deb
@@ -22,6 +23,7 @@ apt_sid() {
     -o "Dir::Etc::sourcelist=${workdir}/sid.sources" \
     -o "Dir::Etc::sourceparts=${workdir}/sourceparts" \
     -o "Dir::State::lists=${workdir}/lists" \
+    -o "Dir::State::status=${workdir}/status" \
     -o "APT::Get::List-Cleanup=0" \
     "$@" >&2
 }

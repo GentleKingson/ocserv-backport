@@ -33,10 +33,10 @@ scripts/resolute-auto-build.sh
 All version defaults live in `scripts/_versions.sh`:
 
 ```text
-OCSERV_DEBIAN_VERSION=1.6.0-0local1
-OCSERV_PACKAGING_VERSION=1.5.0-1
+OCSERV_DEBIAN_VERSION=1.6.0-3
+OCSERV_PACKAGING_VERSION=1.6.0-3
 BACKPORT_REVISION=1
-OCSERV_RESOLUTE_VERSION=1.6.0-0local1~ubuntu26.04.1
+OCSERV_RESOLUTE_VERSION=1.6.0-3~ubuntu26.04.1
 
 TARGET_SUITE=resolute
 TARGET_ARCH=amd64  # Optional explicit override; auto-detected when unset

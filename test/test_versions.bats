@@ -13,27 +13,27 @@ versions() {
 @test "_versions.sh defaults match the committed source locks" {
   versions
   [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "1.6.0-0local1" ]
+  [ "${lines[0]}" = "1.6.0-3" ]
   [ "${lines[1]}" = "1.6.0" ]
-  [ "${lines[2]}" = "1.6.0-0local1~debian13.1" ]
-  [ "${lines[3]}" = "1.6.0-0local1~ubuntu24.04.1" ]
-  [ "${lines[4]}" = "1.6.0-0local1~ubuntu26.04.1" ]
-  [ "${lines[5]}" = "1.5.0-1" ]
+  [ "${lines[2]}" = "1.6.0-3~debian13.1" ]
+  [ "${lines[3]}" = "1.6.0-3~ubuntu24.04.1" ]
+  [ "${lines[4]}" = "1.6.0-3~ubuntu26.04.1" ]
+  [ "${lines[5]}" = "1.6.0-3" ]
   [ "${#lines[@]}" -eq 6 ]
   [ -f "source-lock/ocserv/${lines[5]}.yaml" ]
-  [ -f "source-lock/ocserv/upstream-${lines[1]}.tsv" ]
+  [ -f "source-lock/ocserv/${lines[5]}.lock.tsv" ]
   [ ! -e source-lock/node-undici ]
 }
 
-@test "_versions.sh defaults upgrade prior backports and sort below official 1.6.0-1" {
+@test "_versions.sh defaults upgrade prior backports and sort below official 1.6.0-3" {
   versions
   [ "${status}" -eq 0 ]
-  dpkg --compare-versions 1.5.0-1~debian13.2 lt "${lines[2]}"
-  dpkg --compare-versions 1.5.0-1~ubuntu24.04.2 lt "${lines[3]}"
+  dpkg --compare-versions 1.6.0-0local1~debian13.1 lt "${lines[2]}"
+  dpkg --compare-versions 1.6.0-0local1~ubuntu24.04.1 lt "${lines[3]}"
   dpkg --compare-versions "${lines[3]}" lt "${lines[4]}"
-  dpkg --compare-versions "${lines[2]}" lt 1.6.0-1~debian13.1
-  dpkg --compare-versions "${lines[3]}" lt 1.6.0-1~ubuntu24.04.1
-  dpkg --compare-versions "${lines[4]}" lt 1.6.0-1~ubuntu26.04.1
+  dpkg --compare-versions "${lines[2]}" lt 1.6.0-3
+  dpkg --compare-versions "${lines[3]}" lt 1.6.0-3
+  dpkg --compare-versions "${lines[4]}" lt 1.6.0-3
 }
 
 @test "_versions.sh derives backport and upstream versions from the Debian version" {
@@ -48,9 +48,9 @@ versions() {
 @test "_versions.sh applies BACKPORT_REVISION to all backport versions" {
   versions BACKPORT_REVISION=3
   [ "${status}" -eq 0 ]
-  [ "${lines[2]}" = "1.6.0-0local1~debian13.3" ]
-  [ "${lines[3]}" = "1.6.0-0local1~ubuntu24.04.3" ]
-  [ "${lines[4]}" = "1.6.0-0local1~ubuntu26.04.3" ]
+  [ "${lines[2]}" = "1.6.0-3~debian13.3" ]
+  [ "${lines[3]}" = "1.6.0-3~ubuntu24.04.3" ]
+  [ "${lines[4]}" = "1.6.0-3~ubuntu26.04.3" ]
 }
 
 @test "_versions.sh keeps explicit backport version overrides" {
